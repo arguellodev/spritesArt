@@ -1,0 +1,124 @@
+/* Estos estilos deben añadirse a tu archivo Navbar.css */
+:root {
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #2a2a2a;
+  --bg-tertiary: #333333; 
+  --bg-workspace: #222222;
+  --text-primary: #f0f0f0;
+  --text-secondary: #b8b8b8;
+  --accent-color: #8c52ff;
+  --accent-hover: #9d6dff;
+  --accent-active: #7538e8;
+  --border-color: #444444;
+  --canvas-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+  --panel-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --button-bg: #3a3a3a;
+  --button-hover: #4a4a4a;
+  --button-border: #555555;
+  --layer-hover: #3f3f3f;
+  --layer-selected: #4b3c7a;
+  --danger: #ff5252;
+  --grid-color: rgba(121, 121, 121, 0.164);
+}
+
+/* Estilo para item activo en la navbar */
+.navbar-item-active {
+  background-color: rgba(0, 123, 255, 0.1); /* Azul claro semi-transparente */
+  border-left: 3px solid var(--accent-active); /* Borde izquierdo azul para modo vertical */
+}
+
+/* Para navbar horizontal */
+.horizontal-navbar .navbar-item-active {
+  border-left: none;
+  border-bottom: 3px solid #007bff; /* Borde inferior azul para modo horizontal */
+}
+
+/* Estilo para el contenedor del trigger del dropdown cuando está activo */
+.active-tool {
+  background-color: rgba(0, 123, 255, 0.1);
+  font-weight: bold;
+}
+
+/* Estilos para el icono cuando su item está activo */
+.navbar-item-active .navbar-icon {
+  color: #007bff; /* Azul para tema claro */
+  transform: scale(1.1); /* Ligeramente más grande */
+  transition: transform 0.2s ease;
+}
+
+/* Ajuste para tema oscuro si es necesario */
+.navbar-dark .navbar-item-active {
+  background-color: rgba(0, 123, 255, 0.877); /* Más oscuro para tema dark */
+  border-color: #0d6efd; /* Azul más brillante */
+}
+
+.navbar-dark .navbar-item-active .navbar-icon {
+  color: #0d6efd; /* Azul más brillante para tema oscuro */
+}
+
+/* Estilo para el subitem seleccionado */
+.navbar-dropdown-item.selected {
+  background-color: var(--accent-color);
+  font-weight: bold;
+}
+
+.navbar-dark .navbar-dropdown-item.selected {
+  background-color: var(--accent-active);
+}
+
+/* Efecto de hover mejorado */
+.navbar-item:hover:not(.navbar-item-active),
+.navbar-dropdown-item:hover:not(.selected) {
+  background-color: rgba(0, 0, 0, 0.05);
+  transition: background-color 0.2s ease;
+}
+
+.navbar-dark .navbar-item:hover:not(.navbar-item-active),
+.navbar-dark .navbar-dropdown-item:hover:not(.selected) {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Transición suave para todos los cambios de estado */
+.navbar-item,
+.navbar-dropdown-item,
+.navbar-icon,
+.navbar-dropdown-trigger {
+   
+  transition: all 0.2s ease;
+}
+
+.item-seleccionado {
+  background-color: rgba(69, 5, 219, 0.15); /* Azul claro semi-transparente */
+  border-left: 3px solid var(--accent-active); /* Borde izquierdo azul para modo vertical */
+}
+
+.vertical-navbar {
+  height: 100%;
+  width: fit-content;
+
+}
+
+.vertical-navbar .navbar-container {
+  flex-direction: column;
+  height: 100%;
+  
+}
+
+.vertical-navbar .navbar-menu {
+
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  margin-top: 2rem;
+}
+
+.vertical-navbar .navbar-item {
+  border-left: 3px solid 'transparent'; /* Borde izquierdo azul para modo vertical */
+  width: auto;
+}
+
+.navbar-icons-only.vertical-navbar {
+  min-width: 4rem;
+  width: fit-content;
+}

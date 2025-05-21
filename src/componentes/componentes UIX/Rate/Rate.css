@@ -1,0 +1,48 @@
+.rate {
+    display: inline-flex;
+    margin: 0;
+    padding: 0;
+    color: #facc15;
+    font-size: 1.25rem;
+  }
+  
+  .rate-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .rate-star-wrapper {
+    position: relative;
+    cursor: pointer;
+    margin-right: 0.25rem;
+  }
+  
+  .rate-disabled .rate-star-wrapper {
+    cursor: not-allowed;
+  }
+  
+  .rate-star {
+    transition: all 0.3s;
+  }
+  
+  .rate-star-empty {
+    color: #e5e7eb;
+  }
+  
+  .rate-star-half {
+    position: relative;
+    color: #e5e7eb;
+  }
+  
+  .rate-star-half::before {
+    content: attr(data-character);
+    position: absolute;
+    left: 0;
+    overflow: hidden;
+    width: 50%;
+    color: #facc15;
+  }
+  
+  .rate-star-full {
+    color: #facc15;
+  }

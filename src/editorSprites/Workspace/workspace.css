@@ -1,0 +1,333 @@
+.workspace-container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    user-select: none;
+  }
+  
+  /* Theme variants */
+  .workspace-container.dark {
+    background-color: #1f1f1f;
+    color: #f0f0f0;
+  }
+  
+  .workspace-container.light {
+    background-color: #f8f8f8;
+    color: #1a1a1a;
+  }
+  
+  /* Toolbar styles */
+  .workspace-toolbar {
+    position: sticky;
+    top: 0;
+    left: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+    height: 40px;
+  }
+  
+  .workspace-toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .workspace-toolbar-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 4px;
+    height: 32px;
+    font-size: 14px;
+  }
+  
+  .workspace-button,
+  .workspace-tool-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: 1px solid rgba(128, 128, 128, 0.4);
+    border-radius: 4px;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: inherit;
+  }
+  
+  .dark .workspace-button,
+  .dark .workspace-tool-button {
+    background-color: #333;
+  }
+  
+  .light .workspace-button,
+  .light .workspace-tool-button {
+    background-color: #e5e5e5;
+  }
+  
+  .workspace-button:hover,
+  .workspace-tool-button:hover {
+    background-color: rgba(128, 128, 128, 0.2);
+  }
+  
+  .workspace-button.active,
+  .workspace-tool-button.active {
+    background-color: rgba(66, 135, 245, 0.2);
+    border-color: rgba(66, 135, 245, 0.6);
+  }
+  
+  .workspace-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .workspace-button-icon {
+    width: 16px;
+    height: 16px;
+  }
+  
+  .workspace-zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  
+  .workspace-zoom-value {
+    min-width: 48px;
+    text-align: center;
+    font-size: 14px;
+  }
+  
+  .workspace-clear-button,
+  .workspace-export-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: 1px solid rgba(128, 128, 128, 0.4);
+    border-radius: 4px;
+    padding: 0 12px;
+    height: 32px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+    color: inherit;
+  }
+  
+  .dark .workspace-clear-button,
+  .dark .workspace-export-button {
+    background-color: #333;
+  }
+  
+  .light .workspace-clear-button,
+  .light .workspace-export-button {
+    background-color: #e5e5e5;
+  }
+  
+  .workspace-clear-button:hover,
+  .workspace-export-button:hover {
+    background-color: rgba(128, 128, 128, 0.2);
+  }
+  
+  /* Grid container styles */
+  .workspace-grid-container {
+    flex: 1;
+    overflow: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  
+  /* Drawing area */
+  .workspace-drawing-area {
+    position: relative;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+  }
+  
+  /* Canvas styles */
+  .workspace-visible-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    image-rendering: pixelated; /* Para navegadores modernos */
+    image-rendering: crisp-edges; /* Para Firefox */
+    image-rendering: -moz-crisp-edges; /* Para Firefox antiguo */
+    image-rendering: -webkit-optimize-contrast; /* Para webkit */
+    image-rendering: optimizeSpeed;
+    image-rendering: crisp-edges;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: -o-crisp-edges;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: pixelated;
+    -ms-interpolation-mode: nearest-neighbor;
+  }
+  
+  .workspace-grid-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none; /* La cuadrícula no debe interferir con los eventos */
+    image-rendering: pixelated; /* Para navegadores modernos */
+    image-rendering: crisp-edges; /* Para Firefox */
+    image-rendering: -moz-crisp-edges; /* Para Firefox antiguo */
+    image-rendering: -webkit-optimize-contrast; /* Para webkit */
+    image-rendering: optimizeSpeed;
+    image-rendering: crisp-edges;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: -o-crisp-edges;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: pixelated;
+    -ms-interpolation-mode: nearest-neighbor;
+  }
+  
+  /* Color picker styles */
+  .workspace-color-picker {
+    display: flex;
+    align-items: center;
+    position: relative;
+    gap: 8px;
+  }
+  
+  .workspace-color-preview {
+    width: 32px;
+    height: 32px;
+    border: 1px solid rgba(128, 128, 128, 0.4);
+    border-radius: 4px;
+    cursor: pointer;
+    position: relative;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+  }
+  
+  .workspace-color-palette {
+    display: flex;  
+    flex-wrap: wrap;
+    gap: 4px;
+    max-width: 160px;
+  }
+  
+  .workspace-color-swatch {
+    width: 20px;
+    height: 20px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+  }
+  
+  .workspace-color-swatch:hover {
+    transform: scale(1.1);
+  }
+  
+  /* Checkerboard background for transparency */
+  .workspace-drawing-area::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: linear-gradient(45deg, #808080 25%, transparent 25%),
+                      linear-gradient(-45deg, #808080 25%, transparent 25%),
+                      linear-gradient(45deg, transparent 75%, #808080 75%),
+                      linear-gradient(-45deg, transparent 75%, #808080 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+    opacity: 0.2;
+    z-index: -1;
+  }
+  .main-workspace-section{
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    height: 100%;
+    
+  }
+ 
+  /* Responsive adjustments */
+  @media (max-width: 600px) {
+    .workspace-toolbar {
+      flex-direction: column;
+      height: auto;
+      gap: 8px;
+      padding: 8px;
+    }
+    
+    .workspace-toolbar-group {
+      width: 100%;
+      justify-content: space-between;
+    }
+    
+    .workspace-grid-container {
+      height: calc(100% - 96px) !important;
+    }
+  }
+
+  /*Acciones para grid de selección:*/
+
+  
+  .workspace-grid-container {
+    overflow: hidden;
+    position: relative;
+    margin: auto;
+    display: inline-block; /* Para que el panel de acciones no se desplace */
+  }
+  
+  .workspace-selection-actions {
+    background: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 8;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    left: 0;
+}
+
+.workspace-selection-actions button {
+    display: block;
+    margin: 4px 0;
+    padding: 4px 8px;
+    cursor: pointer;
+    background: #2a2a2a;
+    color: #e0e0e0;
+    border: 1px solid #444;
+    border-radius: 3px;
+    transition: background 0.2s ease;
+}
+
+.workspace-selection-actions button:hover {
+    background: #3a3a3a;
+}
+
+.workspace-selection-actions button:active {
+    background: #444;
+    transform: translateY(1px);
+}
+  
+  .workspace-selection-button:hover {
+    background: #555;
+  }
+
+  .workspace-temporal-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    image-rendering: pixelated; /* Para navegadores modernos */
+    image-rendering: crisp-edges; /* Para Firefox */
+    image-rendering: -moz-crisp-edges; /* Para Firefox antiguo */
+    image-rendering: -webkit-optimize-contrast; /* Para webkit */
+    image-rendering: optimizeSpeed;
+    image-rendering: crisp-edges;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: -o-crisp-edges;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: pixelated;
+    -ms-interpolation-mode: nearest-neighbor;
+  }

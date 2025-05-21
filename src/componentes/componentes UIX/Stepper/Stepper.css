@@ -1,0 +1,65 @@
+.stepper {
+    display: flex;
+    align-items: center;
+    width: 100%;
+  }
+  
+  .stepper-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    position: relative;
+  }
+  
+  .stepper-indicator {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background-color: #e5e7eb;
+    color: #6b7280;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    transition: all 0.3s;
+  }
+  
+  .stepper-active .stepper-indicator {
+    background-color: #3b82f6;
+    color: white;
+  }
+  
+  .stepper-completed .stepper-indicator {
+    background-color: #10b981;
+    color: white;
+  }
+  
+  .stepper-label {
+    font-size: 0.875rem;
+    color: #6b7280;
+    text-align: center;
+  }
+  
+  .stepper-active .stepper-label {
+    color: #3b82f6;
+    font-weight: 500;
+  }
+  
+  .stepper-completed .stepper-label {
+    color: #10b981;
+  }
+  
+  .stepper-line {
+    flex: 1;
+    height: 2px;
+    background-color: #e5e7eb;
+    margin: 0 0.5rem;
+    position: relative;
+    top: -1rem;
+  }
+  
+  .stepper-line-completed {
+    background-color: #10b981;
+  }

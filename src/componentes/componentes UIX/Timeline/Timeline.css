@@ -1,0 +1,91 @@
+.timeline {
+    position: relative;
+    margin: 1.5rem 0;
+    padding: 0;
+  }
+  
+  .timeline-item {
+    position: relative;
+    padding-bottom: 1.5rem;
+    display: flex;
+  }
+  
+  .timeline-item:last-child .timeline-item-tail {
+    display: none;
+  }
+  
+  .timeline-item-left {
+    flex-direction: row;
+  }
+  
+  .timeline-item-right {
+    flex-direction: row-reverse;
+  }
+  
+  .timeline-alternate .timeline-item-left .timeline-item-content {
+    margin-left: 1.5rem;
+    margin-right: auto;
+    text-align: left;
+  }
+  
+  .timeline-alternate .timeline-item-right .timeline-item-content {
+    margin-right: 1.5rem;
+    margin-left: auto;
+    text-align: right;
+  }
+  
+  .timeline-item-tail {
+    position: absolute;
+    top: 0.75rem;
+    left: 0.5rem;
+    height: 100%;
+    border-left: 2px solid #e5e7eb;
+  }
+  
+  .timeline-item-right .timeline-item-tail {
+    right: 0.5rem;
+    left: auto;
+  }
+  
+  .timeline-item-dot {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+  }
+  
+  .timeline-item-dot-blue {
+    background-color: #dbeafe;
+    border: 2px solid #3b82f6;
+  }
+  
+  .timeline-item-dot-green {
+    background-color: #d1fae5;
+    border: 2px solid #10b981;
+  }
+  
+  .timeline-item-dot-red {
+    background-color: #fee2e2;
+    border: 2px solid #ef4444;
+  }
+  
+  .timeline-item-dot-yellow {
+    background-color: #fef3c7;
+    border: 2px solid #f59e0b;
+  }
+  
+  .timeline-item-dot-gray {
+    background-color: #f3f4f6;
+    border: 2px solid #6b7280;
+  }
+  
+  .timeline-item-content {
+    flex: 1;
+    padding: 0 1rem;
+  }
+  

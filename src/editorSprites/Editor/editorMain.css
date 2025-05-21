@@ -1,0 +1,39 @@
+.editor-main {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  
+  .content-wrapper {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+  
+  .render-main {
+    flex: 1;
+   
+    overflow-y: auto;
+    background-color: gray; /* opcional */
+    
+  }
+  
+
+
+  .bottom-panel{
+    height: 100px;
+    background: rgb(73, 72, 73);
+  }
+
+  .workspace-main{
+  
+ width: 100%;
+ height: 100%;
+
+  }
+
+  .color-section-container {
+    background: lightcoral;
+    flex: 1; /* Ocupa el espacio sobrante */
+    
+  } 

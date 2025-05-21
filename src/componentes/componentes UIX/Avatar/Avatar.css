@@ -1,0 +1,104 @@
+.avatar-container {
+    position: relative;
+    display: inline-block;
+  }
+  
+  .avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background-color: #e5e7eb;
+  }
+  
+  .avatar-circle {
+    border-radius: 50%;
+  }
+  
+  .avatar-square {
+    border-radius: 4px;
+  }
+  
+  .avatar-rounded {
+    border-radius: 9999px;
+  }
+  
+  .avatar-xs {
+    width: 1.5rem;
+    height: 1.5rem;
+    font-size: 0.625rem;
+  }
+  
+  .avatar-sm {
+    width: 2rem;
+    height: 2rem;
+    font-size: 0.75rem;
+  }
+  
+  .avatar-md {
+    width: 2.5rem;
+    height: 2.5rem;
+    font-size: 1rem;
+  }
+  
+  .avatar-lg {
+    width: 3.5rem;
+    height: 3.5rem;
+    font-size: 1.25rem;
+  }
+  
+  .avatar-xl {
+    width: 5rem;
+    height: 5rem;
+    font-size: 1.75rem;
+  }
+  
+  .avatar-initials {
+    color: #4b5563;
+    font-weight: 600;
+  }
+  
+  .avatar-status {
+    position: absolute;
+    width: 25%;
+    height: 25%;
+    border-radius: 50%;
+    border: 2px solid white;
+  }
+  
+  .bottom-right .avatar-status {
+    bottom: 0;
+    right: 0;
+  }
+  
+  .bottom-left .avatar-status {
+    bottom: 0;
+    left: 0;
+  }
+  
+  .top-right .avatar-status {
+    top: 0;
+    right: 0;
+  }
+  
+  .top-left .avatar-status {
+    top: 0;
+    left: 0;
+  }
+  
+  .avatar-status-online {
+    background-color: #10b981;
+  }
+  
+  .avatar-status-away {
+    background-color: #f59e0b;
+  }
+  
+  .avatar-status-busy {
+    background-color: #ef4444;
+  }
+  
+  .avatar-status-offline {
+    background-color: #9ca3af;
+  }
+  

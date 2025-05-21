@@ -1,0 +1,3339 @@
+'''
+// Button.jsx
+import React from 'react';
+import './Button.css';
+
+export const Button = ({ 
+  children, 
+  onClick, 
+  variant = 'primary', 
+  size = 'md',
+  disabled = false,
+  fullWidth = false,
+  className = '',
+  type = 'button'
+}) => {
+  const buttonClass = `button ${variant} ${size} ${fullWidth ? 'full-width' : ''} ${className}`;
+  
+  return (
+    <button
+      type={type}
+      className={buttonClass}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {children}
+    </button>
+  );
+};
+
+// Button.css
+
+.button {
+  font-family: inherit;
+  font-weight: 500;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Variants */
+.primary {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.primary:hover:not(:disabled) {
+  background-color: #2563eb;
+}
+
+.secondary {
+  background-color: #e5e7eb;
+  color: #1f2937;
+}
+
+.secondary:hover:not(:disabled) {
+  background-color: #d1d5db;
+}
+
+.success {
+  background-color: #10b981;
+  color: white;
+}
+
+.success:hover:not(:disabled) {
+  background-color: #059669;
+}
+
+.warning {
+  background-color: #f59e0b;
+  color: white;
+}
+
+.warning:hover:not(:disabled) {
+  background-color: #d97706;
+}
+
+.danger {
+  background-color: #ef4444;
+  color: white;
+}
+
+.danger:hover:not(:disabled) {
+  background-color: #dc2626;
+}
+
+.outline {
+  background-color: transparent;
+  border: 1px solid #d1d5db;
+  color: #1f2937;
+}
+
+.outline:hover:not(:disabled) {
+  background-color: #f3f4f6;
+}
+
+/* Sizes */
+.sm {
+  font-size: 0.875rem;
+  padding: 0.375rem 0.75rem;
+}
+
+.md {
+  font-size: 1rem;
+  padding: 0.5rem 1rem;
+}
+
+.lg {
+  font-size: 1.125rem;
+  padding: 0.625rem 1.25rem;
+}
+
+.full-width {
+  width: 100%;
+}
+
+// Input.jsx
+import React from 'react';
+import './Input.css';
+
+export const Input = ({
+  type = 'text',
+  label,
+  value,
+  onChange,
+  placeholder,
+  disabled = false,
+  error,
+  required = false,
+  name,
+  id,
+  className = '',
+}) => {
+  const inputId = id || name || Math.random().toString(36).substr(2, 9);
+  
+  return (
+    <div className={`input-wrapper ${className}`}>
+      {label && (
+        <label htmlFor={inputId} className="input-label">
+          {label} {required && <span className="required">*</span>}
+        </label>
+      )}
+      <input
+        id={inputId}
+        type={type}
+        name={name}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        disabled={disabled}
+        required={required}
+        className={`input ${error ? 'input-error' : ''}`}
+      />
+      {error && <p className="error-message">{error}</p>}
+    </div>
+  );
+};
+
+// Input.css
+.input-wrapper {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 1rem;
+}
+
+.input-label {
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.required {
+  color: #ef4444;
+  margin-left: 2px;
+}
+
+.input {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
+
+.input:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.input-error {
+  border-color: #ef4444;
+}
+
+.input-error:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
+}
+
+.error-message {
+  color: #ef4444;
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+// Table.jsx
+import React from 'react';
+import './Table.css';
+
+export const Table = ({
+  columns,
+  data,
+  className = '',
+  striped = true,
+  hoverable = true,
+  bordered = false,
+  compact = false,
+}) => {
+  const tableClass = `
+    table
+    ${striped ? 'striped' : ''}
+    ${hoverable ? 'hoverable' : ''}
+    ${bordered ? 'bordered' : ''}
+    ${compact ? 'compact' : ''}
+    ${className}
+  `.trim();
+
+  return (
+    <div className="table-container">
+      <table className={tableClass}>
+        <thead>
+          <tr>
+            {columns.map((column) => (
+              <th key={column.key}>{column.title}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row, rowIndex) => (
+            <tr key={rowIndex}>
+              {columns.map((column) => (
+                <td key={`${rowIndex}-${column.key}`}>
+                  {column.render ? column.render(row[column.key], row) : row[column.key]}
+                </td>
+              ))}
+            </tr>
+          ))}
+          {data.length === 0 && (
+            <tr>
+              <td colSpan={columns.length} className="empty-table">
+                No hay datos disponibles
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+// Table.css
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.table th {
+  background-color: #f9fafb;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.75rem 1rem;
+  color: #374151;
+}
+
+.table td {
+  padding: 0.75rem 1rem;
+  color: #4b5563;
+}
+
+.table tbody tr {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.striped tbody tr:nth-child(odd) {
+  background-color: #f9fafb;
+}
+
+.hoverable tbody tr:hover {
+  background-color: #f3f4f6;
+}
+
+.bordered {
+  border: 1px solid #e5e7eb;
+}
+
+.bordered th, .bordered td {
+  border: 1px solid #e5e7eb;
+}
+
+.compact th, .compact td {
+  padding: 0.5rem 0.75rem;
+}
+
+.empty-table {
+  text-align: center;
+  padding: 2rem !important;
+  color: #6b7280;
+}
+
+// Card.jsx
+import React from 'react';
+import './Card.css';
+
+export const Card = ({
+  title,
+  children,
+  footer,
+  className = '',
+  elevation = 'md',
+}) => {
+  return (
+    <div className={`card elevation-${elevation} ${className}`}>
+      {title && <div className="card-header">{title}</div>}
+      <div className="card-body">{children}</div>
+      {footer && <div className="card-footer">{footer}</div>}
+    </div>
+  );
+};
+
+// Card.css
+.card {
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: white;
+}
+
+.elevation-sm {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.elevation-md {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.elevation-lg {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.card-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e5e7eb;
+  font-weight: 600;
+  font-size: 1.125rem;
+}
+
+.card-body {
+  padding: 1.25rem;
+}
+
+.card-footer {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid #e5e7eb;
+  background-color: #f9fafb;
+}
+
+// Modal.jsx
+import React, { useEffect } from 'react';
+import './Modal.css';
+
+export const Modal = ({
+  isOpen,
+  onClose,
+  title,
+  children,
+  footer,
+  size = 'md',
+  closeOnEsc = true,
+  closeOnOverlayClick = true,
+  className = '',
+}) => {
+  useEffect(() => {
+    const handleEsc = (event) => {
+      if (closeOnEsc && event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEsc);
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEsc);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen, onClose, closeOnEsc]);
+
+  if (!isOpen) return null;
+
+  const handleOverlayClick = (e) => {
+    if (closeOnOverlayClick && e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={handleOverlayClick}>
+      <div className={`modal modal-${size} ${className}`}>
+        <div className="modal-header">
+          <h3 className="modal-title">{title}</h3>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">{children}</div>
+        {footer && <div className="modal-footer">{footer}</div>}
+      </div>
+    </div>
+  );
+};
+
+// Modal.css
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background-color: white;
+  border-radius: 6px;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  position: relative;
+  animation: modalFadeIn 0.3s;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-sm {
+  width: 300px;
+}
+
+.modal-md {
+  width: 500px;
+}
+
+.modal-lg {
+  width: 800px;
+}
+
+.modal-xl {
+  width: 1140px;
+}
+
+@media (max-width: 640px) {
+  .modal {
+    width: calc(100% - 2rem) !important;
+    max-width: none;
+  }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.modal-close {
+  background-color: transparent;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  height: 2rem;
+  width: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #6b7280;
+}
+
+.modal-close:hover {
+  background-color: #f3f4f6;
+  color: #1f2937;
+}
+
+.modal-body {
+  padding: 1rem;
+}
+
+.modal-footer {
+  padding: 1rem;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+// Alert.jsx
+import React from 'react';
+import './Alert.css';
+
+export const Alert = ({
+  type = 'info',
+  title,
+  children,
+  onClose,
+  className = '',
+}) => {
+  return (
+    <div className={`alert alert-${type} ${className}`}>
+      <div className="alert-content">
+        {title && <div className="alert-title">{title}</div>}
+        <div className="alert-message">{children}</div>
+      </div>
+      {onClose && (
+        <button className="alert-close" onClick={onClose}>
+          ×
+        </button>
+      )}
+    </div>
+  );
+};
+
+// Alert.css
+.alert {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.alert-content {
+  flex: 1;
+}
+
+.alert-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.alert-message {
+  font-size: 0.875rem;
+}
+
+.alert-close {
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 1.25rem;
+  margin-left: 0.5rem;
+  height: 1.5rem;
+  width: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  opacity: 0.6;
+}
+
+.alert-close:hover {
+  opacity: 1;
+}
+
+.alert-info {
+  background-color: #eff6ff;
+  border-left: 4px solid #3b82f6;
+  color: #1e40af;
+}
+
+.alert-success {
+  background-color: #ecfdf5;
+  border-left: 4px solid #10b981;
+  color: #065f46;
+}
+
+.alert-warning {
+  background-color: #fffbeb;
+  border-left: 4px solid #f59e0b;
+  color: #92400e;
+}
+
+.alert-error {
+  background-color: #fef2f2;
+  border-left: 4px solid #ef4444;
+  color: #b91c1c;
+}
+
+// Dropdown.jsx
+import React, { useState, useRef, useEffect } from 'react';
+import './Dropdown.css';
+
+export const Dropdown = ({
+  trigger,
+  children,
+  position = 'bottom-left',
+  className = '',
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  const toggleDropdown = () => setIsOpen(!isOpen);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  return (
+    <div className={`dropdown ${className}`} ref={dropdownRef}>
+      <div className="dropdown-trigger" onClick={toggleDropdown}>
+        {trigger}
+      </div>
+      {isOpen && (
+        <div className={`dropdown-menu dropdown-${position}`}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const DropdownItem = ({ children, onClick, disabled = false, className = '' }) => {
+  const handleClick = () => {
+    if (!disabled && onClick) {
+      onClick();
+    }
+  };
+
+  return (
+    <div 
+      className={`dropdown-item ${disabled ? 'dropdown-item-disabled' : ''} ${className}`}
+      onClick={handleClick}
+    >
+      {children}
+    </div>
+  );
+};
+
+export const DropdownDivider = () => <div className="dropdown-divider"></div>;
+
+// Dropdown.css
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-trigger {
+  cursor: pointer;
+}
+
+.dropdown-menu {
+  position: absolute;
+  min-width: 180px;
+  background-color: white;
+  border-radius: 4px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.dropdown-bottom-left {
+  top: 100%;
+  left: 0;
+  margin-top: 0.5rem;
+}
+
+.dropdown-bottom-right {
+  top: 100%;
+  right: 0;
+  margin-top: 0.5rem;
+}
+
+.dropdown-top-left {
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 0.5rem;
+}
+
+.dropdown-top-right {
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 0.5rem;
+}
+
+.dropdown-item {
+  padding: 0.625rem 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 0.875rem;
+}
+
+.dropdown-item:hover {
+  background-color: #f3f4f6;
+}
+
+.dropdown-item-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dropdown-item-disabled:hover {
+  background-color: transparent;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background-color: #e5e7eb;
+  margin: 0.25rem 0;
+}
+
+// Tabs.jsx
+import React, { useState } from 'react';
+import './Tabs.css';
+
+export const Tabs = ({ 
+  tabs, 
+  defaultTab = 0,
+  onChange,
+  className = '',
+  variant = 'default'
+}) => {
+  const [activeTab, setActiveTab] = useState(defaultTab);
+
+  const handleTabClick = (index) => {
+    setActiveTab(index);
+    if (onChange) {
+      onChange(index);
+    }
+  };
+
+  return (
+    <div className={`tabs tabs-${variant} ${className}`}>
+      <div className="tabs-header">
+        {tabs.map((tab, index) => (
+          <div
+            key={index}
+            className={`tab ${activeTab === index ? 'active' : ''}`}
+            onClick={() => handleTabClick(index)}
+          >
+            {tab.label}
+          </div>
+        ))}
+      </div>
+      <div className="tabs-content">
+        {tabs[activeTab].content}
+      </div>
+    </div>
+  );
+};
+
+// Tabs.css
+.tabs {
+  width: 100%;
+}
+
+.tabs-header {
+  display: flex;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.tab {
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #6b7280;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.tab:hover {
+  color: #4b5563;
+}
+
+.tab.active {
+  color: #3b82f6;
+  border-bottom-color: #3b82f6;
+}
+
+.tabs-content {
+  padding: 1rem 0;
+}
+
+/* Pills variant */
+.tabs-pills .tabs-header {
+  border-bottom: none;
+  gap: 0.5rem;
+}
+
+.tabs-pills .tab {
+  border-radius: 9999px;
+  border: none;
+  background-color: transparent;
+}
+
+.tabs-pills .tab.active {
+  background-color: #3b82f6;
+  color: white;
+}
+
+/* Boxed variant */
+.tabs-boxed .tabs-header {
+  border-bottom: none;
+  gap: 0.5rem;
+  background-color: #f3f4f6;
+  padding: 0.25rem;
+  border-radius: 8px;
+}
+
+.tabs-boxed .tab {
+  border-radius: 4px;
+  border: none;
+}
+
+.tabs-boxed .tab.active {
+  background-color: white;
+  color: #3b82f6;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+// Spinner.jsx
+import React from 'react';
+import './Spinner.css';
+
+export const Spinner = ({
+  size = 'md',
+  color = 'primary',
+  className = '',
+}) => {
+  return <div className={`spinner spinner-${size} spinner-${color} ${className}`}></div>;
+};
+
+// Spinner.css
+.spinner {
+  border-style: solid;
+  border-radius: 50%;
+  border-color: currentColor;
+  border-top-color: transparent;
+  display: inline-block;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner-sm {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-width: 2px;
+}
+
+.spinner-md {
+  width: 2rem;
+  height: 2rem;
+  border-width: 3px;
+}
+
+.spinner-lg {
+  width: 3rem;
+  height: 3rem;
+  border-width: 4px;
+}
+
+.spinner-primary {
+  color: #3b82f6;
+}
+
+.spinner-secondary {
+  color: #6b7280;
+}
+
+.spinner-success {
+  color: #10b981;
+}
+
+.spinner-warning {
+  color: #f59e0b;
+}
+
+.spinner-danger {
+  color: #ef4444;
+}
+
+// Badge.jsx
+import React from 'react';
+import './Badge.css';
+
+export const Badge = ({
+  children,
+  variant = 'primary',
+  size = 'md',
+  rounded = false,
+  className = '',
+}) => {
+  const badgeClass = `
+    badge 
+    badge-${variant} 
+    badge-${size} 
+    ${rounded ? 'badge-rounded' : ''} 
+    ${className}
+  `.trim();
+
+  return <span className={badgeClass}>{children}</span>;
+};
+
+// Badge.css
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 500;
+  border-radius: 4px;
+}
+
+.badge-rounded {
+  border-radius: 9999px;
+}
+
+.badge-sm {
+  font-size: 0.75rem;
+  padding: 0.125rem 0.5rem;
+}
+
+.badge-md {
+  font-size: 0.875rem;
+  padding: 0.25rem 0.625rem;
+}
+
+.badge-lg {
+  font-size: 1rem;
+  padding: 0.375rem 0.75rem;
+}
+
+.badge-primary {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.badge-secondary {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+.badge-success {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.badge-warning {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.badge-danger {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+
+// Accordion.jsx
+import React, { useState } from 'react';
+import './Accordion.css';
+
+export const AccordionItem = ({
+  title,
+  children,
+  isOpen: controlledIsOpen,
+  onChange,
+  className = '',
+}) => {
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  
+  const isControlled = controlledIsOpen !== undefined;
+  const isOpen = isControlled ? controlledIsOpen : internalIsOpen;
+
+  const toggleAccordion = () => {
+    if (isControlled) {
+      onChange && onChange(!isOpen);
+    } else {
+      setInternalIsOpen(!isOpen);
+    }
+  };
+
+  return (
+    <div className={`accordion-item ${isOpen ? 'accordion-open' : ''} ${className}`}>
+      <div className="accordion-header" onClick={toggleAccordion}>
+        <span className="accordion-title">{title}</span>
+        <span className="accordion-icon">{isOpen ? '−' : '+'}</span>
+      </div>
+      {isOpen && <div className="accordion-content">{children}</div>}
+    </div>
+  );
+};
+
+export const Accordion = ({ children, className = '' }) => {
+  return <div className={`accordion ${className}`}>{children}</div>;
+};
+
+// Accordion.css
+.accordion {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.accordion-item {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.accordion-item:last-child {
+  border-bottom: none;
+}
+
+.accordion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  cursor: pointer;
+  background-color: #f9fafb;
+  transition: background-color 0.2s;
+}
+
+.accordion-header:hover {
+  background-color: #f3f4f6;
+}
+
+.accordion-title {
+  font-weight: 500;
+}
+
+.accordion-icon {
+  font-size: 1.25rem;
+  color: #6b7280;
+}
+
+.accordion-content {
+  padding: 1rem;
+  background-color: white;
+}
+
+// Checkbox.jsx
+import React from 'react';
+import './Checkbox.css';
+
+export const Checkbox = ({
+  label,
+  checked,
+  onChange,
+  disabled = false,
+  className = '',
+  id,
+  name,
+}) => {
+  const checkboxId = id || Math.random().toString(36).substr(2, 9);
+  
+  return (
+    <div className={`checkbox-container ${disabled ? 'checkbox-disabled' : ''} ${className}`}>
+      <input
+        id={checkboxId}
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        disabled={disabled}
+        className="checkbox"
+        name={name}
+      />
+      <label htmlFor={checkboxId} className="checkbox-label">
+        {label}
+      </label>
+    </div>
+  );
+};
+
+// Checkbox.css
+.checkbox-container {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.checkbox {
+  appearance: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  margin-right: 0.5rem;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: white;
+}
+
+.checkbox:checked {
+  background-color: #3b82f6;
+  border-color: #3b82f6;
+}
+
+.checkbox:checked::after {
+  content: '';
+  display: block;
+  width: 0.375rem;
+  height: 0.625rem;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  position: absolute;
+  top: 0.0625rem;
+}
+
+.checkbox:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
+
+.checkbox-label {
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.checkbox-disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.checkbox-disabled .checkbox,
+.checkbox-disabled .checkbox-label {
+  cursor: not-allowed;
+}
+
+// RadioButton.jsx
+import React from 'react';
+import './RadioButton.css';
+
+export const RadioButton = ({
+  label,
+  checked,
+  onChange,
+  disabled = false,
+  className = '',
+  id,
+  name,
+  value,
+}) => {
+  const radioId = id || Math.random().toString(36).substr(2, 9);
+  
+  return (
+    <div className={`radio-container ${disabled ? 'radio-disabled' : ''} ${className}`}>
+      <input
+        id={radioId}
+        type="radio"
+        checked={checked}
+        onChange={onChange}
+        disabled={disabled}
+        className="radio"
+        name={name}
+        value={value}
+      />
+      <label htmlFor={radioId} className="radio-label">
+        {label}
+      </label>
+    </div>
+  );
+};
+
+// RadioButton.css
+.radio-container {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.radio {
+  appearance: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 50%;
+  margin-right: 0.5rem;
+  cursor: pointer;
+  position: relative;
+  background-color: white;
+}
+
+.radio:checked {
+  border-color: #3b82f6;
+  border-width: 4px;
+}
+
+.radio:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
+
+.radio-label {
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.radio-disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.radio-disabled .radio,
+.radio-disabled .radio-label {
+  cursor: not-allowed;
+}
+
+// RadioGroup.jsx
+import React from 'react';
+import './RadioGroup.css';
+import { RadioButton } from './RadioButton';
+
+export const RadioGroup = ({
+  options,
+  name,
+  value,
+  onChange,
+  disabled = false,
+  className = '',
+  direction = 'vertical',
+}) => {
+  return (
+    <div className={`radio-group radio-group-${direction} ${className}`}>
+      {options.map((option) => (
+        <RadioButton
+          key={option.value}
+          label={option.label}
+          checked={value === option.value}
+          onChange={() => onChange(option.value)}
+          disabled={disabled || option.disabled}
+          name={name}
+          value={option.value}
+        />
+      ))}
+    </div>
+  );
+};
+
+// RadioGroup.css
+.radio-group {
+  display: flex;
+}
+
+.radio-group-vertical {
+  flex-direction: column;
+}
+
+.radio-group-horizontal {
+  flex-direction: row;
+  gap: 1rem;
+}
+
+// Select.jsx
+import React from 'react';
+import './Select.css';
+
+export const Select = ({
+  options,
+  value,
+  onChange,
+  placeholder = 'Selecciona una opción',
+  disabled = false,
+  error,
+  label,
+  required = false,
+  className = '',
+  id,
+  name,
+}) => {
+  const selectId = id || name || Math.random().toString(36).substr(2, 9);
+  
+  return (
+    <div className={`select-wrapper ${className}`}>
+      {label && (
+        <label htmlFor={selectId} className="select-label">
+          {label} {required && <span className="required">*</span>}
+        </label>
+      )}
+      <select
+        id={selectId}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        className={`select ${error ? 'select-error' : ''}`}
+        name={name}
+      >
+        {placeholder && (
+          <option value="" disabled>
+            {placeholder}
+          </option>
+        )}
+        {options.map((option) => (
+          <option key={option.value} value={option.value} disabled={option.disabled}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {error && <p className="error-message">{error}</p>}
+    </div>
+  );
+};
+
+// Select.css
+.select-wrapper {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 1rem;
+}
+
+.select-label {
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.required {
+  color: #ef4444;
+  margin-left: 2px;
+}
+
+.select {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
+
+.select:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.select-error {
+  border-color: #ef4444;
+}
+
+.select-error:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
+}
+
+.error-message {
+  color: #ef4444;
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+// Textarea.jsx
+import React from 'react';
+import './Textarea.css';
+
+export const Textarea = ({
+  value,
+  onChange,
+  placeholder,
+  disabled = false,
+  rows = 4,
+  error,
+  label,
+  required = false,
+  className = '',
+  id,
+  name,
+  maxLength,
+}) => {
+  const textareaId = id || name || Math.random().toString(36).substr(2, 9);
+  
+  return (
+    <div className={`textarea-wrapper ${className}`}>
+      {label && (
+        <label htmlFor={textareaId} className="textarea-label">
+          {label} {required && <span className="required">*</span>}
+        </label>
+      )}
+      <textarea
+        id={textareaId}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        disabled={disabled}
+        rows={rows}
+        className={`textarea ${error ? 'textarea-error' : ''}`}
+        name={name}
+        maxLength={maxLength}
+      ></textarea>
+      {error && <p className="error-message">{error}</p>}
+      {maxLength && (
+        <div className="textarea-counter">
+          {value ? value.length : 0}/{maxLength}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Textarea.css
+.textarea-wrapper {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 1rem;
+  position: relative;
+}
+
+.textarea-label {
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.required {
+  color: #ef4444;
+  margin-left: 2px;
+}
+
+.textarea {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  resize: vertical;
+  min-height: 6rem;
+  font-family: inherit;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
+
+.textarea:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.textarea-error {
+  border-color: #ef4444;
+}
+
+.textarea-error:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
+}
+
+.error-message {
+  color: #ef4444;
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.textarea-counter {
+  font-size: 0.75rem;
+  color: #6b7280;
+  text-align: right;
+  margin-top: 0.25rem;
+}
+
+// Avatar.jsx
+import React from 'react';
+import './Avatar.css';
+
+export const Avatar = ({
+  src,
+  alt,
+  size = 'md',
+  shape = 'circle',
+  status,
+  statusPosition = 'bottom-right',
+  initials,
+  className = '',
+}) => {
+  const avatarClass = `
+    avatar 
+    avatar-${size} 
+    avatar-${shape} 
+    ${className}
+  `.trim();
+
+  // Get initials from alt text if not provided
+  const getInitials = () => {
+    if (initials) return initials;
+    if (!alt) return '';
+    return alt
+      .split(' ')
+      .map(word => word[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  return (
+    <div className={`avatar-container ${statusPosition}`}>
+      {src ? (
+        <img src={src} alt={alt || 'Avatar'} className={avatarClass} />
+      ) : (
+        <div className={`${avatarClass} avatar-initials`}>
+          {getInitials()}
+        </div>
+      )}
+      {status && <span className={`avatar-status avatar-status-${status}`}></span>}
+    </div>
+  );
+};
+
+// Avatar.css
+.avatar-container {
+  position: relative;
+  display: inline-block;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background-color: #e5e7eb;
+}
+
+.avatar-circle {
+  border-radius: 50%;
+}
+
+.avatar-square {
+  border-radius: 4px;
+}
+
+.avatar-rounded {
+  border-radius: 9999px;
+}
+
+.avatar-xs {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.625rem;
+}
+
+.avatar-sm {
+  width: 2rem;
+  height: 2rem;
+  font-size: 0.75rem;
+}
+
+.avatar-md {
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1rem;
+}
+
+.avatar-lg {
+  width: 3.5rem;
+  height: 3.5rem;
+  font-size: 1.25rem;
+}
+
+.avatar-xl {
+  width: 5rem;
+  height: 5rem;
+  font-size: 1.75rem;
+}
+
+.avatar-initials {
+  color: #4b5563;
+  font-weight: 600;
+}
+
+.avatar-status {
+  position: absolute;
+  width: 25%;
+  height: 25%;
+  border-radius: 50%;
+  border: 2px solid white;
+}
+
+.bottom-right .avatar-status {
+  bottom: 0;
+  right: 0;
+}
+
+.bottom-left .avatar-status {
+  bottom: 0;
+  left: 0;
+}
+
+.top-right .avatar-status {
+  top: 0;
+  right: 0;
+}
+
+.top-left .avatar-status {
+  top: 0;
+  left: 0;
+}
+
+.avatar-status-online {
+  background-color: #10b981;
+}
+
+.avatar-status-away {
+  background-color: #f59e0b;
+}
+
+.avatar-status-busy {
+  background-color: #ef4444;
+}
+
+.avatar-status-offline {
+  background-color: #9ca3af;
+}
+
+// Progress.jsx
+import React from 'react';
+import './Progress.css';
+
+export const Progress = ({
+  value = 0,
+  max = 100,
+  showLabel = true,
+  size = 'md',
+  color = 'primary',
+  className = '',
+}) => {
+  const percentage = Math.min(100, Math.max(0, (value / max) * 100));
+  
+  return (
+    <div className={`progress-container ${className}`}>
+      <div className={`progress progress-${size} progress-${color}`}>
+        <div 
+          className="progress-bar" 
+          style={{ width: `${percentage}%` }}
+          role="progressbar" 
+          aria-valuenow={value} 
+          aria-valuemin="0" 
+          aria-valuemax={max}
+        ></div>
+      </div>
+      {showLabel && <span className="progress-label">{Math.round(percentage)}%</span>}
+    </div>
+  );
+};
+
+// Progress.css
+.progress-container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.progress {
+  flex-grow: 1;
+  background-color: #e5e7eb;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.progress-sm {
+  height: 0.5rem;
+}
+
+.progress-md {
+  height: 0.75rem;
+}
+
+.progress-lg {
+  height: 1rem;
+}
+
+.progress-bar {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.progress-primary .progress-bar {
+  background-color: #3b82f6;
+}
+
+.progress-secondary .progress-bar {
+  background-color: #6b7280;
+}
+
+.progress-success .progress-bar {
+  background-color: #10b981;
+}
+
+.progress-warning .progress-bar {
+  background-color: #f59e0b;
+}
+
+.progress-danger .progress-bar {
+  background-color: #ef4444;
+}
+
+.progress-label {
+  font-size: 0.875rem;
+  color: #4b5563;
+  min-width: 2.5rem;
+  text-align: right;
+}
+
+// ToggleSwitch.jsx
+import React from 'react';
+import './ToggleSwitch.css';
+
+export const ToggleSwitch = ({
+  checked,
+  onChange,
+  disabled = false,
+  label,
+  size = 'md',
+  className = '',
+  id,
+  name,
+}) => {
+  const switchId = id || Math.random().toString(36).substr(2, 9);
+  
+  return (
+    <div className={`switch-container ${disabled ? 'switch-disabled' : ''} ${className}`}>
+      <label htmlFor={switchId} className="switch">
+        <input
+          id={switchId}
+          type="checkbox"
+          checked={checked}
+          onChange={onChange}
+          disabled={disabled}
+          className="switch-input"
+          name={name}
+        />
+        <span className={`switch-slider switch-${size}`}></span>
+      </label>
+      {label && <span className="switch-label">{label}</span>}
+    </div>
+  );
+};
+
+// ToggleSwitch.css
+.switch-container {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  gap: 0.75rem;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  cursor: pointer;
+}
+
+.switch-input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-slider {
+  position: relative;
+  display: block;
+  background-color: #e5e7eb;
+  border-radius: 9999px;
+  transition: 0.3s;
+}
+
+.switch-slider:before {
+  content: "";
+  position: absolute;
+  background-color: white;
+  border-radius: 50%;
+  transition: 0.3s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.switch-sm {
+  width: 2rem;
+  height: 1rem;
+}
+
+.switch-sm:before {
+  height: 0.75rem;
+  width: 0.75rem;
+  left: 0.125rem;
+  bottom: 0.125rem;
+}
+
+.switch-md {
+  width: 2.5rem;
+  height: 1.25rem;
+}
+
+.switch-md:before {
+  height: 1rem;
+  width: 1rem;
+  left: 0.125rem;
+  bottom: 0.125rem;
+}
+
+.switch-lg {
+  width: 3rem;
+  height: 1.5rem;
+}
+
+.switch-lg:before {
+  height: 1.25rem;
+  width: 1.25rem;
+  left: 0.125rem;
+  bottom: 0.125rem;
+}
+
+.switch-input:checked + .switch-slider {
+  background-color: #3b82f6;
+}
+
+.switch-input:focus + .switch-slider {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
+
+.switch-input:checked + .switch-sm:before {
+  transform: translateX(1rem);
+}
+
+.switch-input:checked + .switch-md:before {
+  transform: translateX(1.25rem);
+}
+
+.switch-input:checked + .switch-lg:before {
+  transform: translateX(1.5rem);
+}
+
+.switch-disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.switch-disabled .switch,
+.switch-disabled .switch-label {
+  cursor: not-allowed;
+}
+
+.switch-label {
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+// FormGroup.jsx
+import React from 'react';
+import './FormGroup.css';
+
+export const FormGroup = ({ children, className = '', title }) => {
+  return (
+    <div className={`form-group ${className}`}>
+      {title && <h3 className="form-group-title">{title}</h3>}
+      <div className="form-group-content">
+        {children}
+      </div>
+    </div>
+  );
+};
+
+// FormGroup.css
+.form-group {
+  margin-bottom: 1.5rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.form-group-title {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.form-group-content {
+  padding: 1rem;
+}
+
+// Breadcrumb.jsx
+import React from 'react';
+import './Breadcrumb.css';
+
+export const BreadcrumbItem = ({ children, href, active = false, className = '' }) => {
+  const Component = href ? 'a' : 'span';
+
+  return (
+    <li className={`breadcrumb-item ${active ? 'breadcrumb-active' : ''} ${className}`}>
+      <Component href={href}>{children}</Component>
+    </li>
+  );
+};
+
+export const Breadcrumb = ({ children, separator = '/', className = '' }) => {
+  // Clone children to add separator
+  const items = React.Children.map(children, (child, index) => {
+    if (index === React.Children.count(children) - 1) {
+      return child;
+    }
+    return (
+      <>
+        {child}
+        <span className="breadcrumb-separator">{separator}</span>
+      </>
+    );
+  });
+
+  return (
+    <nav aria-label="breadcrumb">
+      <ol className={`breadcrumb ${className}`}>{items}</ol>
+    </nav>
+  );
+};
+
+// Breadcrumb.css
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 0.5rem 0;
+  margin: 0;
+  list-style: none;
+  align-items: center;
+}
+
+.breadcrumb-item {
+  display: flex;
+  align-items: center;
+  font-size: 0.875rem;
+}
+
+.breadcrumb-item a {
+  color: #3b82f6;
+  text-decoration: none;
+}
+
+.breadcrumb-item a:hover {
+  text-decoration: underline;
+}
+
+.breadcrumb-active {
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.breadcrumb-separator {
+  margin: 0 0.5rem;
+  color: #9ca3af;
+}
+
+// Tooltip.jsx
+import React, { useState, useRef } from 'react';
+import './Tooltip.css';
+
+export const Tooltip = ({
+  children,
+  content,
+  position = 'top',
+  className = '',
+  delay = 300,
+}) => {
+  const [isVisible, setIsVisible] = useState(false);
+  const timeoutRef = useRef(null);
+  
+  const showTooltip = () => {
+    timeoutRef.current = setTimeout(() => {
+      setIsVisible(true);
+    }, delay);
+  };
+  
+  const hideTooltip = () => {
+    clearTimeout(timeoutRef.current);
+    setIsVisible(false);
+  };
+
+  return (
+    <div 
+      className={`tooltip-container ${className}`}
+      onMouseEnter={showTooltip}
+      onMouseLeave={hideTooltip}
+      onFocus={showTooltip}
+      onBlur={hideTooltip}
+    >
+      {children}
+      {isVisible && (
+        <div className={`tooltip tooltip-${position}`}>
+          {content}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Tooltip.css
+.tooltip-container {
+  position: relative;
+  display: inline-block;
+}
+
+.tooltip {
+  position: absolute;
+  background-color: #1f2937;
+  color: white;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  z-index: 1000;
+  white-space: nowrap;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 3px rgba(0, 0, 0, 0.07));
+}
+
+.tooltip::before {
+  content: '';
+  position: absolute;
+  border-width: 5px;
+  border-style: solid;
+  border-color: transparent;
+}
+
+.tooltip-top {
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.tooltip-top::before {
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-top-color: #1f2937;
+}
+
+.tooltip-bottom {
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.tooltip-bottom::before {
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-bottom-color: #1f2937;
+}
+
+.tooltip-left {
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.tooltip-left::before {
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border-left-color: #1f2937;
+}
+
+.tooltip-right {
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.tooltip-right::before {
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border-right-color: #1f2937;
+}
+
+// Pagination.jsx
+import React from 'react';
+import './Pagination.css';
+
+export const Pagination = ({
+  currentPage,
+  totalPages,
+  onChange,
+  siblingCount = 1,
+  className = '',
+}) => {
+  // Generate page numbers to be displayed
+  const getPageNumbers = () => {
+    const totalPageNumbers = siblingCount * 2 + 3; // siblings + first + current + last + ellipsis
+    
+    if (totalPageNumbers >= totalPages) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    
+    const leftSiblingIndex = Math.max(currentPage - siblingCount, 1);
+    const rightSiblingIndex = Math.min(currentPage + siblingCount, totalPages);
+    
+    const shouldShowLeftDots = leftSiblingIndex > 2;
+    const shouldShowRightDots = rightSiblingIndex < totalPages - 1;
+    
+    if (!shouldShowLeftDots && shouldShowRightDots) {
+      const leftItemCount = 1 + 2 * siblingCount;
+      return [...Array.from({ length: leftItemCount }, (_, i) => i + 1), '...', totalPages];
+    }
+    
+    if (shouldShowLeftDots && !shouldShowRightDots) {
+      const rightItemCount = 1 + 2 * siblingCount;
+      return [1, '...', ...Array.from(
+        { length: rightItemCount }, 
+        (_, i) => totalPages - rightItemCount + i + 1
+      )];
+    }
+    
+    if (shouldShowLeftDots && shouldShowRightDots) {
+      return [
+        1,
+        '...',
+        ...Array.from(
+          { length: rightSiblingIndex - leftSiblingIndex + 1 },
+          (_, i) => leftSiblingIndex + i
+        ),
+        '...',
+        totalPages
+      ];
+    }
+  };
+
+  const pages = getPageNumbers();
+
+  return (
+    <div className={`pagination ${className}`}>
+      <button
+        className="pagination-item"
+        disabled={currentPage === 1}
+        onClick={() => onChange(currentPage - 1)}
+      >
+        &laquo;
+      </button>
+      
+      {pages.map((page, index) => {
+        if (page === '...') {
+          return <span key={`ellipsis-${index}`} className="pagination-ellipsis">...</span>;
+        }
+        return (
+          <button
+            key={page}
+            className={`pagination-item ${currentPage === page ? 'pagination-active' : ''}`}
+            onClick={() => onChange(page)}
+          >
+            {page}
+          </button>
+        );
+      })}
+      
+      <button
+        className="pagination-item"
+        disabled={currentPage === totalPages}
+        onClick={() => onChange(currentPage + 1)}
+      >
+        &raquo;
+      </button>
+    </div>
+  );
+};
+
+// Pagination.css
+.pagination {
+  display: flex;
+  list-style-type: none;
+  padding: 0;
+  margin: 1rem 0;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.pagination-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  height: 2rem;
+  border-radius: 4px;
+  border: 1px solid #e5e7eb;
+  background-color: white;
+  color: #4b5563;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0 0.5rem;
+}
+
+.pagination-item:hover:not(:disabled) {
+  background-color: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.pagination-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-active {
+  background-color: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
+
+.pagination-active:hover {
+  background-color: #2563eb !important;
+  border-color: #2563eb !important;
+  color: white !important;
+}
+
+.pagination-ellipsis {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  height: 2rem;
+  color: #6b7280;
+}
+
+// Navbar.jsx
+import React from 'react';
+import './Navbar.css';
+
+export const Navbar = ({ 
+  brand, 
+  children, 
+  position = 'static',
+  color = 'light',
+  className = '', 
+}) => {
+  return (
+    <nav className={`navbar navbar-${position} navbar-${color} ${className}`}>
+      <div className="navbar-container">
+        {brand && <div className="navbar-brand">{brand}</div>}
+        <div className="navbar-content">{children}</div>
+      </div>
+    </nav>
+  );
+};
+
+export const NavbarItem = ({ children, active = false, className = '' }) => {
+  return (
+    <div className={`navbar-item ${active ? 'navbar-item-active' : ''} ${className}`}>
+      {children}
+    </div>
+  );
+};
+
+export const NavbarLink = ({ 
+  children, 
+  href, 
+  active = false, 
+  className = '' 
+}) => {
+  return (
+    <a 
+      href={href} 
+      className={`navbar-link ${active ? 'navbar-link-active' : ''} ${className}`}
+    >
+      {children}
+    </a>
+  );
+};
+
+export const NavbarDivider = () => <div className="navbar-divider"></div>;
+
+// NavbarGroup (continuación del archivo)
+export const NavbarGroup = ({ children, position = 'left', className = '' }) => {
+    return (
+      <div className={`navbar-group navbar-group-${position} ${className}`}>
+        {children}
+      </div>
+    );
+  };
+  
+  // Navbar.css
+  .navbar {
+    width: 100%;
+    padding: 0.75rem 1.25rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  .navbar-static {
+    position: static;
+  }
+  
+  .navbar-fixed {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+  }
+  
+  .navbar-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+  }
+  
+  .navbar-light {
+    background-color: white;
+    color: #1f2937;
+  }
+  
+  .navbar-dark {
+    background-color: #1f2937;
+    color: white;
+  }
+  
+  .navbar-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+  
+  .navbar-brand {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-right: 2rem;
+  }
+  
+  .navbar-content {
+    display: flex;
+    align-items: center;
+    flex-grow: 1;
+  }
+  
+  .navbar-item {
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+  }
+  
+  .navbar-link {
+    color: inherit;
+    text-decoration: none;
+    display: block;
+    padding: 0.5rem 0.75rem;
+    transition: all 0.2s;
+  }
+  
+  .navbar-link:hover {
+    opacity: 0.8;
+  }
+  
+  .navbar-item-active, .navbar-link-active {
+    font-weight: 500;
+  }
+  
+  .navbar-dark .navbar-link-active {
+    color: #3b82f6;
+  }
+  
+  .navbar-light .navbar-link-active {
+    color: #3b82f6;
+  }
+  
+  .navbar-divider {
+    width: 1px;
+    align-self: stretch;
+    background-color: currentColor;
+    opacity: 0.2;
+    margin: 0 0.5rem;
+  }
+  
+  .navbar-group {
+    display: flex;
+    align-items: center;
+  }
+  
+  .navbar-group-left {
+    margin-right: auto;
+  }
+  
+  .navbar-group-right {
+    margin-left: auto;
+  }
+  
+  // Stepper.jsx
+  import React from 'react';
+  import './Stepper.css';
+  
+  export const Stepper = ({ steps, activeStep, className = '' }) => {
+    return (
+      <div className={`stepper ${className}`}>
+        {steps.map((step, index) => {
+          const isActive = index === activeStep;
+          const isCompleted = index < activeStep;
+          const isLast = index === steps.length - 1;
+  
+          return (
+            <React.Fragment key={index}>
+              <div
+                className={`
+                  stepper-step 
+                  ${isActive ? 'stepper-active' : ''} 
+                  ${isCompleted ? 'stepper-completed' : ''}
+                `}
+              >
+                <div className="stepper-indicator">
+                  {isCompleted ? (
+                    <span className="stepper-check">✓</span>
+                  ) : (
+                    <span className="stepper-number">{index + 1}</span>
+                  )}
+                </div>
+                <div className="stepper-label">{step}</div>
+              </div>
+              {!isLast && <div className={`stepper-line ${isCompleted ? 'stepper-line-completed' : ''}`} />}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    );
+  };
+  
+  // Stepper.css
+  .stepper {
+    display: flex;
+    align-items: center;
+    width: 100%;
+  }
+  
+  .stepper-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    position: relative;
+  }
+  
+  .stepper-indicator {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background-color: #e5e7eb;
+    color: #6b7280;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    transition: all 0.3s;
+  }
+  
+  .stepper-active .stepper-indicator {
+    background-color: #3b82f6;
+    color: white;
+  }
+  
+  .stepper-completed .stepper-indicator {
+    background-color: #10b981;
+    color: white;
+  }
+  
+  .stepper-label {
+    font-size: 0.875rem;
+    color: #6b7280;
+    text-align: center;
+  }
+  
+  .stepper-active .stepper-label {
+    color: #3b82f6;
+    font-weight: 500;
+  }
+  
+  .stepper-completed .stepper-label {
+    color: #10b981;
+  }
+  
+  .stepper-line {
+    flex: 1;
+    height: 2px;
+    background-color: #e5e7eb;
+    margin: 0 0.5rem;
+    position: relative;
+    top: -1rem;
+  }
+  
+  .stepper-line-completed {
+    background-color: #10b981;
+  }
+  
+  // Tag.jsx
+  import React from 'react';
+  import './Tag.css';
+  
+  export const Tag = ({ 
+    children, 
+    color = 'gray', 
+    size = 'md', 
+    closable = false, 
+    onClose, 
+    className = '' 
+  }) => {
+    return (
+      <div className={`tag tag-${color} tag-${size} ${className}`}>
+        <span className="tag-text">{children}</span>
+        {closable && (
+          <button type="button" className="tag-close" onClick={onClose}>
+            &times;
+          </button>
+        )}
+      </div>
+    );
+  };
+  
+  // Tag.css
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    font-weight: 500;
+    line-height: 1;
+    margin-right: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .tag-sm {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.625rem;
+  }
+  
+  .tag-md {
+    font-size: 0.875rem;
+    padding: 0.375rem 0.75rem;
+  }
+  
+  .tag-lg {
+    font-size: 1rem;
+    padding: 0.5rem 0.875rem;
+  }
+  
+  .tag-gray {
+    background-color: #f3f4f6;
+    color: #4b5563;
+  }
+  
+  .tag-red {
+    background-color: #fee2e2;
+    color: #b91c1c;
+  }
+  
+  .tag-yellow {
+    background-color: #fef3c7;
+    color: #92400e;
+  }
+  
+  .tag-green {
+    background-color: #d1fae5;
+    color: #065f46;
+  }
+  
+  .tag-blue {
+    background-color: #dbeafe;
+    color: #1e40af;
+  }
+  
+  .tag-indigo {
+    background-color: #e0e7ff;
+    color: #3730a3;
+  }
+  
+  .tag-purple {
+    background-color: #ede9fe;
+    color: #5b21b6;
+  }
+  
+  .tag-pink {
+    background-color: #fce7f3;
+    color: #9d174d;
+  }
+  
+  .tag-close {
+    margin-left: 0.375rem;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    font-size: 1.25em;
+    line-height: 0.5;
+    opacity: 0.6;
+  }
+  
+  .tag-close:hover {
+    opacity: 1;
+  }
+  
+  // List.jsx
+  import React from 'react';
+  import './List.css';
+  
+  export const List = ({ 
+    children, 
+    type = 'default', 
+    bordered = false, 
+    className = '', 
+    size = 'md' 
+  }) => {
+    return (
+      <div 
+        className={`
+          list 
+          list-${type} 
+          list-${size} 
+          ${bordered ? 'list-bordered' : ''} 
+          ${className}
+        `}
+      >
+        {children}
+      </div>
+    );
+  };
+  
+  export const ListItem = ({ 
+    children, 
+    extra, 
+    title, 
+    description, 
+    className = '', 
+    onClick 
+  }) => {
+    return (
+      <div 
+        className={`list-item ${onClick ? 'list-item-clickable' : ''} ${className}`} 
+        onClick={onClick}
+      >
+        <div className="list-item-content">
+          {(title || description) ? (
+            <div className="list-item-meta">
+              {title && <div className="list-item-title">{title}</div>}
+              {description && <div className="list-item-description">{description}</div>}
+            </div>
+          ) : children}
+        </div>
+        {extra && <div className="list-item-extra">{extra}</div>}
+      </div>
+    );
+  };
+  
+  // List.css
+  .list {
+    width: 100%;
+  }
+  
+  .list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    transition: background-color 0.2s;
+  }
+  
+  .list-default .list-item:not(:last-child) {
+    border-bottom: 1px solid #e5e7eb;
+  }
+  
+  .list-sm .list-item {
+    padding: 0.5rem 0.75rem;
+  }
+  
+  .list-md .list-item {
+    padding: 0.75rem 1rem;
+  }
+  
+  .list-lg .list-item {
+    padding: 1rem 1.25rem;
+  }
+  
+  .list-bordered {
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  
+  .list-striped .list-item:nth-child(odd) {
+    background-color: #f9fafb;
+  }
+  
+  .list-item-clickable {
+    cursor: pointer;
+  }
+  
+  .list-item-clickable:hover {
+    background-color: #f3f4f6;
+  }
+  
+  .list-item-content {
+    flex: 1;
+  }
+  
+  .list-item-meta {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .list-item-title {
+    font-weight: 500;
+  }
+  
+  .list-item-description {
+    font-size: 0.875rem;
+    color: #6b7280;
+    margin-top: 0.25rem;
+  }
+  
+  .list-item-extra {
+    margin-left: 1rem;
+  }
+  
+  // Timeline.jsx
+  import React from 'react';
+  import './Timeline.css';
+  
+  export const Timeline = ({ children, className = '', alternate = false }) => {
+    return (
+      <div className={`timeline ${alternate ? 'timeline-alternate' : ''} ${className}`}>
+        {React.Children.map(children, (child, index) => {
+          return React.cloneElement(child, {
+            position: alternate ? (index % 2 === 0 ? 'left' : 'right') : child.props.position,
+          });
+        })}
+      </div>
+    );
+  };
+  
+  export const TimelineItem = ({ 
+    children, 
+    dot, 
+    position = 'left', 
+    color = 'blue', 
+    className = ''
+  }) => {
+    return (
+      <div className={`timeline-item timeline-item-${position} ${className}`}>
+        <div className="timeline-item-tail"></div>
+        <div className={`timeline-item-dot timeline-item-dot-${color}`}>
+          {dot || <span></span>}
+        </div>
+        <div className="timeline-item-content">{children}</div>
+      </div>
+    );
+  };
+  
+  // Timeline.css
+  .timeline {
+    position: relative;
+    margin: 1.5rem 0;
+    padding: 0;
+  }
+  
+  .timeline-item {
+    position: relative;
+    padding-bottom: 1.5rem;
+    display: flex;
+  }
+  
+  .timeline-item:last-child .timeline-item-tail {
+    display: none;
+  }
+  
+  .timeline-item-left {
+    flex-direction: row;
+  }
+  
+  .timeline-item-right {
+    flex-direction: row-reverse;
+  }
+  
+  .timeline-alternate .timeline-item-left .timeline-item-content {
+    margin-left: 1.5rem;
+    margin-right: auto;
+    text-align: left;
+  }
+  
+  .timeline-alternate .timeline-item-right .timeline-item-content {
+    margin-right: 1.5rem;
+    margin-left: auto;
+    text-align: right;
+  }
+  
+  .timeline-item-tail {
+    position: absolute;
+    top: 0.75rem;
+    left: 0.5rem;
+    height: 100%;
+    border-left: 2px solid #e5e7eb;
+  }
+  
+  .timeline-item-right .timeline-item-tail {
+    right: 0.5rem;
+    left: auto;
+  }
+  
+  .timeline-item-dot {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+  }
+  
+  .timeline-item-dot-blue {
+    background-color: #dbeafe;
+    border: 2px solid #3b82f6;
+  }
+  
+  .timeline-item-dot-green {
+    background-color: #d1fae5;
+    border: 2px solid #10b981;
+  }
+  
+  .timeline-item-dot-red {
+    background-color: #fee2e2;
+    border: 2px solid #ef4444;
+  }
+  
+  .timeline-item-dot-yellow {
+    background-color: #fef3c7;
+    border: 2px solid #f59e0b;
+  }
+  
+  .timeline-item-dot-gray {
+    background-color: #f3f4f6;
+    border: 2px solid #6b7280;
+  }
+  
+  .timeline-item-content {
+    flex: 1;
+    padding: 0 1rem;
+  }
+  
+  // Skeleton.jsx
+  import React from 'react';
+  import './Skeleton.css';
+  
+  export const Skeleton = ({ 
+    type = 'text', 
+    rows = 3, 
+    height, 
+    width, 
+    circle = false, 
+    className = '',
+    active = true
+  }) => {
+    if (type === 'avatar' || circle) {
+      return (
+        <div 
+          className={`skeleton skeleton-circle ${active ? 'skeleton-active' : ''} ${className}`} 
+          style={{ 
+            width: width || '3rem', 
+            height: height || '3rem'
+          }}
+        ></div>
+      );
+    }
+  
+    if (type === 'button') {
+      return (
+        <div 
+          className={`skeleton ${active ? 'skeleton-active' : ''} ${className}`} 
+          style={{ 
+            width: width || '5rem', 
+            height: height || '2rem',
+            borderRadius: '0.25rem'
+          }}
+        ></div>
+      );
+    }
+  
+    if (type === 'image') {
+      return (
+        <div 
+          className={`skeleton ${active ? 'skeleton-active' : ''} ${className}`} 
+          style={{ 
+            width: width || '100%', 
+            height: height || '12rem',
+            borderRadius: '0.25rem'
+          }}
+        ></div>
+      );
+    }
+  
+    if (type === 'text') {
+      return (
+        <div className={`skeleton-text ${className}`}>
+          {Array(rows)
+            .fill()
+            .map((_, index) => (
+              <div 
+                key={index} 
+                className={`skeleton ${active ? 'skeleton-active' : ''}`} 
+                style={{ 
+                  width: index === rows - 1 && rows > 1 ? '80%' : '100%',
+                  height: height || '0.875rem'
+                }}
+              ></div>
+            ))}
+        </div>
+      );
+    }
+  
+    return (
+      <div 
+        className={`skeleton ${active ? 'skeleton-active' : ''} ${className}`} 
+        style={{ width, height }}
+      ></div>
+    );
+  };
+  
+  // Skeleton.css
+  .skeleton {
+    display: inline-block;
+    width: 100%;
+    height: 1rem;
+    background-color: #e5e7eb;
+    border-radius: 0.125rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .skeleton-text > .skeleton:last-child {
+    margin-bottom: 0;
+  }
+  
+  .skeleton-circle {
+    border-radius: 50%;
+  }
+  
+  .skeleton-active {
+    position: relative;
+    overflow: hidden;
+    z-index: 1;
+  }
+  
+  .skeleton-active::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.4), rgba(255,255,255,0));
+    animation: skeleton-loading 1.5s infinite;
+  }
+  
+  @keyframes skeleton-loading {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+  
+  // Divider.jsx
+  import React from 'react';
+  import './Divider.css';
+  
+  export const Divider = ({ 
+    children, 
+    orientation = 'center', 
+    dashed = false, 
+    className = '',
+    type = 'horizontal' 
+  }) => {
+    if (type === 'vertical') {
+      return <div className={`divider-vertical ${dashed ? 'divider-dashed' : ''} ${className}`}></div>;
+    }
+  
+    if (children) {
+      return (
+        <div className={`divider divider-with-text divider-with-text-${orientation} ${className}`}>
+          <span className="divider-inner-text">{children}</span>
+        </div>
+      );
+    }
+  
+    return (
+      <div className={`divider ${dashed ? 'divider-dashed' : ''} ${className}`}></div>
+    );
+  };
+  
+  // Divider.css
+  .divider {
+    box-sizing: border-box;
+    margin: 1.5rem 0;
+    padding: 0;
+    color: #e5e7eb;
+    font-size: 0;
+    line-height: 1.5;
+    border-top: 1px solid #e5e7eb;
+    clear: both;
+    width: 100%;
+  }
+  
+  .divider-dashed {
+    border-top-style: dashed;
+  }
+  
+  .divider-vertical {
+    position: relative;
+    top: -0.06em;
+    display: inline-block;
+    height: 0.9em;
+    margin: 0 0.5rem;
+    vertical-align: middle;
+    border-top: 0;
+    border-left: 1px solid #e5e7eb;
+  }
+  
+  .divider-vertical.divider-dashed {
+    border-left-style: dashed;
+  }
+  
+  .divider-with-text {
+    display: flex;
+    align-items: center;
+    margin: 1rem 0;
+    color: #6b7280;
+    font-size: 0.875rem;
+    white-space: nowrap;
+    text-align: center;
+    border-top: 0;
+  }
+  
+  .divider-with-text::before,
+  .divider-with-text::after {
+    content: '';
+    flex: 1;
+    border-top: 1px solid #e5e7eb;
+  }
+  
+  .divider-with-text-left::before {
+    width: 5%;
+  }
+  
+  .divider-with-text-right::after {
+    width: 5%;
+  }
+  
+  .divider-inner-text {
+    padding: 0 1rem;
+  }
+  
+  // Empty.jsx
+  import React from 'react';
+  import './Empty.css';
+  
+  export const Empty = ({ 
+    image, 
+    description = 'No hay datos disponibles', 
+    children, 
+    className = '' 
+  }) => {
+    return (
+      <div className={`empty ${className}`}>
+        {image && <div className="empty-image">{image}</div>}
+        {!image && (
+          <div className="empty-default-image">
+            <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M32 56C45.2548 56 56 45.2548 56 32C56 18.7452 45.2548 8 32 8C18.7452 8 8 18.7452 8 32C8 45.2548 18.7452 56 32 56Z" stroke="#D1D5DB" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M32 45.3333V45.3467" stroke="#D1D5DB" strokeWidth="5.33333" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M32 37.3333V18.6667" stroke="#D1D5DB" strokeWidth="5.33333" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+        )}
+        <div className="empty-description">{description}</div>
+        {children && <div className="empty-footer">{children}</div>}
+      </div>
+    );
+  };
+  
+  // Empty.css
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2rem;
+    color: #6b7280;
+  }
+  
+  .empty-image {
+    margin-bottom: 1rem;
+  }
+  
+  .empty-default-image {
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+  
+  .empty-description {
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
+    color: #6b7280;
+  }
+  
+  .empty-footer {
+    margin-top: 0.5rem;
+  }
+  
+  // Rate.jsx
+  import React, { useState } from 'react';
+  import './Rate.css';
+  
+  export const Rate = ({ 
+    count = 5, 
+    value = 0, 
+    onChange, 
+    character = '★', 
+    disabled = false, 
+    className = '',
+    allowHalf = false
+  }) => {
+    const [hoverValue, setHoverValue] = useState(undefined);
+  
+    const handleMouseMove = (event, index) => {
+      if (disabled) return;
+      
+      if (allowHalf) {
+        const position = event.nativeEvent.offsetX;
+        const halfPosition = event.target.getBoundingClientRect().width / 2;
+        
+        if (position <= halfPosition) {
+          setHoverValue(index + 0.5);
+        } else {
+          setHoverValue(index + 1);
+        }
+      } else {
+        setHoverValue(index + 1);
+      }
+    };
+  
+    const handleMouseLeave = () => {
+      setHoverValue(undefined);
+    };
+  
+    const handleClick = (index, event) => {
+      if (disabled) return;
+      
+      if (allowHalf) {
+        const position = event.nativeEvent.offsetX;
+        const halfPosition = event.target.getBoundingClientRect().width / 2;
+        
+        if (position <= halfPosition) {
+          onChange(index + 0.5);
+        } else {
+          onChange(index + 1);
+        }
+      } else {
+        onChange(index + 1);
+      }
+    };
+  
+    return (
+      <div className={`rate ${disabled ? 'rate-disabled' : ''} ${className}`}>
+        {[...Array(count)].map((_, index) => {
+          const activeValue = hoverValue !== undefined ? hoverValue : value;
+          
+          return (
+            <div
+              key={index}
+              className="rate-star-wrapper"
+              onClick={(event) => handleClick(index, event)}
+              onMouseMove={(event) => handleMouseMove(event, index)}
+              onMouseLeave={handleMouseLeave}
+            >
+              <div
+                className={`
+                  rate-star 
+                  ${
+                    activeValue >= index + 1
+                      ? 'rate-star-full'
+                      : activeValue >= index + 0.5 && allowHalf
+                      ? 'rate-star-half'
+                      : 'rate-star-empty'
+                  }
+                `}
+              >
+                {character}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+  
+  // Rate.css
+  .rate {
+    display: inline-flex;
+    margin: 0;
+    padding: 0;
+    color: #facc15;
+    font-size: 1.25rem;
+  }
+  
+  .rate-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .rate-star-wrapper {
+    position: relative;
+    cursor: pointer;
+    margin-right: 0.25rem;
+  }
+  
+  .rate-disabled .rate-star-wrapper {
+    cursor: not-allowed;
+  }
+  
+  .rate-star {
+    transition: all 0.3s;
+  }
+  
+  .rate-star-empty {
+    color: #e5e7eb;
+  }
+  
+  .rate-star-half {
+    position: relative;
+    color: #e5e7eb;
+  }
+  
+  .rate-star-half::before {
+    content: attr(data-character);
+    position: absolute;
+    left: 0;
+    overflow: hidden;
+    width: 50%;
+    color: #facc15;
+  }
+  
+  .rate-star-full {
+    color: #facc15;
+  }
+
+ 

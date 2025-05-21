@@ -1,0 +1,23 @@
+.pixel-art-container {
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+  }
+  
+  .pixel-art {
+    display: grid;
+    gap: 1px;
+    border: 1px solid #ddd;
+    background-color: #f0f0f0;
+  }
+  
+  .pixel {
+    box-sizing: border-box;
+  }
+  
+  .error {
+    color: red;
+    padding: 20px;
+    text-align: center;
+    font-weight: bold;
+  }

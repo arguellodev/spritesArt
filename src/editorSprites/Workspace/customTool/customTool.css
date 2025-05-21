@@ -1,0 +1,343 @@
+/* Estilos Dark Theme para la herramienta de Lápiz de Pixel Art */
+
+:root {
+    --bg-primary: #333;
+    --bg-secondary: #282838;
+    --bg-tertiary: #313142;
+    --text-primary: #e2e2e2;
+    --text-secondary: #9d9db2;
+    --accent-color: #7c4dff;
+    --accent-hover: #9670ff;
+    --border-color: #3f3f54;
+    --error-color: #ff5370;
+    --success-color: #3cde8d;
+    --slider-track: #3f3f54;
+    --slider-thumb: #7c4dff;
+    --toggle-off: #3f3f54;
+    --toggle-on: #7c4dff;
+  }
+  
+  .customTool-section {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    border-radius: 10px;
+    padding: 16px;
+    min-width: 280px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    font-family: 'Inter', sans-serif;
+    border: 1px solid var(--border-color);
+  }
+  
+  /* Encabezado de la herramienta */
+  .tool-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
+  }
+  
+  .tool-name {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0;
+  }
+  
+  .tool-icon {
+    background-color: var(--accent-color);
+    color: white;
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+  }
+  
+  /* Contenedor de configuraciones */
+  .tool-configs {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  
+  .config-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  
+  .tool-label {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+  
+  .tool-value {
+    font-size: 14px;
+    color: var(--text-primary);
+    margin: 0;
+  }
+  
+  /* Slider personalizado */
+  .slider-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  
+  .slider {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--slider-track);
+    outline: none;
+    flex: 1;
+  }
+  
+  .slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--slider-thumb);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  
+  .slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--slider-thumb);
+    cursor: pointer;
+  }
+  
+  .slider::-webkit-slider-thumb:hover {
+    background: var(--accent-hover);
+    transform: scale(1.1);
+  }
+  
+  /* Selector de color */
+  .color-selector {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .color-picker {
+    -webkit-appearance: none;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 6px;
+    overflow: hidden;
+    cursor: pointer;
+    padding: 0;
+  }
+  
+  .color-picker::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+  
+  .color-picker::-webkit-color-swatch {
+    border: none;
+    border-radius: 6px;
+  }
+  
+  .color-value {
+    font-family: monospace;
+    font-size: 14px;
+    color: var(--text-primary);
+  }
+  
+  /* Selector de patrón */
+  .pattern-selector {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 14px;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+  }
+  
+  .pattern-selector:focus {
+    border-color: var(--accent-color);
+  }
+  
+  .pattern-selector option {
+    background-color: var(--bg-secondary);
+  }
+  
+  /* Botón de opciones avanzadas */
+  .advanced-toggle {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 14px;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: all 0.2s ease;
+  }
+  
+  .advanced-toggle:hover {
+    background-color: var(--bg-tertiary);
+  }
+  
+  /* Opciones avanzadas */
+  .advanced-options {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  
+  /* Atajos de teclado */
+  .shortcut-display {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .key {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: monospace;
+    border: 1px solid var(--border-color);
+  }
+  
+  .edit-shortcut {
+    background-color: transparent;
+    color: var(--accent-color);
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 4px;
+  }
+  
+  .edit-shortcut:hover {
+    text-decoration: underline;
+  }
+  
+  /* Toggle switch */
+  .toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+  }
+  
+  .toggle-input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  
+  .toggle-label {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--toggle-off);
+    border-radius: 34px;
+    transition: .4s;
+  }
+  
+  .toggle-label:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    border-radius: 50%;
+    transition: .4s;
+  }
+  
+  .toggle-input:checked + .toggle-label {
+    background-color: var(--toggle-on);
+  }
+  
+  .toggle-input:checked + .toggle-label:before {
+    transform: translateX(18px);
+  }
+  
+  /* Vista previa */
+  .tool-preview {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+  }
+  
+  .preview-label {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+  
+  .preview-box {
+    width: 100%;
+    height: 60px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-secondary);
+  }
+  
+  /* Historial de colores recientes */
+  .recent-colors {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  
+  .color-dot {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: transform 0.2s ease;
+  }
+  
+  .color-dot:hover {
+    transform: scale(1.2);
+  }
+  
+  /* Animaciones y efectos */
+  @keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+  }
+  
+  .tool-icon:hover {
+    animation: pulse 1s infinite;
+  }
+  
+  /* Media queries para responsividad */
+  @media (max-width: 600px) {
+    .customTool-section {
+      min-width: auto;
+      padding: 12px;
+    }
+    
+    .tool-name {
+      font-size: 16px;
+    }
+  }

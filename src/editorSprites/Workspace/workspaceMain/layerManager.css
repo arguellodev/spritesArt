@@ -1,0 +1,150 @@
+/* App.css - Dark Theme for Pixel Editor */
+:root {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2a2a2a;
+    --bg-tertiary: #333333; 
+    --bg-workspace: #222222;
+    --text-primary: #f0f0f0;
+    --text-secondary: #b8b8b8;
+    --accent-color: #8c52ff;
+    --accent-hover: #9d6dff;
+    --accent-active: #7538e8;
+    --border-color: #444444;
+    --canvas-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    --panel-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    --button-bg: #3a3a3a;
+    --button-hover: #4a4a4a;
+    --button-border: #555555;
+    --layer-hover: #3f3f3f;
+    --layer-selected: #4b3c7a;
+    --danger: #ff5252;
+    --grid-color: rgba(121, 121, 121, 0.164);
+  }
+
+  /* Toolbar styles */
+  .editor-toolbar {
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  
+  .tool-group {
+    display: flex;
+    gap: 8px;
+  }
+  
+  .tool-btn {
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 200ms ease;
+  }
+  
+  .tool-btn:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+  }
+  
+  .tool-btn.active {
+    background-color: var(--accent-primary);
+    color: white;
+    border-color: var(--accent-secondary);
+  }
+  
+  .color-picker, .brush-size, .zoom-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .color-picker input[type="color"] {
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+    overflow: hidden;
+  }
+  
+  .brush-size input[type="range"],
+  .zoom-control input[type="range"] {
+    width: 100px;
+    accent-color: var(--accent-primary);
+  }
+  
+  /* Main editor area */
+  .editor-main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+  
+  .canvas-container {
+    flex: 1;
+    overflow: auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--bg-primary);
+    position: relative;
+    padding: 20px;
+  }
+  
+  .pixel-canvas {
+    background-color: white;
+    box-shadow: 0 4px 20px var(--shadow-dark);
+    cursor: crosshair;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  
+  .editor-sidebar {
+    width: 320px;
+    border-left: 1px solid var(--border);
+    background-color: var(--bg-secondary);
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  /* Responsive adjustments */
+  @media (max-width: 1024px) {
+    .editor-main {
+      flex-direction: column;
+    }
+    
+    .editor-sidebar {
+      width: auto;
+      border-left: none;
+      border-top: 1px solid var(--border);
+      padding: 8px;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    .editor-toolbar {
+      padding: 8px;
+      gap: 12px;
+    }
+    
+    .tool-btn {
+      padding: 6px 10px;
+      font-size: 13px;
+    }
+    
+    .brush-size input[type="range"],
+    .zoom-control input[type="range"] {
+      width: 80px;
+    }
+  }

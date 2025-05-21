@@ -1,0 +1,42 @@
+.radio-container {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+  
+  .radio {
+    appearance: none;
+    width: 1rem;
+    height: 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+    cursor: pointer;
+    position: relative;
+    background-color: white;
+  }
+  
+  .radio:checked {
+    border-color: #3b82f6;
+    border-width: 4px;
+  }
+  
+  .radio:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+  }
+  
+  .radio-label {
+    cursor: pointer;
+    font-size: 0.875rem;
+  }
+  
+  .radio-disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+  
+  .radio-disabled .radio,
+  .radio-disabled .radio-label {
+    cursor: not-allowed;
+  }

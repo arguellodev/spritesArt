@@ -1,0 +1,79 @@
+.tag {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    font-weight: 500;
+    line-height: 1;
+    margin-right: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .tag-sm {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.625rem;
+  }
+  
+  .tag-md {
+    font-size: 0.875rem;
+    padding: 0.375rem 0.75rem;
+  }
+  
+  .tag-lg {
+    font-size: 1rem;
+    padding: 0.5rem 0.875rem;
+  }
+  
+  .tag-gray {
+    background-color: #f3f4f6;
+    color: #4b5563;
+  }
+  
+  .tag-red {
+    background-color: #fee2e2;
+    color: #b91c1c;
+  }
+  
+  .tag-yellow {
+    background-color: #fef3c7;
+    color: #92400e;
+  }
+  
+  .tag-green {
+    background-color: #d1fae5;
+    color: #065f46;
+  }
+  
+  .tag-blue {
+    background-color: #dbeafe;
+    color: #1e40af;
+  }
+  
+  .tag-indigo {
+    background-color: #e0e7ff;
+    color: #3730a3;
+  }
+  
+  .tag-purple {
+    background-color: #ede9fe;
+    color: #5b21b6;
+  }
+  
+  .tag-pink {
+    background-color: #fce7f3;
+    color: #9d174d;
+  }
+  
+  .tag-close {
+    margin-left: 0.375rem;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    font-size: 1.25em;
+    line-height: 0.5;
+    opacity: 0.6;
+  }
+  
+  .tag-close:hover {
+    opacity: 1;
+  }
