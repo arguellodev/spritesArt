@@ -105,6 +105,32 @@ const [selectedGroup, setSelectedGroup] = useState(null);
   
   // Current viewport position
   const [viewportOffset, setViewportOffset] = useState({ x: 0, y: 0 });
+
+  ///=========Funciones de utilidad para la gestion de grupos =================
+
+  // 4. NUEVA FUNCIÓN para obtener capas de forma jerárquica
+const getHierarchicalLayers = useCallback(() => {
+  const mainLayers = layers.filter(layer => !layer.isGroupLayer);
+  
+  return mainLayers.map(mainLayer => ({
+    ...mainLayer,
+    groupLayers: layers.filter(layer => 
+      layer.isGroupLayer && layer.parentLayerId === mainLayer.id
+    ).sort((a, b) => a.zIndex - b.zIndex)
+  }));
+}, [layers]);
+
+// 7. NUEVA FUNCIÓN para obtener solo las capas principales (para UI)
+const getMainLayers = useCallback(() => {
+  return layers.filter(layer => !layer.isGroupLayer);
+}, [layers]);
+
+// 8. NUEVA FUNCIÓN para obtener capas de grupo de una capa específica
+const getGroupLayersForParent = useCallback((parentLayerId) => {
+  return layers.filter(layer => 
+    layer.isGroupLayer && layer.parentLayerId === parentLayerId
+  ).sort((a, b) => a.zIndex - b.zIndex);
+}, [layers]);
   
   // Initialize with a default layer when the hook is first used
   useEffect(() => {
@@ -148,36 +174,56 @@ const [selectedGroup, setSelectedGroup] = useState(null);
   /**
    * Render all visible layers to the composite canvas
    */
-  const compositeRender = useCallback(() => {
-    if (!compositeCanvasRef.current) return;
+  // 6. MODIFICAR LA FUNCIÓN compositeRender para respetar la jerarquía
+const compositeRender = useCallback(() => {
+  if (!compositeCanvasRef.current) return;
+  
+  const ctx = compositeCanvasRef.current.getContext('2d');
+  if (!ctx) return;
+  
+  // Clear the composite canvas
+  ctx.clearRect(0, 0, viewportWidth * zoom, viewportHeight * zoom);
+  
+  // Obtener capas jerárquicas
+  const hierarchicalLayers = getHierarchicalLayers();
+  
+  // Ordenar capas principales por zIndex
+  const sortedMainLayers = hierarchicalLayers.sort((a, b) => a.zIndex - b.zIndex);
+  
+  // Renderizar cada capa principal y sus capas de grupo
+  for (const mainLayer of sortedMainLayers) {
+    if (!mainLayer.visible) continue;
     
-    const ctx = compositeCanvasRef.current.getContext('2d');
-    if (!ctx) return;
-    
-    // Clear the composite canvas
-    ctx.clearRect(0, 0, viewportWidth * zoom, viewportHeight * zoom);
-    
-    // Sort layers by zIndex
-    const sortedLayers = [...layers].sort((a, b) => a.zIndex - b.zIndex);
-    
-    // Render each visible layer onto the composite canvas
-    for (const layer of sortedLayers) {
-      if (!layer.visible) continue;
-      
-      const layerCanvas = layerCanvasesRef.current[layer.id];
-      if (!layerCanvas) continue;
-      
-      // Get the section of the layer that should be visible in the viewport
+    // Renderizar capa principal
+    const mainCanvas = layerCanvasesRef.current[mainLayer.id];
+    if (mainCanvas) {
       ctx.drawImage(
-        layerCanvas,
-        viewportOffset.x, viewportOffset.y,   // Source position (portion of the layer to show)
-        viewportWidth, viewportHeight,        // Source dimensions
-        0, 0,                                 // Destination position (always 0,0 for the viewport)
-        viewportWidth * zoom, viewportHeight * zoom // Scaled dimensions
+        mainCanvas,
+        viewportOffset.x, viewportOffset.y,
+        viewportWidth, viewportHeight,
+        0, 0,
+        viewportWidth * zoom, viewportHeight * zoom
       );
     }
-  }, [layers, viewportOffset, viewportWidth, viewportHeight, zoom]);
-  
+    
+    // Renderizar capas de grupo de esta capa principal
+    for (const groupLayer of mainLayer.groupLayers) {
+      if (!groupLayer.visible) continue;
+      
+      const groupCanvas = layerCanvasesRef.current[groupLayer.id];
+      if (groupCanvas) {
+        ctx.drawImage(
+          groupCanvas,
+          viewportOffset.x, viewportOffset.y,
+          viewportWidth, viewportHeight,
+          0, 0,
+          viewportWidth * zoom, viewportHeight * zoom
+        );
+      }
+    }
+  }
+}, [layers, viewportOffset, viewportWidth, viewportHeight, zoom, getHierarchicalLayers]);
+
   // Render the composite canvas whenever layers or viewport changes
   useEffect(() => {
     compositeRender();
@@ -186,6 +232,47 @@ const [selectedGroup, setSelectedGroup] = useState(null);
   /**
    * Add a new layer
    */
+//logica especial para manejar las capas de grupos: 
+// Dentro de useLayerManager:
+// 2. MODIFICAR LA FUNCIÓN addGroupLayer
+const addGroupLayer = useCallback((parentLayerId) => {
+  const newLayerId = nanoid();
+  
+  const newLayer = {
+    id: newLayerId,
+    name: `Grupo Layer ${layers.length + 1}`,
+    visible: true,
+    zIndex: Math.max(...layers.map(l => l.zIndex)) + 1,
+    isGroupLayer: true,
+    parentLayerId: parentLayerId, // Nueva propiedad para vincular con la capa padre
+    children: [] // Para futuras subcapas si es necesario
+  };
+
+  // Crear canvas para esta capa
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  layerCanvasesRef.current[newLayerId] = canvas;
+
+  // Agregar la nueva capa a la estructura
+  setLayers(prev => {
+    return prev.map(layer => {
+      // Si esta es la capa padre, agregar el ID del grupo a sus children
+      if (layer.id === parentLayerId) {
+        return {
+          ...layer,
+          children: [...(layer.children || []), newLayerId]
+        };
+      }
+      return layer;
+    }).concat([newLayer]); // Agregar la nueva capa al final
+  });
+
+  return newLayerId;
+}, [layers, width, height]);
+
+
+
   const addLayer = useCallback(() => {
     // Generate a unique ID for the new layer
     const newLayerId = nanoid();
@@ -223,67 +310,151 @@ const [selectedGroup, setSelectedGroup] = useState(null);
    * Delete a layer by ID
    */
   const deleteLayer = useCallback((layerId) => {
-    // Don't delete if it's the only layer
-    if (layers.length <= 1) return;
+    // No eliminar si es la única capa principal
+    const mainLayers = layers.filter(layer => !layer.isGroupLayer);
+    if (mainLayers.length <= 1 && mainLayers.some(layer => layer.id === layerId)) {
+      return;
+    }
+  
+    const layerToDelete = layers.find(layer => layer.id === layerId);
     
-    // Remove the layer's canvas from memory
-    delete layerCanvasesRef.current[layerId];
-    
-    // Remove the layer from state
-    setLayers(prevLayers => prevLayers.filter(layer => layer.id !== layerId));
+    if (layerToDelete) {
+      // Si es una capa principal, eliminar también sus capas de grupo
+      if (!layerToDelete.isGroupLayer) {
+        const groupLayersToDelete = layers.filter(layer => 
+          layer.isGroupLayer && layer.parentLayerId === layerId
+        );
+        
+        // Eliminar canvas de todas las capas relacionadas
+        groupLayersToDelete.forEach(groupLayer => {
+          delete layerCanvasesRef.current[groupLayer.id];
+          // Limpiar grupos de píxeles asociados
+          setPixelGroups(prev => {
+            const newGroups = { ...prev };
+            delete newGroups[groupLayer.id];
+            return newGroups;
+          });
+        });
+      }
+      
+      // Eliminar el canvas de la capa principal
+      delete layerCanvasesRef.current[layerId];
+      
+      // Si es una capa de grupo, limpiar referencia del padre
+      if (layerToDelete.isGroupLayer && layerToDelete.parentLayerId) {
+        setLayers(prev => prev.map(layer => {
+          if (layer.id === layerToDelete.parentLayerId) {
+            return {
+              ...layer,
+              children: (layer.children || []).filter(childId => childId !== layerId)
+            };
+          }
+          return layer;
+        }));
+        
+        // Limpiar grupos de píxeles
+        setPixelGroups(prev => {
+          const newGroups = { ...prev };
+          delete newGroups[layerId];
+          return newGroups;
+        });
+      }
+    }
+  
+    // Remover la capa y todas sus capas de grupo del estado
+    setLayers(prevLayers => prevLayers.filter(layer => {
+      if (layer.id === layerId) return false;
+      if (layer.isGroupLayer && layer.parentLayerId === layerId) return false;
+      return true;
+    }));
   }, [layers]);
   
   /**
    * Move a layer up in the stack (increase zIndex)
    */
-  const moveLayerUp = useCallback((layerId) => {
-    setLayers(prevLayers => {
-      // Find the current layer and the one above it
-      const layer = prevLayers.find(l => l.id === layerId);
-      if (!layer) return prevLayers;
+  // 9. MODIFICAR LA FUNCIÓN moveLayerUp para manejar jerarquía
+const moveLayerUp = useCallback((layerId) => {
+  setLayers(prevLayers => {
+    const layer = prevLayers.find(l => l.id === layerId);
+    if (!layer) return prevLayers;
+    
+    if (layer.isGroupLayer) {
+      // Para capas de grupo, solo mover dentro de su grupo padre
+      const siblingGroupLayers = prevLayers.filter(l => 
+        l.isGroupLayer && l.parentLayerId === layer.parentLayerId
+      ).sort((a, b) => a.zIndex - b.zIndex);
       
-      const layersOrderedByZIndex = [...prevLayers].sort((a, b) => a.zIndex - b.zIndex);
-      const currentIndex = layersOrderedByZIndex.findIndex(l => l.id === layerId);
+      const currentIndex = siblingGroupLayers.findIndex(l => l.id === layerId);
+      if (currentIndex === siblingGroupLayers.length - 1) return prevLayers;
       
-      // If already at the top, do nothing
-      if (currentIndex === layersOrderedByZIndex.length - 1) return prevLayers;
-      
-      // Swap zIndex with the layer above
-      const layerAbove = layersOrderedByZIndex[currentIndex + 1];
+      const layerAbove = siblingGroupLayers[currentIndex + 1];
       
       return prevLayers.map(l => {
         if (l.id === layerId) return { ...l, zIndex: layerAbove.zIndex };
         if (l.id === layerAbove.id) return { ...l, zIndex: layer.zIndex };
         return l;
       });
-    });
-  }, []);
+    } else {
+      // Para capas principales, comportamiento normal
+      const mainLayers = prevLayers.filter(l => !l.isGroupLayer).sort((a, b) => a.zIndex - b.zIndex);
+      const currentIndex = mainLayers.findIndex(l => l.id === layerId);
+      
+      if (currentIndex === mainLayers.length - 1) return prevLayers;
+      
+      const layerAbove = mainLayers[currentIndex + 1];
+      
+      return prevLayers.map(l => {
+        if (l.id === layerId) return { ...l, zIndex: layerAbove.zIndex };
+        if (l.id === layerAbove.id) return { ...l, zIndex: layer.zIndex };
+        return l;
+      });
+    }
+  });
+}, []);
+
   
   /**
    * Move a layer down in the stack (decrease zIndex)
    */
   const moveLayerDown = useCallback((layerId) => {
     setLayers(prevLayers => {
-      // Find the current layer and the one below it
       const layer = prevLayers.find(l => l.id === layerId);
       if (!layer) return prevLayers;
       
-      const layersOrderedByZIndex = [...prevLayers].sort((a, b) => a.zIndex - b.zIndex);
-      const currentIndex = layersOrderedByZIndex.findIndex(l => l.id === layerId);
-      
-      // If already at the bottom, do nothing
-      if (currentIndex === 0) return prevLayers;
-      
-      // Swap zIndex with the layer below
-      const layerBelow = layersOrderedByZIndex[currentIndex - 1];
-      
-      return prevLayers.map(l => {
-        if (l.id === layerId) return { ...l, zIndex: layerBelow.zIndex };
-        if (l.id === layerBelow.id) return { ...l, zIndex: layer.zIndex };
-        return l;
-      });
+      if (layer.isGroupLayer) {
+        // Para capas de grupo, solo mover dentro de su grupo padre
+        const siblingGroupLayers = prevLayers.filter(l => 
+          l.isGroupLayer && l.parentLayerId === layer.parentLayerId
+        ).sort((a, b) => a.zIndex - b.zIndex);
+        
+        const currentIndex = siblingGroupLayers.findIndex(l => l.id === layerId);
+        if (currentIndex === 0) return prevLayers;
+        
+        const layerBelow = siblingGroupLayers[currentIndex - 1];
+        
+        return prevLayers.map(l => {
+          if (l.id === layerId) return { ...l, zIndex: layerBelow.zIndex };
+          if (l.id === layerBelow.id) return { ...l, zIndex: layer.zIndex };
+          return l;
+        });
+      } else {
+        // Para capas principales, comportamiento normal
+        const mainLayers = prevLayers.filter(l => !l.isGroupLayer).sort((a, b) => a.zIndex - b.zIndex);
+        const currentIndex = mainLayers.findIndex(l => l.id === layerId);
+        
+        if (currentIndex === 0) return prevLayers;
+        
+        const layerBelow = mainLayers[currentIndex - 1];
+        
+        return prevLayers.map(l => {
+          if (l.id === layerId) return { ...l, zIndex: layerBelow.zIndex };
+          if (l.id === layerBelow.id) return { ...l, zIndex: layer.zIndex };
+          return l;
+        });
+      }
     });
   }, []);
+  
   
   /**
    * Toggle a layer's visibility
@@ -754,38 +925,44 @@ function createRGBA(r, g, b, a = 255) {
  * @returns {string} - ID del grupo creado
  */
 // Modificar la estructura de grupos para incluir zIndex
-const createPixelGroup = useCallback((layerId, selectedPixels, groupName = null) => {
-  if (!selectedPixels || selectedPixels.length === 0) {
-    console.warn('No hay píxeles seleccionados para crear el grupo');
-    return null;
-  }
+// 3. MODIFICAR LA FUNCIÓN createPixelGroup (cambiar la llamada a addGroupLayer)
+const createPixelGroup = useCallback((layerId, selectedPixels, groupName) => {
+  // 1. Crear capa especial para el grupo (ahora pasa el layerId como padre)
+  const groupLayerId = addGroupLayer(layerId);
 
+  // 2. Copiar píxeles a la nueva capa
+  drawOnLayer(groupLayerId, (ctx) => {
+    selectedPixels.forEach(pixel => {
+      ctx.fillStyle = `rgba(${pixel.color.r},${pixel.color.g},${pixel.color.b},${pixel.color.a})`;
+      ctx.fillRect(pixel.x, pixel.y, 1, 1);
+    });
+  });
+
+  // 3. Borrar píxeles de la capa original (opcional, si quieres "mover")
+  drawOnLayer(layerId, (ctx) => {
+    selectedPixels.forEach(pixel => {
+      ctx.clearRect(pixel.x, pixel.y, 1, 1);
+    });
+  });
+
+  // 4. Guardar grupo con referencia a su capa
   const groupId = nanoid();
-  const finalGroupName = groupName || `Grupo ${Object.keys(pixelGroups[layerId] || {}).length + 1}`;
-  
-  const newGroup = {
-    id: groupId,
-    name: finalGroupName,
-    layerId: layerId,
-    pixels: [...selectedPixels],
-    created: new Date().toISOString(),
-    visible: true,
-    zIndex: nextGroupZIndex // Asignar el siguiente zIndex disponible
-  };
-
-  setPixelGroups(prevGroups => ({
-    ...prevGroups,
-    [layerId]: {
-      ...prevGroups[layerId],
-      [groupId]: newGroup
+  setPixelGroups(prev => ({
+    ...prev,
+    [groupLayerId]: {
+      ...prev[groupLayerId],
+      [groupId]: {
+        id: groupId,
+        name: groupName,
+        pixels: selectedPixels,
+        parentLayer: layerId, // Capa original (para referencia)
+        groupLayerId: groupLayerId // Nueva referencia a la capa del grupo
+      }
     }
   }));
 
-  // Incrementar el contador de zIndex para el próximo grupo
-  setNextGroupZIndex(prev => prev + 1);
-
-  return groupId;
-}, [pixelGroups, nextGroupZIndex]);
+  return { groupId, groupLayerId };
+}, [addGroupLayer, drawOnLayer]);
 
 /**
  * Eliminar un grupo de píxeles
@@ -1362,8 +1539,10 @@ updatePixelGroup,
   
   // Renderizado mejorado
   renderGroupOverlays,
+
+   // Nuevas funciones jerárquicas
+   getHierarchicalLayers,
+   getMainLayers,
+   getGroupLayersForParent,
 };
 }
-// implementaciones
-
-
