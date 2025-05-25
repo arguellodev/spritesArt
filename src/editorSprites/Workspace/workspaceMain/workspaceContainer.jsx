@@ -113,7 +113,11 @@ selectPixelGroup,
 clearSelectedGroup,
 renamePixelGroup,
 toggleGroupVisibility,
-updatePixelGroup
+updatePixelGroup,
+
+getHierarchicalLayers,
+   getMainLayers,
+   getGroupLayersForParent,
 
   } = useLayerManager({
     width: totalWidth,
@@ -664,7 +668,10 @@ const clearCurrentSelection = useCallback(() => {
   activeLayerId,
   isDraggingSelection,  // Nueva dependencia
   selectedGroup,        // Nueva dependencia
-  updatePixelGroup      // Función del hook useLayerManager
+  updatePixelGroup,      // Función del hook useLayerManager
+
+   
+  
 ]);
 
 
@@ -1600,6 +1607,10 @@ const handleSelectGroup = useCallback((pixels) => {
           setDragOffset={setDragOffset}
           setTool={setTool}
           clearCurrentSelection={clearCurrentSelection}
+
+          getHierarchicalLayers= {getHierarchicalLayers}
+   getMainLayers={getMainLayers}
+   getGroupLayersForParent= {getGroupLayersForParent}
         />
       </div>
       

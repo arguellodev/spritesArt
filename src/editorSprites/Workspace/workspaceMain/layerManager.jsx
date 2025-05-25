@@ -46,7 +46,11 @@ const LayerManager = ({
   setDragOffset,
   setSelectionCoords,
   setTool,
-  clearCurrentSelection
+  clearCurrentSelection,
+
+  getHierarchicalLayers,
+   getMainLayers,
+   getGroupLayersForParent,
 }) => {
   const [editingLayerId, setEditingLayerId] = useState(null);
   const [editingName, setEditingName] = useState('');
