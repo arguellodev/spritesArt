@@ -4,7 +4,8 @@ import { LuEye, LuEyeOff, LuTrash2, LuEraser, LuGroup ,LuUngroup, LuMousePointer
 import { SlLayers } from "react-icons/sl";
 import ViewportNavigator from './viewportNavigator';
 import CustomTool from '../customTool/customTool';
-
+import './workspaceContainer.css'
+import LayerManager from './layerManager';
 
 //Inicializamos las herramientas disponibles 
 
@@ -13,10 +14,11 @@ const TOOLS = {
   erase : "eraser",
   select: "select",
   lassoSelect : 'lassoSelect',
-  move: 'move'
+  move: 'move',
+  fill: 'fill'
 }
 
-function CanvasTracker({tool,setToolParameters,toolParameters}) {
+function CanvasTracker({setTool, tool,setToolParameters,toolParameters}) {
   const workspaceRef = useRef(null);
   const canvasContainerRef = useRef(null);
   const selectionActionsRef = useRef(null);
@@ -95,7 +97,24 @@ function CanvasTracker({tool,setToolParameters,toolParameters}) {
     viewportToCanvasCoords,
     drawPixelLine,
     getLayerData,
-    erasePixels  // Add this function to your useLayerManager hook
+    erasePixels  ,
+    floodFill,// Add this function to your useLayerManager hook
+    pixelGroups,
+selectedGroup,
+
+// Funciones de manejo de grupos
+createPixelGroup,
+deletePixelGroup,
+getLayerGroups,
+getAllGroups,
+getPixelGroupAt,
+isPixelInGroup,
+selectPixelGroup,
+clearSelectedGroup,
+renamePixelGroup,
+toggleGroupVisibility,
+updatePixelGroup
+
   } = useLayerManager({
     width: totalWidth,
     height: totalHeight,
@@ -124,7 +143,7 @@ const handleZoomChange = (e) => {
   const newZoom = parseInt(e.target.value, 10);
   if (isNaN(newZoom) || newZoom <= 0) return;
   
-  console.log("Zoom anterior:", zoom, "Nuevo zoom:", newZoom);
+  
   
   // Calcular el centro actual del viewport en coordenadas del canvas
   const currentCenterX = viewportOffset.x + (viewportWidth / 2);
@@ -148,10 +167,6 @@ const handleZoomChange = (e) => {
   const deltaX = newOffsetX - viewportOffset.x;
   const deltaY = newOffsetY - viewportOffset.y;
   
-  console.log("Centro actual:", currentCenterX, currentCenterY);
-  console.log("Nuevo viewport:", newViewportWidth, newViewportHeight);
-  console.log("Nuevo offset:", newOffsetX, newOffsetY);
-  console.log("Delta:", deltaX, deltaY);
   
   // Actualizar el zoom primero
   setZoom(newZoom);
@@ -298,6 +313,7 @@ useEffect(() => {
         )
         `
       }
+      
       else{
         return
       }
@@ -324,7 +340,9 @@ useEffect(() => {
         );
       }
     });
-    
+    if(tool === TOOLS.fill){
+      rellenar(canvasCoords)
+     }
     // Almacenar la posición actual para el siguiente frame
     lastPixelRef.current = viewportPixelCoords;
   }, [isPressed, relativeToTarget, activeLayerId, drawOnLayer, viewportToCanvasCoords, drawPixelLine, drawMode,tool,toolParameters,zoom]);
@@ -518,7 +536,7 @@ const [selectionDragStart, setSelectionDragStart] = useState({ x: 0, y: 0 });
 const [selectionOffset, setSelectionOffset] = useState({ x: 0, y: 0 });
 const [selectionActive, setSelectionActive] = useState(false);
 const selectionCanvasRef = useRef(null);
-const [selectionCoords, setSelectionCoords] = useState([{x: 0, y: 0}]);
+const [selectionCoords, setSelectionCoords] = useState([]);
 const [croppedSelectionBounds, setCroppedSelectionBounds] = useState(null);
 // Add a new state for lasso selection points
 const [lassoPoints, setLassoPoints] = useState([]);
@@ -593,19 +611,32 @@ const findNonEmptyBounds = useCallback((imageData, width, height) => {
 
 // Función para limpiar la selección actual
 const clearCurrentSelection = useCallback(() => {
+  // 1. Actualizar el grupo ANTES de limpiar (si hay arrastre y grupo seleccionado)
+  if (selectedGroup && (dragOffset.x !== 0 || dragOffset.y !== 0)) {
+    console.log("e actualizaron los pixeles del grupo");
+    const updatedPixels = selectedPixels.map(pixel => ({
+      x: pixel.x + dragOffset.x,
+      y: pixel.y + dragOffset.y,
+      color: pixel.color
+    }));
+    
+    updatePixelGroup(selectedGroup.layerId, selectedGroup.id, updatedPixels);
+  }
+
+  // 2. Limpieza normal del canvas y estados
   const canvas = selectionCanvasRef.current;
   if (canvas) {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
 
-  // Restaurar los pixeles a sus colores originales
+  // Restaurar pixeles a colores originales
   if (selectedPixels.length > 0 && originalPixelColors.length > 0) {
     selectedPixels.forEach((pixel, index) => {
       if (originalPixelColors[index]) {
         pintarPixelConTamaño(
-          pixel.x+dragOffset.x, 
-          pixel.y+ dragOffset.y, 
+          pixel.x + dragOffset.x, 
+          pixel.y + dragOffset.y, 
           originalPixelColors[index], 
           1
         );
@@ -613,24 +644,34 @@ const clearCurrentSelection = useCallback(() => {
     });
   }
 
+  // 3. Resetear todos los estados
   setSelectedPixels([]);
   setOriginalPixelColors([]);
   setSelectionCoords([{ x: 0, y: 0 }]);
   setCroppedSelectionBounds(null);
   setDragOffset({ x: 0, y: 0 });
   setSelectionActive(false);
-  setLassoPoints([]); // Limpiar los puntos del lazo
-  // Resetear los estados de arrastre
+  setLassoPoints([]);
   setIsDraggingSelection(false);
   setDragStartPoint(null);
-}, [selectedPixels, originalPixelColors, zoom, dragOffset]); // Añade zoom como dependencia
 
+}, [
+  selectedPixels, 
+  originalPixelColors, 
+  zoom, 
+  dragOffset,
+  layers, 
+  activeLayerId,
+  isDraggingSelection,  // Nueva dependencia
+  selectedGroup,        // Nueva dependencia
+  updatePixelGroup      // Función del hook useLayerManager
+]);
 
 
 // Auto-crop de la selección
 const autoCropSelection = useCallback(async () => {
   if (!activeLayerId || !selectionCoords || selectionCoords.length < 1) return;
-
+  console.log("autoCropSelection - selectionCoords:", selectionCoords); // 👈 ¿Se reciben las coordenadas?
   const start = selectionCoords[0];
   const end = selectionCoords[selectionCoords.length - 1];
 
@@ -639,25 +680,51 @@ const autoCropSelection = useCallback(async () => {
   const width = Math.abs(end.x - start.x) + 1;
   const height = Math.abs(end.y - start.y) + 1;
   
+  
   const imageData = await getLayerData(activeLayerId, x, y, width, height);
   if (!imageData) return;
   
   const bounds = findNonEmptyBounds(imageData, width, height);
   
   if (bounds) {
-    setCroppedSelectionBounds({
+    const croppedBounds = {
       x: x + bounds.x,
       y: y + bounds.y,
       width: bounds.width,
       height: bounds.height
-    });
-    //Al limpiar los selection coords se rompe el ciclo de dependencias, al ya estar vacio este no se ejecutara mas
+    };
+    setCroppedSelectionBounds(croppedBounds);
+  
+    // Verificar si al menos un pixel dentro de los bounds recortados pertenece a un grupo
+    let groupFound = false;
+    let foundGroupName = null;
+    let groupData = null;
+    // Iterar a través de todos los píxeles en el área recortada
+    for (let py = croppedBounds.y; py < croppedBounds.y + croppedBounds.height; py++) {
+      for (let px = croppedBounds.x; px < croppedBounds.x + croppedBounds.width; px++) {
+        const groupInfo = getPixelGroupAt(px, py, activeLayerId);
+        if (groupInfo) {
+          groupFound = true;
+          foundGroupName = groupInfo.group.name;
+          groupData = groupInfo;
+          break; // Salir del bucle al encontrar el primer grupo
+        }
+      }
+      if (groupFound) break; // Romper también el bucle exterior
+    }
+  
+    if (groupFound) {
+      console.log(`Pixel con grupo encontrado: ${JSON.stringify(groupData, null, 2)}`);
+    } else {
+      console.log("Ningún pixel dentro del área recortada pertenece a un grupo");
+    }
+  
     setSelectionCoords([]);
-  } else {
+  }else {
     setCroppedSelectionBounds({ x, y, width, height });
   }
  
-}, [activeLayerId, selectionCoords, findNonEmptyBounds, getLayerData]);
+}, [activeLayerId, selectionCoords,layers, findNonEmptyBounds, getLayerData]);
 
 const autoCropLasso = useCallback(async () => {
   if (!activeLayerId || !lassoPoints || lassoPoints.length < 1) return;
@@ -690,7 +757,7 @@ const autoCropLasso = useCallback(async () => {
     setCroppedSelectionBounds({ x, y, width, height });
   }
 
-  console.log("Se ejecutó el autocrop por lasso");
+  
 }, [activeLayerId, lassoPoints, findNonEmptyBounds, getLayerData]);
 
 
@@ -703,7 +770,7 @@ useEffect(() => {
     const clickPoint = path[0];
     const pixelCoords = getPixelCoordinates(clickPoint);
     const canvasCoords = viewportToCanvasCoords(pixelCoords.x, pixelCoords.y);
-
+   
     // Verificar si el click está en la selección existente
     if (selectionActive && selectedPixels.length > 0) {
       const isOnSelection = selectedPixels.some(pixel => 
@@ -749,10 +816,11 @@ useEffect(() => {
     // Solo actualizar las coordenadas de selección si no estamos arrastrando
     if (!isDraggingSelection) {
       setSelectionCoords(canvasCoords);
+      console.log("se ejecuto esto:,",canvasCoords);
       setCroppedSelectionBounds(null);
     }
   }
-}, [isPressed, path, tool, isDraggingSelection]);
+}, [isPressed, path, tool, isDraggingSelection, activeLayerId]);
 
 
 // Finalizar arrastre cuando se suelta el mouse
@@ -767,8 +835,8 @@ useEffect(() => {
 // Finalización de selección
 useEffect(() => {
   if (tool === TOOLS.select && !isPressed && selectionCoords.length >= 1 && !isDraggingSelection) {
-    autoCropSelection();
     
+    autoCropSelection();
     setSelectionActive(true);
   }
   if (tool === TOOLS.lassoSelect && !isPressed && lassoPoints.length >= 3 && !isDraggingSelection) {
@@ -791,7 +859,7 @@ useEffect(() => {
    
     setSelectionActive(true);
   }
-}, [tool, isPressed, selectionCoords, autoCropSelection, isDraggingSelection,lassoPoints]);
+}, [tool, isPressed, selectionCoords, autoCropSelection, isDraggingSelection,lassoPoints, activeLayerId]);
 
 const paintPixelInSelectionCanvas = useCallback((x, y, color) => {
   const canvas = selectionCanvasRef.current;
@@ -898,7 +966,7 @@ useEffect(() => {
       setCroppedSelectionBounds(null);
       setSelectionActive(false);
     });
-    console.log("si se ejecuto esto:");
+  
   }
 }, [croppedSelectionBounds, isPressed, selectedPixels.length, tool, lassoPoints, isPointInPolygon, getPixelColor, setOriginalPixelColors, setSelectedPixels, setFinalizedSelection, setCroppedSelectionBounds, setSelectionActive]);
 
@@ -961,7 +1029,7 @@ const pintarPixelConTamaño = (coordX, coordY, color, tamaño) => {
     const startX = intX - offset;
     const startY = intY - offset;
 
-    ctx.fillRect(startX, startY, intTamaño, intTamaño);
+    ctx.fillRect(startX, startY, intTamaño, intTamaño,activeLayerId,layers);
   });
 };
 
@@ -996,10 +1064,11 @@ useEffect(() => {
         y: canvasCoords.y
       });
     } else if (!isOnActionButtons) {
+     
       clearCurrentSelection();
-    }
+    } 
   }
-}, [isPressed, path, tool, selectionActive, selectedPixels, dragOffset, clearCurrentSelection, getPixelCoordinates, viewportToCanvasCoords, croppedSelectionBounds]);
+}, [isPressed, path, tool, selectionActive, selectedPixels, dragOffset,activeLayerId, clearCurrentSelection, getPixelCoordinates, viewportToCanvasCoords, croppedSelectionBounds]);
 
 // Pintar pixeles seleccionados en el canvas de selección
 useEffect(() => {
@@ -1046,7 +1115,7 @@ useEffect(() => {
     if (croppedSelectionBounds) {
       const { x, y, width, height } = croppedSelectionBounds;
 
-      console.log("bounds",croppedSelectionBounds);
+   
       // Aplicar tanto el dragOffset como el viewportOffset
       const finalX = x + dragOffset.x;
       const finalY = y + dragOffset.y;
@@ -1102,7 +1171,7 @@ useEffect(() => {
   // Solo se activa para la herramiento de lasso
   if (tool !== TOOLS.lassoSelect || !selectionCanvasRef.current) return;
   
-  console.log("se activoo estooooo");
+
   const canvas = selectionCanvasRef.current;
   const ctx = canvas.getContext('2d');
   
@@ -1176,12 +1245,86 @@ const deleteSelection=()=>{
   selectedPixels.forEach(pixel=>{
     erasePixels(activeLayerId, pixel.x+dragOffset.x, pixel.y+dragOffset.y);
   })
-  setSelectedPixels([]);
+  
 }
 
-const groupSelection =()=>{
 
-}
+
+
+
+const rellenar = useCallback((coords) => {
+  floodFill(activeLayerId, coords.x, coords.y, toolParameters.color);
+}, [layers,activeLayerId,toolParameters]);
+
+// En tu componente padre
+
+
+const groupSelection = useCallback(() => {
+  if (selectedPixels.length > 0) {
+    // Aplicar el desplazamiento actual a las coordenadas de los píxeles
+    const pixelsWithOffset = selectedPixels.map(pixel => ({
+      ...pixel,
+      x: pixel.x + dragOffset.x,
+      y: pixel.y + dragOffset.y
+    }));
+    
+    const groupId = createPixelGroup(activeLayerId, pixelsWithOffset, 'Nuevo Grupo');
+    
+    // Resetear el desplazamiento después de agrupar
+    setDragOffset({ x: 0, y: 0 });
+    
+    // Opcional: seleccionar el grupo recién creado
+    selectPixelGroup(groupId);
+  }
+}, [selectedPixels, dragOffset, activeLayerId, createPixelGroup, selectPixelGroup]);
+
+const ungroupSelection = useCallback(() => {
+  
+  if (!selectedGroup) return;
+
+  // 1. Eliminar el grupo usando la función existente
+  deletePixelGroup(selectedGroup.layerId, selectedGroup.id);
+  
+  // 2. Limpiar la selección actual manteniendo los píxeles visibles
+ 
+
+  // 3. Resetear los estados relacionados con la selección
+  
+}, [selectedGroup, deletePixelGroup]);
+
+
+//Funciones de utilidad para layer manager:
+const handleSelectGroup = useCallback((pixels) => {
+  setTool(TOOLS.select);
+  
+  if (pixels && pixels.length > 0) {
+    const xCoords = pixels.map(p => p.x);
+    const yCoords = pixels.map(p => p.y);
+    
+    const minX = Math.min(...xCoords);
+    const maxX = Math.max(...xCoords);
+    const minY = Math.min(...yCoords);
+    const maxY = Math.max(...yCoords);
+
+    // Guardar los píxeles originales con sus coordenadas absolutas
+    setSelectedPixels(pixels);
+    setOriginalPixelColors(pixels.map(p => p.color || { r: 0, g: 0, b: 0, a: 1 }));
+    setCroppedSelectionBounds({
+      x: minX,
+      y: minY,
+      width: maxX - minX + 1,
+      height: maxY - minY + 1
+    });
+    
+    // Resetear el desplazamiento al seleccionar nuevo grupo
+    setDragOffset({ x: 0, y: 0 });
+    setSelectionActive(true);
+  }
+
+  
+}, []);
+
+
   return (
     <div className="workspace2-container" style={{ position: 'relative', display: 'flex' }}>
       {/* Canvas Area */}
@@ -1189,8 +1332,6 @@ const groupSelection =()=>{
         <div className="toolbar" style={{ 
           display: 'flex', 
           padding: '8px', 
-          
-          
           alignItems: 'center',
           justifyContent: 'space-between'
         }}>
@@ -1329,11 +1470,17 @@ const groupSelection =()=>{
           </span>
           <p className='action-text'>Deseleccionar</p>
       </button>
-      <button className='action-button'>
+      <button className='action-button' onClick={groupSelection}>
           <span className='icon'>
             <LuGroup/>
           </span>
           <p className='action-text'>Agrupar</p>
+      </button>
+      <button className='action-button' onClick={ungroupSelection}>
+          <span className='icon'>
+            <LuGroup/>
+          </span>
+          <p className='action-text'>Desagrupar</p>
       </button>
     </div>
 
@@ -1414,7 +1561,46 @@ const groupSelection =()=>{
       }
  
         <CustomTool tool={tool} setToolParameters={setToolParameters}/>
-       
+        
+        <LayerManager
+          // Props existentes
+          layers={layers}
+          addLayer={addLayer}
+          deleteLayer={deleteLayer}
+          moveLayerUp={moveLayerUp}
+          moveLayerDown={moveLayerDown}
+          toggleLayerVisibility={toggleLayerVisibility}
+          renameLayer={renameLayer}
+          clearLayer={clearLayer}
+          activeLayerId={activeLayerId}
+          setActiveLayerId={setActiveLayerId}
+          
+          // Nuevas props para grupos
+          pixelGroups={pixelGroups}
+          selectedGroup={selectedGroup}
+          selectedPixels={selectedPixels}
+          createPixelGroup={createPixelGroup}
+          deletePixelGroup={deletePixelGroup}
+          getLayerGroups={getLayerGroups}
+          selectPixelGroup={selectPixelGroup}
+          clearSelectedGroup={clearSelectedGroup}
+          renamePixelGroup={renamePixelGroup}
+          toggleGroupVisibility={toggleGroupVisibility}
+          setSelectedPixels={setSelectedPixels}
+
+          //funciones:
+          handleSelectGroup={handleSelectGroup}
+
+          //estados
+          setSelectionCoords={setSelectionCoords}
+          setSelectionActive={setSelectionActive}
+          setCroppedSelectionBounds={setCroppedSelectionBounds}
+          autoCropSelection={autoCropSelection}
+          setOriginalPixelColors={setOriginalPixelColors}
+          setDragOffset={setDragOffset}
+          setTool={setTool}
+          clearCurrentSelection={clearCurrentSelection}
+        />
       </div>
       
     </div>

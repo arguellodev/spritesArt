@@ -4,7 +4,6 @@ import { GoTools } from "react-icons/go";
 import { useState } from "react";
 import './editorMain.css'
 import { LuBrush, LuMousePointer2, LuEraser, LuHand, LuPaintBucket, LuTriangle } from "react-icons/lu";
-import Workspace2 from "../Workspace/workspace2";
 import CanvasTracker from "../Workspace/workspaceMain/workspaceContainer";
 import { LuLassoSelect } from "react-icons/lu";
 import { LuPipette } from "react-icons/lu";
@@ -19,7 +18,7 @@ import { BiReflectVertical } from "react-icons/bi";
 import { LuSquare } from "react-icons/lu";
 import { LuCircle } from "react-icons/lu";
 import { BiPolygon } from "react-icons/bi";
-import CanvasPixi from "../Workspace/workspacePixi/pixiWorkspace";
+
 
 const EditorMain =()=>{
 
@@ -234,7 +233,9 @@ const EditorMain =()=>{
        toolParameters={toolParameters}
      /> */}
     <div className="render-main">
-     <CanvasTracker tool={tool} toolParameters={toolParameters} setToolParameters={setToolParameters}/>
+     <CanvasTracker tool={tool} toolParameters={toolParameters} setToolParameters={setToolParameters} 
+     setTool={setTool}
+     />
     </div>
    {/*
    <div className=" right-panel">

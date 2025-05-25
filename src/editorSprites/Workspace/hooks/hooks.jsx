@@ -81,6 +81,19 @@ export function usePointer(containerRef, targetRef, ignoreRef) {
  * Uses a composite rendering approach for better performance
  */
 export function useLayerManager({ width, height, viewportWidth, viewportHeight, zoom }) {
+  // Agregar estos estados al inicio del hook useLayerManager (después de los estados existentes)
+
+  // Modificaciones para el hook useLayerManager con sistema jerárquico de grupos
+// Estados adicionales para jerarquía de grupos
+const [groupZIndexes, setGroupZIndexes] = useState({}); // {groupId: zIndex}
+const [nextGroupZIndex, setNextGroupZIndex] = useState(0);
+
+
+// Estado para almacenar los grupos de píxeles por capa
+const [pixelGroups, setPixelGroups] = useState({});
+
+// Estado para el grupo actualmente seleccionado
+const [selectedGroup, setSelectedGroup] = useState(null);
   // Reference to the composite canvas (what's actually shown to the user)
   const compositeCanvasRef = useRef(null);
   
@@ -531,6 +544,757 @@ const getPointerCoordsFromCanvas = useCallback((canvasX, canvasY) => {
   };
 }, [zoom, canvasToViewportCoords]);
 
+ /**
+ * Función de flood fill (relleno por inundación) para rellenar un área con un color específico
+ * @param {string} layerId - ID de la capa donde aplicar el flood fill
+ * @param {number} startX - Coordenada X del punto de inicio
+ * @param {number} startY - Coordenada Y del punto de inicio  
+ * @param {Object|string} fillColor - Color de relleno como objeto {r, g, b, a} o string "rgba(r,g,b,a)"
+ * @param {number} tolerance - Tolerancia de color (0-255, por defecto 0 para color exacto)
+ * @returns {boolean} - True si se realizó el relleno correctamente, false si hubo algún error
+ */
+const floodFill = useCallback((layerId, startX, startY, fillColor, tolerance = 0) => {
+  const canvas = layerCanvasesRef.current[layerId];
+  if (!canvas) return false;
+  
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return false;
+  
+  // Verificar que las coordenadas estén dentro del canvas
+  if (startX < 0 || startX >= canvas.width || startY < 0 || startY >= canvas.height) {
+    return false;
+  }
+  
+  // Normalizar el color de relleno a objeto RGBA
+  const fillRGBA = normalizeToRGBA(fillColor);
+  if (!fillRGBA) return false;
+  
+  // Obtener los datos de imagen del canvas completo
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  
+  // Obtener el color del píxel inicial
+  const startIndex = (startY * canvas.width + startX) * 4;
+  const targetColor = {
+    r: data[startIndex],
+    g: data[startIndex + 1], 
+    b: data[startIndex + 2],
+    a: data[startIndex + 3]
+  };
+  
+  // Si el color inicial es igual al color de relleno, no hacer nada
+  if (colorsEqual(targetColor, fillRGBA, 0)) {
+    return true;
+  }
+  
+  // Pila para almacenar los píxeles a procesar
+  const pixelStack = [{x: startX, y: startY}];
+  const processedPixels = new Set();
+  
+  while (pixelStack.length > 0) {
+    const {x, y} = pixelStack.pop();
+    
+    // Crear clave única para este píxel
+    const pixelKey = `${x},${y}`;
+    if (processedPixels.has(pixelKey)) continue;
+    
+    // Verificar límites
+    if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) continue;
+    
+    // Obtener el color del píxel actual
+    const currentIndex = (y * canvas.width + x) * 4;
+    const currentColor = {
+      r: data[currentIndex],
+      g: data[currentIndex + 1],
+      b: data[currentIndex + 2], 
+      a: data[currentIndex + 3]
+    };
+    
+    // Verificar si el color actual coincide con el color objetivo (dentro de la tolerancia)
+    if (!colorsEqual(currentColor, targetColor, tolerance)) {
+      continue;
+    }
+    
+    // Marcar este píxel como procesado
+    processedPixels.add(pixelKey);
+    
+    // Cambiar el color del píxel actual
+    data[currentIndex] = fillRGBA.r;
+    data[currentIndex + 1] = fillRGBA.g;
+    data[currentIndex + 2] = fillRGBA.b;
+    data[currentIndex + 3] = fillRGBA.a;
+    
+    // Añadir píxeles adyacentes a la pila (4-conectividad)
+    pixelStack.push({x: x + 1, y: y});     // Derecha
+    pixelStack.push({x: x - 1, y: y});     // Izquierda  
+    pixelStack.push({x: x, y: y + 1});     // Abajo
+    pixelStack.push({x: x, y: y - 1});     // Arriba
+  }
+  
+  // Aplicar los cambios al canvas
+  ctx.putImageData(imageData, 0, 0);
+  
+  // Re-renderizar la vista compuesta
+  compositeRender();
+  
+  return true;
+}, [compositeRender]);
+
+/**
+ * Función auxiliar para normalizar diferentes formatos de color a objeto RGBA
+ * @param {Object|string} color - Color en formato objeto {r,g,b,a}, string "rgba(r,g,b,a)", hex "#RRGGBB", etc.
+ * @returns {Object|null} - Objeto con propiedades r, g, b, a (0-255) o null si es inválido
+ */
+function normalizeToRGBA(color) {
+  // Si ya es un objeto RGBA válido
+  if (typeof color === 'object' && color !== null) {
+    const { r, g, b, a = 255 } = color;
+    if (isValidRGBAValue(r) && isValidRGBAValue(g) && isValidRGBAValue(b) && isValidRGBAValue(a)) {
+      return { 
+        r: Math.round(r), 
+        g: Math.round(g), 
+        b: Math.round(b), 
+        a: Math.round(a) 
+      };
+    }
+  }
+  
+  // Si es un string, intentar parsearlo
+  if (typeof color === 'string') {
+    const trimmed = color.trim();
+    
+    // Formato rgba(r, g, b, a) o rgb(r, g, b)
+    const rgbaMatch = trimmed.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?\s*\)$/i);
+    if (rgbaMatch) {
+      const r = parseInt(rgbaMatch[1], 10);
+      const g = parseInt(rgbaMatch[2], 10);
+      const b = parseInt(rgbaMatch[3], 10);
+      const a = rgbaMatch[4] ? Math.round(parseFloat(rgbaMatch[4]) * 255) : 255;
+      
+      if (isValidRGBAValue(r) && isValidRGBAValue(g) && isValidRGBAValue(b) && isValidRGBAValue(a)) {
+        return { r, g, b, a };
+      }
+    }
+    
+    // Formato hex #RRGGBB o #RRGGBBAA
+    const hex = trimmed.replace('#', '');
+    if (hex.length === 6 || hex.length === 8) {
+      const r = parseInt(hex.substring(0, 2), 16);
+      const g = parseInt(hex.substring(2, 4), 16);
+      const b = parseInt(hex.substring(4, 6), 16);
+      const a = hex.length === 8 ? parseInt(hex.substring(6, 8), 16) : 255;
+      
+      if (isValidRGBAValue(r) && isValidRGBAValue(g) && isValidRGBAValue(b) && isValidRGBAValue(a)) {
+        return { r, g, b, a };
+      }
+    }
+  }
+  
+  return null; // Formato no reconocido o inválido
+}
+
+/**
+ * Función auxiliar para validar si un valor RGBA está en el rango correcto
+ * @param {number} value - Valor a validar
+ * @returns {boolean} - True si el valor está entre 0 y 255
+ */
+function isValidRGBAValue(value) {
+  return typeof value === 'number' && !isNaN(value) && value >= 0 && value <= 255;
+}
+
+/**
+ * Función auxiliar para comparar dos colores con tolerancia
+ * @param {Object} color1 - Primer color {r, g, b, a}
+ * @param {Object} color2 - Segundo color {r, g, b, a}
+ * @param {number} tolerance - Tolerancia de diferencia (0-255)
+ * @returns {boolean} - True si los colores son similares dentro de la tolerancia
+ */
+function colorsEqual(color1, color2, tolerance) {
+  return Math.abs(color1.r - color2.r) <= tolerance &&
+         Math.abs(color1.g - color2.g) <= tolerance &&
+         Math.abs(color1.b - color2.b) <= tolerance &&
+         Math.abs(color1.a - color2.a) <= tolerance;
+}
+
+/**
+ * Función auxiliar para convertir objeto RGBA a string CSS
+ * @param {Object} rgba - Objeto color {r, g, b, a}
+ * @returns {string} - String en formato "rgba(r, g, b, a)"
+ */
+function rgbaToString(rgba) {
+  const alpha = rgba.a / 255; // Convertir de 0-255 a 0-1 para CSS
+  return `rgba(${rgba.r}, ${rgba.g}, ${rgba.b}, ${alpha})`;
+}
+
+/**
+ * Función auxiliar para crear un objeto RGBA desde valores individuales
+ * @param {number} r - Valor rojo (0-255)
+ * @param {number} g - Valor verde (0-255)
+ * @param {number} b - Valor azul (0-255)
+ * @param {number} a - Valor alpha (0-255, por defecto 255)
+ * @returns {Object} - Objeto RGBA
+ */
+function createRGBA(r, g, b, a = 255) {
+  return { 
+    r: Math.max(0, Math.min(255, Math.round(r))), 
+    g: Math.max(0, Math.min(255, Math.round(g))), 
+    b: Math.max(0, Math.min(255, Math.round(b))), 
+    a: Math.max(0, Math.min(255, Math.round(a))) 
+  };
+}
+
+
+// Agregar estas funciones antes del return del hook
+
+/**
+ * Crear un nuevo grupo de píxeles en una capa específica
+ * @param {string} layerId - ID de la capa donde crear el grupo
+ * @param {Array} selectedPixels - Array de píxeles con formato [{x, y, color: {r, g, b, a}}, ...]
+ * @param {string} groupName - Nombre opcional para el grupo
+ * @returns {string} - ID del grupo creado
+ */
+// Modificar la estructura de grupos para incluir zIndex
+const createPixelGroup = useCallback((layerId, selectedPixels, groupName = null) => {
+  if (!selectedPixels || selectedPixels.length === 0) {
+    console.warn('No hay píxeles seleccionados para crear el grupo');
+    return null;
+  }
+
+  const groupId = nanoid();
+  const finalGroupName = groupName || `Grupo ${Object.keys(pixelGroups[layerId] || {}).length + 1}`;
+  
+  const newGroup = {
+    id: groupId,
+    name: finalGroupName,
+    layerId: layerId,
+    pixels: [...selectedPixels],
+    created: new Date().toISOString(),
+    visible: true,
+    zIndex: nextGroupZIndex // Asignar el siguiente zIndex disponible
+  };
+
+  setPixelGroups(prevGroups => ({
+    ...prevGroups,
+    [layerId]: {
+      ...prevGroups[layerId],
+      [groupId]: newGroup
+    }
+  }));
+
+  // Incrementar el contador de zIndex para el próximo grupo
+  setNextGroupZIndex(prev => prev + 1);
+
+  return groupId;
+}, [pixelGroups, nextGroupZIndex]);
+
+/**
+ * Eliminar un grupo de píxeles
+ * @param {string} layerId - ID de la capa
+ * @param {string} groupId - ID del grupo a eliminar
+ * @returns {boolean} - True si se eliminó correctamente
+ */
+const deletePixelGroup = useCallback((layerId, groupId) => {
+  setPixelGroups(prevGroups => {
+    const layerGroups = { ...prevGroups[layerId] };
+    delete layerGroups[groupId];
+    
+    return {
+      ...prevGroups,
+      [layerId]: layerGroups
+    };
+  });
+
+  // Si el grupo eliminado era el seleccionado, limpiar la selección
+  if (selectedGroup && selectedGroup.id === groupId) {
+    setSelectedGroup(null);
+  }
+
+  return true;
+}, [selectedGroup]);
+
+/**
+ * Obtener todos los grupos de una capa específica
+ * @param {string} layerId - ID de la capa
+ * @returns {Array} - Array de grupos de la capa
+ */
+const getLayerGroups = useCallback((layerId) => {
+  return Object.values(pixelGroups[layerId] || {});
+}, [pixelGroups]);
+
+/**
+ * Obtener todos los grupos de todas las capas
+ * @returns {Object} - Objeto con todos los grupos organizados por capa
+ */
+const getAllGroups = useCallback(() => {
+  return pixelGroups;
+}, [pixelGroups]);
+
+/**
+ * Verificar si un píxel específico pertenece a algún grupo y devolver los píxeles del grupo
+ * @param {number} x - Coordenada X del píxel
+ * @param {number} y - Coordenada Y del píxel
+ * @param {string} layerId - ID de la capa (opcional, si no se proporciona busca en todas las capas)
+ * @returns {Object|null} - Objeto con información del grupo y sus píxeles, o null si no pertenece a ningún grupo
+ */
+const getPixelGroupAt = useCallback((x, y, layerId = null) => {
+  // Si se especifica una capa, buscar solo en esa capa
+  if (layerId) {
+    const layerGroups = pixelGroups[layerId] || {};
+    
+    for (const group of Object.values(layerGroups)) {
+      if (!group.visible) continue; // Saltar grupos invisibles
+      
+      const foundPixel = group.pixels.find(pixel => pixel.x === x && pixel.y === y);
+      if (foundPixel) {
+        return {
+          group: group,
+          selectedPixels: group.pixels,
+          layerId: layerId
+        };
+      }
+    }
+  } else {
+    // Buscar en todas las capas
+    for (const [currentLayerId, layerGroups] of Object.entries(pixelGroups)) {
+      for (const group of Object.values(layerGroups)) {
+        if (!group.visible) continue; // Saltar grupos invisibles
+        
+        const foundPixel = group.pixels.find(pixel => pixel.x === x && pixel.y === y);
+        if (foundPixel) {
+          return {
+            group: group,
+            selectedPixels: group.pixels,
+            layerId: currentLayerId
+          };
+        }
+      }
+    }
+  }
+  
+  return null; // No se encontró el píxel en ningún grupo
+}, [pixelGroups]);
+
+/**
+ * Verificar si un píxel pertenece a un grupo específico
+ * @param {number} x - Coordenada X del píxel
+ * @param {number} y - Coordenada Y del píxel
+ * @param {string} layerId - ID de la capa
+ * @param {string} groupId - ID del grupo
+ * @returns {boolean} - True si el píxel pertenece al grupo
+ */
+const isPixelInGroup = useCallback((x, y, layerId, groupId) => {
+  const layerGroups = pixelGroups[layerId] || {};
+  const group = layerGroups[groupId];
+  
+  if (!group) return false;
+  
+  return group.pixels.some(pixel => pixel.x === x && pixel.y === y);
+}, [pixelGroups]);
+
+/**
+ * Seleccionar un grupo específico (establecer como grupo activo)
+ * @param {string} layerId - ID de la capa
+ * @param {string} groupId - ID del grupo
+ * @returns {Array} - Array de píxeles del grupo seleccionado
+ */
+const selectPixelGroup = useCallback((layerId, groupId) => {
+  const layerGroups = pixelGroups[layerId] || {};
+  const group = layerGroups[groupId];
+  
+  if (!group) {
+    console.warn(`Grupo ${groupId} no encontrado en la capa ${layerId}`);
+    return [];
+  }
+  
+  setSelectedGroup({
+    ...group,
+    layerId: layerId
+  });
+  
+  return group.pixels;
+}, [pixelGroups]);
+
+/**
+ * Limpiar la selección de grupo activo
+ */
+const clearSelectedGroup = useCallback(() => {
+  setSelectedGroup(null);
+}, []);
+
+/**
+ * Renombrar un grupo
+ * @param {string} layerId - ID de la capa
+ * @param {string} groupId - ID del grupo
+ * @param {string} newName - Nuevo nombre para el grupo
+ * @returns {boolean} - True si se renombró correctamente
+ */
+const renamePixelGroup = useCallback((layerId, groupId, newName) => {
+  setPixelGroups(prevGroups => {
+    const layerGroups = { ...prevGroups[layerId] };
+    if (layerGroups[groupId]) {
+      layerGroups[groupId] = {
+        ...layerGroups[groupId],
+        name: newName
+      };
+    }
+    
+    return {
+      ...prevGroups,
+      [layerId]: layerGroups
+    };
+  });
+  
+  return true;
+}, []);
+
+/**
+ * Alternar la visibilidad de un grupo
+ * @param {string} layerId - ID de la capa
+ * @param {string} groupId - ID del grupo
+ * @returns {boolean} - Nuevo estado de visibilidad
+ */
+const toggleGroupVisibility = useCallback((layerId, groupId) => {
+  let newVisibility = false;
+  
+  setPixelGroups(prevGroups => {
+    const layerGroups = { ...prevGroups[layerId] };
+    if (layerGroups[groupId]) {
+      newVisibility = !layerGroups[groupId].visible;
+      layerGroups[groupId] = {
+        ...layerGroups[groupId],
+        visible: newVisibility
+      };
+    }
+    
+    return {
+      ...prevGroups,
+      [layerId]: layerGroups
+    };
+  });
+  
+  return newVisibility;
+}, []);
+
+/**
+ * Actualizar los píxeles de un grupo existente
+ * @param {string} layerId - ID de la capa
+ * @param {string} groupId - ID del grupo
+ * @param {Array} newPixels - Nuevos píxeles para el grupo
+ * @returns {boolean} - True si se actualizó correctamente
+ */
+const updatePixelGroup = useCallback((layerId, groupId, newPixels) => {
+  setPixelGroups(prevGroups => {
+    const layerGroups = { ...prevGroups[layerId] };
+    if (layerGroups[groupId]) {
+      layerGroups[groupId] = {
+        ...layerGroups[groupId],
+        pixels: [...newPixels]
+      };
+    }
+    
+    return {
+      ...prevGroups,
+      [layerId]: layerGroups
+    };
+  });
+  
+  return true;
+}, []);
+
+// Aquìi todo lo relacionado con la mejora de overlays de los grupos y jerarquia:
+// Funciones para manejar la jerarquía de grupos
+const moveGroupUp = useCallback((layerId, groupId) => {
+  setPixelGroups(prevGroups => {
+    const layerGroups = { ...prevGroups[layerId] };
+    const allGroups = Object.values(layerGroups);
+    const currentGroup = layerGroups[groupId];
+    
+    if (!currentGroup) return prevGroups;
+    
+    // Encontrar el grupo que está inmediatamente encima
+    const sortedGroups = allGroups.sort((a, b) => a.zIndex - b.zIndex);
+    const currentIndex = sortedGroups.findIndex(g => g.id === groupId);
+    
+    // Si ya está en la cima, no hacer nada
+    if (currentIndex === sortedGroups.length - 1) return prevGroups;
+    
+    // Intercambiar zIndex con el grupo de arriba
+    const groupAbove = sortedGroups[currentIndex + 1];
+    const tempZIndex = currentGroup.zIndex;
+    
+    layerGroups[groupId] = { ...currentGroup, zIndex: groupAbove.zIndex };
+    layerGroups[groupAbove.id] = { ...groupAbove, zIndex: tempZIndex };
+    
+    return {
+      ...prevGroups,
+      [layerId]: layerGroups
+    };
+  });
+}, []);
+
+const moveGroupDown = useCallback((layerId, groupId) => {
+  setPixelGroups(prevGroups => {
+    const layerGroups = { ...prevGroups[layerId] };
+    const allGroups = Object.values(layerGroups);
+    const currentGroup = layerGroups[groupId];
+    
+    if (!currentGroup) return prevGroups;
+    
+    // Encontrar el grupo que está inmediatamente debajo
+    const sortedGroups = allGroups.sort((a, b) => a.zIndex - b.zIndex);
+    const currentIndex = sortedGroups.findIndex(g => g.id === groupId);
+    
+    // Si ya está en el fondo, no hacer nada
+    if (currentIndex === 0) return prevGroups;
+    
+    // Intercambiar zIndex con el grupo de abajo
+    const groupBelow = sortedGroups[currentIndex - 1];
+    const tempZIndex = currentGroup.zIndex;
+    
+    layerGroups[groupId] = { ...currentGroup, zIndex: groupBelow.zIndex };
+    layerGroups[groupBelow.id] = { ...groupBelow, zIndex: tempZIndex };
+    
+    return {
+      ...prevGroups,
+      [layerId]: layerGroups
+    };
+  });
+}, []);
+
+const moveGroupToTop = useCallback((layerId, groupId) => {
+  setPixelGroups(prevGroups => {
+    const layerGroups = { ...prevGroups[layerId] };
+    const currentGroup = layerGroups[groupId];
+    
+    if (!currentGroup) return prevGroups;
+    
+    // Asignar un nuevo zIndex que sea el más alto
+    const maxZIndex = Math.max(...Object.values(layerGroups).map(g => g.zIndex), -1);
+    layerGroups[groupId] = { ...currentGroup, zIndex: maxZIndex + 1 };
+    
+    // Actualizar el contador global si es necesario
+    setNextGroupZIndex(prev => Math.max(prev, maxZIndex + 2));
+    
+    return {
+      ...prevGroups,
+      [layerId]: layerGroups
+    };
+  });
+}, []);
+
+const moveGroupToBottom = useCallback((layerId, groupId) => {
+  setPixelGroups(prevGroups => {
+    const layerGroups = { ...prevGroups[layerId] };
+    const currentGroup = layerGroups[groupId];
+    
+    if (!currentGroup) return prevGroups;
+    
+    // Asignar un nuevo zIndex que sea el más bajo
+    const minZIndex = Math.min(...Object.values(layerGroups).map(g => g.zIndex), 1);
+    layerGroups[groupId] = { ...currentGroup, zIndex: minZIndex - 1 };
+    
+    return {
+      ...prevGroups,
+      [layerId]: layerGroups
+    };
+  });
+}, []);
+
+// Función mejorada para obtener grupos en una posición considerando jerarquía
+const getGroupsAtPosition = useCallback((x, y, layerId = null) => {
+  const foundGroups = [];
+  
+  // Si se especifica una capa, buscar solo en esa capa
+  if (layerId) {
+    const layerGroups = pixelGroups[layerId] || {};
+    
+    Object.values(layerGroups).forEach(group => {
+      if (!group.visible) return;
+      
+      const foundPixel = group.pixels.find(pixel => pixel.x === x && pixel.y === y);
+      if (foundPixel) {
+        foundGroups.push({
+          group: group,
+          layerId: layerId,
+          pixel: foundPixel
+        });
+      }
+    });
+  } else {
+    // Buscar en todas las capas
+    Object.entries(pixelGroups).forEach(([currentLayerId, layerGroups]) => {
+      Object.values(layerGroups).forEach(group => {
+        if (!group.visible) return;
+        
+        const foundPixel = group.pixels.find(pixel => pixel.x === x && pixel.y === y);
+        if (foundPixel) {
+          foundGroups.push({
+            group: group,
+            layerId: currentLayerId,
+            pixel: foundPixel
+          });
+        }
+      });
+    });
+  }
+  
+  // Ordenar por zIndex (el más alto primero)
+  return foundGroups.sort((a, b) => b.group.zIndex - a.group.zIndex);
+}, [pixelGroups]);
+
+// Obtener el grupo más alto en una posición
+const getTopGroupAt = useCallback((x, y, layerId = null) => {
+  const groups = getGroupsAtPosition(x, y, layerId);
+  return groups.length > 0 ? groups[0] : null;
+}, [getGroupsAtPosition]);
+
+// Renderizado de overlays mejorado con jerarquía
+const renderGroupOverlays = useCallback((ctx) => {
+  // Obtener todos los grupos de todas las capas visibles
+  const allGroupsToRender = [];
+  
+  const sortedLayers = [...layers].sort((a, b) => a.zIndex - b.zIndex);
+  
+  for (const layer of sortedLayers) {
+    if (!layer.visible) continue;
+    
+    const layerGroups = pixelGroups[layer.id] || {};
+    
+    Object.values(layerGroups).forEach(group => {
+      if (!group.visible) return;
+      
+      allGroupsToRender.push({
+        ...group,
+        layerId: layer.id,
+        layerZIndex: layer.zIndex
+      });
+    });
+  }
+  
+  // Ordenar primero por capa, luego por zIndex del grupo
+  allGroupsToRender.sort((a, b) => {
+    if (a.layerZIndex !== b.layerZIndex) {
+      return a.layerZIndex - b.layerZIndex;
+    }
+    return a.zIndex - b.zIndex;
+  });
+  
+  // Renderizar grupos en orden jerárquico
+  allGroupsToRender.forEach(group => {
+    const isSelected = selectedGroup?.id === group.id;
+    
+    group.pixels.forEach(pixel => {
+      // Verificar si el píxel está en el viewport
+      if (pixel.x < viewportOffset.x || 
+          pixel.x >= viewportOffset.x + viewportWidth ||
+          pixel.y < viewportOffset.y || 
+          pixel.y >= viewportOffset.y + viewportHeight) {
+        return;
+      }
+      
+      // Calcular posición en el viewport
+      const viewportX = (pixel.x - viewportOffset.x) * zoom;
+      const viewportY = (pixel.y - viewportOffset.y) * zoom;
+      
+      // Renderizar overlay del grupo con estilo jerárquico
+      renderHierarchicalGroupOverlay(ctx, viewportX, viewportY, zoom, group, isSelected);
+    });
+  });
+}, [layers, pixelGroups, selectedGroup, viewportOffset, viewportWidth, viewportHeight, zoom]);
+
+const renderHierarchicalGroupOverlay = useCallback((ctx, x, y, zoom, group, isSelected) => {
+  ctx.save();
+  
+  // Calcular intensidad del overlay basada en el zIndex
+  const normalizedZIndex = Math.min(group.zIndex / 10, 1); // Normalizar para que no sea demasiado intenso
+  
+  if (isSelected) {
+    // Grupo seleccionado: animación y borde distintivo
+    ctx.strokeStyle = '#00ff00';
+    ctx.lineWidth = Math.max(2, zoom * 0.25);
+    ctx.setLineDash([zoom * 0.4, zoom * 0.2]);
+    
+    const time = Date.now() * 0.005;
+    ctx.lineDashOffset = time * zoom;
+    
+    // Fondo más visible para el grupo seleccionado
+    ctx.fillStyle = `rgba(0, 255, 0, ${0.15 + normalizedZIndex * 0.1})`;
+  } else {
+    // Grupos normales: intensidad basada en jerarquía
+    const hue = (group.zIndex * 60) % 360; // Diferentes colores por zIndex
+    const saturation = 60 + normalizedZIndex * 30; // Más saturación = más arriba
+    const lightness = 50;
+    const alpha = 0.3 + normalizedZIndex * 0.3; // Más opacidad = más arriba
+    
+    ctx.strokeStyle = `hsla(${hue}, ${saturation}%, ${lightness}%, ${alpha})`;
+    ctx.lineWidth = Math.max(1, zoom * (0.1 + normalizedZIndex * 0.15));
+    ctx.setLineDash([]);
+    
+    // Fondo con intensidad jerárquica
+    ctx.fillStyle = `hsla(${hue}, ${saturation}%, ${lightness}%, ${alpha * 0.2})`;
+  }
+  
+  // Dibujar el overlay
+  ctx.strokeRect(x, y, zoom, zoom);
+  ctx.fillRect(x, y, zoom, zoom);
+  
+  // Añadir un pequeño indicador de nivel para grupos muy altos
+  if (group.zIndex > 5) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.font = `${Math.max(8, zoom * 0.3)}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.fillText(group.zIndex.toString(), x + zoom/2, y + zoom/2 + 2);
+  }
+  
+  ctx.restore();
+}, []);
+
+// Función para obtener información detallada de jerarquía en una posición
+const getHierarchyInfoAt = useCallback((x, y, layerId) => {
+  const groups = getGroupsAtPosition(x, y, layerId);
+  
+  return {
+    totalGroups: groups.length,
+    topGroup: groups[0] || null,
+    allGroups: groups,
+    hasHierarchy: groups.length > 1,
+    hierarchy: groups.map((g, index) => ({
+      ...g,
+      hierarchyLevel: groups.length - index,
+      isTop: index === 0,
+      isBottom: index === groups.length - 1
+    }))
+  };
+}, [getGroupsAtPosition]);
+
+// Función para ciclar entre grupos en una posición (útil para selección)
+const cycleGroupSelectionAt = useCallback((x, y, layerId) => {
+  const groups = getGroupsAtPosition(x, y, layerId);
+  if (groups.length === 0) return null;
+  
+  if (!selectedGroup) {
+    // Si no hay grupo seleccionado, seleccionar el de arriba
+    selectPixelGroup(groups[0].layerId, groups[0].group.id);
+    return groups[0];
+  }
+  
+  // Encontrar el grupo actualmente seleccionado en la pila
+  const currentIndex = groups.findIndex(g => g.group.id === selectedGroup.id);
+  
+  if (currentIndex === -1) {
+    // El grupo seleccionado no está en esta posición, seleccionar el de arriba
+    selectPixelGroup(groups[0].layerId, groups[0].group.id);
+    return groups[0];
+  }
+  
+  // Ciclar al siguiente grupo (o volver al primero)
+  const nextIndex = (currentIndex + 1) % groups.length;
+  selectPixelGroup(groups[nextIndex].layerId, groups[nextIndex].group.id);
+  return groups[nextIndex];
+}, [getGroupsAtPosition, selectedGroup, selectPixelGroup]);
+
+
+
 
 return {
   // State
@@ -565,6 +1329,41 @@ return {
   getLayerData,
   erasePixels,
   getCanvasCoordsFromPointer,
-  getPointerCoordsFromCanvas
+  getPointerCoordsFromCanvas,
+//funcion para rellenado
+  floodFill,
+  // Estado de grupos
+pixelGroups,
+selectedGroup,
+
+// Funciones de manejo de grupos
+createPixelGroup,
+deletePixelGroup,
+getLayerGroups,
+getAllGroups,
+getPixelGroupAt,
+isPixelInGroup,
+selectPixelGroup,
+clearSelectedGroup,
+renamePixelGroup,
+toggleGroupVisibility,
+updatePixelGroup,
+
+ 
+  // Nuevas funciones jerárquicas
+  moveGroupUp,
+  moveGroupDown,
+  moveGroupToTop,
+  moveGroupToBottom,
+  getGroupsAtPosition,
+  getTopGroupAt,
+  getHierarchyInfoAt,
+  cycleGroupSelectionAt,
+  
+  // Renderizado mejorado
+  renderGroupOverlays,
 };
 }
+// implementaciones
+
+
