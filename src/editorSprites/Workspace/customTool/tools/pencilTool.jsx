@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import ColorPicker from "./colorPicker";
 
 // Function to convert hex color to RGBA object
 const hexToRgba = (hex) => {
@@ -56,7 +57,7 @@ const PencilTool = ({ setToolParameters, tool }) => {
     // Use RGBA object for color state
     const [pixelSize, setPixelSize] = useState(1);
     const [opacity, setOpacity] = useState(100);
-    const [color, setColor] = useState({ r: 0, g: 0, b: 0, a: 255 }); // Black default
+  
     const [pressure, setPressure] = useState(50);
     const [pattern, setPattern] = useState("solid");
 
@@ -82,25 +83,16 @@ const PencilTool = ({ setToolParameters, tool }) => {
     useEffect(() => {
         setToolParameters({
             width: pixelSize,
-            color: color // Send color as RGBA object
+            
         });
-    }, [pixelSize, color, setToolParameters]);
+    }, [pixelSize, setToolParameters]);
 
     return (
         <>
             <div className="tool-configs">
                 {/* Color configuration */}
                 <div className="config-item">
-                    <label className="tool-label">Color</label>
-                    <div className="color-selector">
-                        <input 
-                            type="color" 
-                            value={rgbaToHex(color)} 
-                            onChange={(e) => handleColorChange(e.target.value)} 
-                            className="color-picker" 
-                        />
-                        <span className="color-value">{rgbaToString(color)}</span>
-                    </div>
+ 
                 </div>
 
                 {/* Pixel size configuration */}
@@ -120,73 +112,16 @@ const PencilTool = ({ setToolParameters, tool }) => {
                 </div>
 
                 {/* Opacity configuration */}
-                <div className="config-item">
-                    <label className="tool-label">Opacity</label>
-                    <div className="slider-container">
-                        <input 
-                            type="range" 
-                            min="0" 
-                            max="100" 
-                            value={opacity} 
-                            onChange={(e) => handleOpacityChange(Number(e.target.value))} 
-                            className="slider" 
-                        />
-                        <span className="tool-value">{opacity}%</span>
-                    </div>
-                </div>
+                
 
                 {/* Toggle for advanced options */}
-                <div className="config-toggle" onClick={() => setShowAdvanced(!showAdvanced)}>
-                    <span>{showAdvanced ? "Hide" : "Show"} Advanced Options</span>
-                    <span className="toggle-icon">{showAdvanced ? "▲" : "▼"}</span>
-                </div>
+                
 
-                {/* Advanced options */}
-                {showAdvanced && (
-                    <>
-                        <div className="config-item">
-                            <label className="tool-label">Pressure</label>
-                            <div className="slider-container">
-                                <input 
-                                    type="range" 
-                                    min="1" 
-                                    max="100" 
-                                    value={pressure} 
-                                    onChange={(e) => setPressure(Number(e.target.value))} 
-                                    className="slider" 
-                                />
-                                <span className="tool-value">{pressure}%</span>
-                            </div>
-                        </div>
-
-                        <div className="config-item">
-                            <label className="tool-label">Pattern</label>
-                            <div className="pattern-selector">
-                                {patterns.map((p) => (
-                                    <button 
-                                        key={p}
-                                        className={`pattern-btn ${pattern === p ? 'active' : ''}`}
-                                        onClick={() => setPattern(p)}
-                                    >
-                                        {p}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </>
-                )}
+             
             </div>
 
             {/* Preview using RGBA color */}
-            <div className="tool-preview">
-                <div className="preview-label">Preview</div>
-                <div 
-                    className="preview-box"
-                    style={{
-                        backgroundColor: rgbaToString(color)
-                    }}
-                ></div>
-            </div>
+           
         </>
     );
 };

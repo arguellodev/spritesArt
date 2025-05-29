@@ -18,12 +18,14 @@ import { BiReflectVertical } from "react-icons/bi";
 import { LuSquare } from "react-icons/lu";
 import { LuCircle } from "react-icons/lu";
 import { BiPolygon } from "react-icons/bi";
+import { TfiLayoutLineSolid } from "react-icons/tfi";
+import { FaBezierCurve } from "react-icons/fa6";
 
 
 const EditorMain =()=>{
 
 
-  const [actualFunction, setActualFunction] = useState('pencil');
+
   const [tool,setTool]= useState('pencil');
   // Aqui un estado para manipular la logica de las configuraciones de los objetos
   //Estos parametros se modifican a partir del navbar derecho
@@ -171,8 +173,19 @@ const EditorMain =()=>{
           icon:   <BiPolygon  /> ,
           onClick: () => setTool('polygon')
         },
+        {
+          label: 'Linea',
+          icon:   <TfiLayoutLineSolid /> ,
+          onClick: () => setTool('line')
+        },
+        {
+          label: 'Curva',
+          icon:   <FaBezierCurve /> ,
+          onClick: () => setTool('curve')
+        },
       ];
-     
+      
+
       
       const [navConfigLateral, setNavLateralConfig] = useState({
         variant: 'vertical',

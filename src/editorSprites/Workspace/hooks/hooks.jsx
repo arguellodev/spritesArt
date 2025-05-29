@@ -930,20 +930,8 @@ const createPixelGroup = useCallback((layerId, selectedPixels, groupName) => {
   // 1. Crear capa especial para el grupo (ahora pasa el layerId como padre)
   const groupLayerId = addGroupLayer(layerId);
 
-  // 2. Copiar píxeles a la nueva capa
-  drawOnLayer(groupLayerId, (ctx) => {
-    selectedPixels.forEach(pixel => {
-      ctx.fillStyle = `rgba(${pixel.color.r},${pixel.color.g},${pixel.color.b},${pixel.color.a})`;
-      ctx.fillRect(pixel.x, pixel.y, 1, 1);
-    });
-  });
-
-  // 3. Borrar píxeles de la capa original (opcional, si quieres "mover")
-  drawOnLayer(layerId, (ctx) => {
-    selectedPixels.forEach(pixel => {
-      ctx.clearRect(pixel.x, pixel.y, 1, 1);
-    });
-  });
+ 
+  //aqui hay un error
 
   // 4. Guardar grupo con referencia a su capa
   const groupId = nanoid();

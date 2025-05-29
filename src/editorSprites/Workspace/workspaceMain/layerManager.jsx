@@ -57,6 +57,53 @@ const LayerManager = ({
   const [showCreateGroup, setShowCreateGroup] = useState(null);
 
   // Funciones de edición de capas
+// Función para manejar el cambio de capa activa
+const handleLayerChange = (layerId) => {
+  
+
+  const groupID = Object.keys(pixelGroups?.[layerId] || {})[0] || null;
+
+  // Si estamos cambiando a una capa diferente
+  if (activeLayerId !== layerId) {
+    // Limpiar selección actual si existe
+    if (selectedGroup || selectedPixels?.length > 0) {
+      clearCurrentSelection();
+    }
+    
+    // Cambiar a la nueva capa
+    setActiveLayerId(layerId);
+
+    setTool('select');
+    clearCurrentSelection();
+    const pixels = selectPixelGroup(layerId, groupID);
+    if (pixels?.length > 0) {
+      // 1. Calcula el bounding box
+      const xCoords = pixels.map(p => p.x);
+      const yCoords = pixels.map(p => p.y);
+      const minX = Math.min(...xCoords);
+      const maxX = Math.max(...xCoords);
+      const minY = Math.min(...yCoords);
+      const maxY = Math.max(...yCoords);
+  
+      // 2. Simula el flujo del mouse: punto inicial -> punto final
+      const startPoint = { x: minX, y: minY };
+      const endPoint = { x: maxX, y: maxY };
+  
+      // 3. Primero setea solo el punto inicial (como el primer click del mouse)
+      setSelectionCoords([startPoint]);
+      
+      // 4. Después de un breve delay, agrega el punto final
+      setTimeout(() => {
+        setSelectionCoords([startPoint, endPoint]);
+        setSelectedPixels(pixels);
+        setOriginalPixelColors(pixels.map(p => p.color || { r: 0, g: 0, b: 0, a: 1 }));
+        setDragOffset({ x: 0, y: 0 });
+        setSelectionActive(true);
+      }, 50); // Delay similar al movimiento natural del mouse
+    }
+  }
+};
+
   const startEditing = (layer, e) => {
     e.stopPropagation();
     setEditingLayerId(layer.id);
@@ -108,14 +155,25 @@ const LayerManager = ({
       alert('Selecciona píxeles primero');
       return;
     }
-
+  
     const groupName = newGroupName.trim() || `Grupo ${getLayerGroups(layerId).length + 1}`;
-    createPixelGroup(layerId, selectedPixels, groupName);
-    
+  
+    // Creamos el grupo y obtenemos su ID
+    const newGroupId = createPixelGroup(layerId, selectedPixels, groupName);
+  
+    // Seleccionamos el grupo recién creado
+    if (newGroupId) {
+      selectPixelGroup(layerId, newGroupId); // ✅ asegúrate que esta función actualiza el estado global
+    }
+  console.log(newGroupId);
+
+  setActiveLayerId(newGroupId.groupLayerId);
+    // Limpiamos
     setNewGroupName('');
     setShowCreateGroup(null);
     setExpandedLayers(prev => ({ ...prev, [layerId]: true }));
   };
+  
 
   // Eliminación de grupos
   const handleDeleteGroup = (layerId, groupId, e) => {
@@ -136,19 +194,11 @@ const LayerManager = ({
         <div 
           className={`layer-item ${layer.visible ? 'visible' : 'hidden'} ${activeLayerId === layer.id ? 'selected' : ''}`}
           style={{ paddingLeft: `${depth * 20}px` }}
-          onClick={() => setActiveLayerId(layer.id)}
+          onClick={() => handleLayerChange(layer.id)}
         >
           <div className="layer-header">
             <div className="layer-content">
-              {hasChildren && (
-                <button 
-                  className="expand-toggle"
-                  onClick={(e) => { e.stopPropagation(); toggleLayerExpansion(layer.id); }}
-                  title={isExpanded ? 'Colapsar' : 'Expandir'}
-                >
-                  {isExpanded ? <LuChevronDown /> : <LuChevronRight />}
-                </button>
-              )}
+              
 
               {editingLayerId === layer.id ? (
                 <input
@@ -172,6 +222,19 @@ const LayerManager = ({
                     <span className="group-count">({layerGroups.length})</span>
                   )}
                 </div>
+              )}
+              {hasChildren && (
+                <div className='groups-toggle-container'>
+                <p className='groups-text'>Grupos: </p>
+                 <button 
+                  className="expand-toggle"
+                  onClick={(e) => { e.stopPropagation(); toggleLayerExpansion(layer.id); }}
+                  title={isExpanded ? 'Colapsar' : 'Expandir'}
+                >
+                  {isExpanded ? <LuChevronDown /> : <LuChevronRight />}
+                </button>
+                </div>
+               
               )}
             </div>
 
@@ -259,7 +322,10 @@ const LayerManager = ({
                 />
                 <div className="group-actions">
                   <button 
-                    onClick={() => handleCreateGroup(layer.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCreateGroup(layer.id);
+                    }}
                     className="confirm-btn"
                   >
                     ✓
@@ -333,3 +399,11 @@ const LayerManager = ({
 };
 
 export default LayerManager;
+
+<button 
+onClick={() => {
+ 
+}}
+    title="Seleccionar píxeles del grupo"
+    className="group-btn select-btn"
+  ></button>

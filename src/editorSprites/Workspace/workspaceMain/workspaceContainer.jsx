@@ -6,6 +6,7 @@ import ViewportNavigator from './viewportNavigator';
 import CustomTool from '../customTool/customTool';
 import './workspaceContainer.css'
 import LayerManager from './layerManager';
+import ColorPicker from '../customTool/tools/colorPicker';
 
 //Inicializamos las herramientas disponibles 
 
@@ -15,7 +16,9 @@ const TOOLS = {
   select: "select",
   lassoSelect : 'lassoSelect',
   move: 'move',
-  fill: 'fill'
+  fill: 'fill',
+  line: 'line',
+  curve: 'curve' 
 }
 
 function CanvasTracker({setTool, tool,setToolParameters,toolParameters}) {
@@ -28,10 +31,20 @@ function CanvasTracker({setTool, tool,setToolParameters,toolParameters}) {
   //Evaluacion de las medidas del canvas:
   const [workspaceWidth, setWorkspaceWidth] = useState(1000);
   const [workspaceHeight, setWorkspaceHeight] = useState(1000);
-
-  //Calcular el area visible:
+  const [color, setColor] = useState({ r: 0, g: 0, b: 0, a: 1 }); // Black default
   
+ // Estados específicos para la herramienta de curva
+ const [curveState, setCurveState] = useState('idle'); // 'idle', 'first-point', 'setting-control'
+const [isSettingControl, setIsSettingControl] = useState(false);
+const [lastPressState, setLastPressState] = useState(false);
+ const curveStartRef = useRef(null);
+ const curveEndRef = useRef(null);
+ const curveControlRef = useRef(null);
 
+
+const [clickStartTime, setClickStartTime] = useState(null);
+  
+  const lineStartRef = useRef(null);
 /*Evaluar el tamaño del workspace para resize cuando se mueve */
 
   useEffect(() => {
@@ -73,7 +86,192 @@ function CanvasTracker({setTool, tool,setToolParameters,toolParameters}) {
     setViewportHeight(Math.min(totalHeight, Math.floor(workspaceHeight.toFixed(0)/ zoom)));
   }, [zoom]);
 
+ // 3. Función para dibujar curva cuadrática (Bézier)
+// Reemplaza la función drawQuadraticCurve existente con esta versión mejorada:
 
+const drawQuadraticCurve = (ctx, start, end, control, width) => {
+  ctx.save();
+  ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
+  
+  // Generar puntos usando un muestreo más denso y conectar con líneas pixel a pixel
+  const distance = Math.max(
+    Math.abs(end.x - start.x) + Math.abs(end.y - start.y),
+    Math.abs(control.x - start.x) + Math.abs(control.y - start.y),
+    Math.abs(control.x - end.x) + Math.abs(control.y - end.y)
+  );
+  
+  // Incrementar significativamente el número de pasos para evitar huecos
+  const steps = Math.max(distance * 3, 50);
+  const points = [];
+  
+  // Generar todos los puntos de la curva
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const x = Math.round((1 - t) * (1 - t) * start.x + 2 * (1 - t) * t * control.x + t * t * end.x);
+    const y = Math.round((1 - t) * (1 - t) * start.y + 2 * (1 - t) * t * control.y + t * t * end.y);
+    points.push({ x, y });
+  }
+  
+  // Función auxiliar para dibujar línea pixel perfecta usando Bresenham
+  const drawPixelPerfectLine = (x0, y0, x1, y1, width) => {
+    const dx = Math.abs(x1 - x0);
+    const dy = -Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1;
+    const sy = y0 < y1 ? 1 : -1;
+    let err = dx + dy;
+    let x = x0, y = y0;
+    
+    const offset = Math.floor(width / 2);
+    const drawnPixels = new Set();
+    
+    while (true) {
+      // Dibujar el brush en la posición actual
+      for (let dy = 0; dy < width; dy++) {
+        for (let dx = 0; dx < width; dx++) {
+          const px = x + dx - offset;
+          const py = y + dy - offset;
+          const key = `${px},${py}`;
+          
+          if (!drawnPixels.has(key) && px >= 0 && px < ctx.canvas.width && py >= 0 && py < ctx.canvas.height) {
+            ctx.fillRect(px, py, 1, 1);
+            drawnPixels.add(key);
+          }
+        }
+      }
+      
+      if (x === x1 && y === y1) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) { err += dy; x += sx; }
+      if (e2 <= dx) { err += dx; y += sy; }
+    }
+  };
+  
+  // Conectar cada punto con el siguiente usando líneas pixel perfectas
+  for (let i = 0; i < points.length - 1; i++) {
+    const current = points[i];
+    const next = points[i + 1];
+    
+    // Solo dibujar si los puntos son diferentes
+    if (current.x !== next.x || current.y !== next.y) {
+      drawPixelPerfectLine(current.x, current.y, next.x, next.y, width);
+    }
+  }
+  
+  // Asegurar que el punto inicial y final estén dibujados
+  const offset = Math.floor(width / 2);
+  
+  // Punto inicial
+  for (let dy = 0; dy < width; dy++) {
+    for (let dx = 0; dx < width; dx++) {
+      const px = start.x + dx - offset;
+      const py = start.y + dy - offset;
+      if (px >= 0 && px < ctx.canvas.width && py >= 0 && py < ctx.canvas.height) {
+        ctx.fillRect(px, py, 1, 1);
+      }
+    }
+  }
+  
+  // Punto final
+  for (let dy = 0; dy < width; dy++) {
+    for (let dx = 0; dx < width; dx++) {
+      const px = end.x + dx - offset;
+      const py = end.y + dy - offset;
+      if (px >= 0 && px < ctx.canvas.width && py >= 0 && py < ctx.canvas.height) {
+        ctx.fillRect(px, py, 1, 1);
+      }
+    }
+  }
+  
+  ctx.restore();
+};
+
+// También actualiza la función de preview de curva en el useEffect del preview:
+// En la parte del preview de curva, reemplaza drawPreviewCurve con esta versión:
+
+const drawPreviewCurve = (start, end, control, width) => {
+  const distance = Math.max(
+    Math.abs(end.x - start.x) + Math.abs(end.y - start.y),
+    Math.abs(control.x - start.x) + Math.abs(control.y - start.y),
+    Math.abs(control.x - end.x) + Math.abs(control.y - end.y)
+  );
+  
+  const steps = Math.max(distance * 3, 50);
+  const points = [];
+  
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const x = Math.round((1 - t) * (1 - t) * start.x + 2 * (1 - t) * t * control.x + t * t * end.x);
+    const y = Math.round((1 - t) * (1 - t) * start.y + 2 * (1 - t) * t * control.y + t * t * end.y);
+    points.push({ x, y });
+  }
+  
+  const offset = Math.floor(width / 2);
+  const drawnPixels = new Set();
+  
+  // Conectar puntos con líneas pixel perfectas
+  for (let i = 0; i < points.length - 1; i++) {
+    const current = points[i];
+    const next = points[i + 1];
+    
+    if (current.x !== next.x || current.y !== next.y) {
+      // Bresenham entre puntos consecutivos
+      const dx = Math.abs(next.x - current.x);
+      const dy = -Math.abs(next.y - current.y);
+      const sx = current.x < next.x ? 1 : -1;
+      const sy = current.y < next.y ? 1 : -1;
+      let err = dx + dy;
+      let x = current.x, y = current.y;
+      
+      while (true) {
+        for (let brushY = 0; brushY < width; brushY++) {
+          for (let brushX = 0; brushX < width; brushX++) {
+            const px = x + brushX - offset;
+            const py = y + brushY - offset;
+            const key = `${px},${py}`;
+            
+            if (!drawnPixels.has(key)) {
+              const screenX = (px - viewportOffset.x) * zoom;
+              const screenY = (py - viewportOffset.y) * zoom;
+              
+              if (screenX >= 0 && screenY >= 0) {
+                ctx.fillRect(Math.floor(screenX), Math.floor(screenY), zoom, zoom);
+                drawnPixels.add(key);
+              }
+            }
+          }
+        }
+        
+        if (x === next.x && y === next.y) break;
+        const e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x += sx; }
+        if (e2 <= dx) { err += dx; y += sy; }
+      }
+    }
+  }
+};
+
+const drawPreviewLine = (x0, y0, x1, y1) => {
+  const dx = Math.abs(x1 - x0);
+  const dy = -Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1;
+  const sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy;
+  let x = x0, y = y0;
+  
+  while (true) {
+    const screenX = (x - viewportOffset.x) * zoom;
+    const screenY = (y - viewportOffset.y) * zoom;
+    
+    if (screenX >= 0 && screenY >= 0) {
+      previewCanvasRef.current?.getContext('2d')?.fillRect(Math.floor(screenX), Math.floor(screenY), zoom, zoom);
+    }
+    
+    if (x === x1 && y === y1) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x += sx; }
+    if (e2 <= dx) { err += dx; y += sy; }
+  }
+};
   
   // Pan offset para arrastrar el canvas
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
@@ -273,83 +471,217 @@ useEffect(() => {
   
   // Manejar el dibujo en la capa activa cuando el usuario arrastra
   useEffect(() => {
-   
     if (tool === TOOLS.move) {
       setDrawMode('move');
     } else if (tool === TOOLS.paint) {
       setDrawMode('draw');
     } else if (tool === TOOLS.erase) {
       setDrawMode('erase');
+    } else if (tool === TOOLS.curve) {
+      setDrawMode('curve'); // Agregar este caso
+    } else if (tool === TOOLS.line) {
+      setDrawMode('line'); // Agregar este caso
     }
   }, [tool]);
+
+ 
   
   useEffect(() => {
-    if (!isPressed || !activeLayerId || drawMode === "move") {
-      
-      lastPixelRef.current = null;
-      return;
-    }
-   
+    // PRIMERO: Manejar herramientas que necesitan detectar clicks y releases
+   // En el useEffect principal, modifica la parte del manejo de la curva:
+   if (tool === TOOLS.curve) {
     const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
     const canvasCoords = viewportToCanvasCoords(viewportPixelCoords.x, viewportPixelCoords.y);
     
+    // Detectar cambio de estado del mouse (de no presionado a presionado)
+    const justPressed = isPressed && !lastPressState;
+    const justReleased = !isPressed && lastPressState;
+    
+    if (justPressed) {
+      if (curveState === 'idle') {
+        // Primer click: establecer punto inicial
+        curveStartRef.current = canvasCoords;
+        setCurveState('first-point');
+        console.log('Punto inicial establecido:', canvasCoords);
+      } else if (curveState === 'first-point') {
+        // Segundo click: establecer punto final y comenzar control
+        curveEndRef.current = canvasCoords;
+        curveControlRef.current = canvasCoords;
+        setCurveState('setting-control');
+        setIsSettingControl(true);
+        console.log('Punto final establecido:', canvasCoords);
+      }
+    }
+    
+    if (justReleased) {
+      if (curveState === 'setting-control') {
+        // Soltar el segundo click: finalizar curva
+        if (curveStartRef.current && curveEndRef.current && curveControlRef.current) {
+          drawOnLayer(activeLayerId, (ctx) => {
+            drawQuadraticCurve(
+              ctx,
+              curveStartRef.current,
+              curveEndRef.current,
+              curveControlRef.current,
+              toolParameters.width
+            );
+          });
+          console.log('Curva dibujada');
+        }
+        
+        // Resetear todo
+        setCurveState('idle');
+        setIsSettingControl(false);
+        curveStartRef.current = null;
+        curveEndRef.current = null;
+        curveControlRef.current = null;
+      }
+    }
+    
+    // Actualizar punto de control mientras se arrastra
+    if (curveState === 'setting-control' && isPressed) {
+      curveControlRef.current = canvasCoords;
+    }
+    
+    // Actualizar estado anterior del mouse
+    setLastPressState(isPressed);
+    
+    return;
+  }
+    if (tool === TOOLS.line) {
+      if (isPressed) {
+        // Guardar el punto inicial al presionar el mouse
+        if (!lineStartRef.current) {
+          const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
+          const canvasCoords = viewportToCanvasCoords(viewportPixelCoords.x, viewportPixelCoords.y);
+          lineStartRef.current = canvasCoords;
+        }
+      } else {
+        // Dibujar la línea definitiva al soltar el mouse
+        if (lineStartRef.current) {
+          const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
+          const endCoords = viewportToCanvasCoords(viewportPixelCoords.x, viewportPixelCoords.y);
+          
+          drawOnLayer(activeLayerId, (ctx) => {
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
+            
+            drawPixelLine(
+              ctx,
+              lineStartRef.current.x,
+              lineStartRef.current.y,
+              endCoords.x,
+              endCoords.y,
+              toolParameters.width
+            );
+          });
+          
+          lineStartRef.current = null;
+        }
+      }
+      return; // Salir temprano
+    }
   
+    // SEGUNDO: Verificar condiciones para herramientas que solo necesitan mouse presionado
+    if (!isPressed || !activeLayerId || drawMode === "move") {
+      lastPixelRef.current = null;
+      return;
+    }
   
-
-    // Dibujar en la capa activa 
-    //Aqui va toda la logica de cambiar estados del pixel
-    drawOnLayer(activeLayerId, (ctx) => {
-      
-      if (tool === TOOLS.erase) {
+    const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
+    const canvasCoords = viewportToCanvasCoords(viewportPixelCoords.x, viewportPixelCoords.y);
+  
+    // TERCERO: Manejar herramientas que solo necesitan un click
+    if (tool === TOOLS.fill) {
+      if (lastPixelRef.current === null) {
+        rellenar(canvasCoords);
+        lastPixelRef.current = viewportPixelCoords;
+      }
+      return;
+    }
+    
+    if (tool === TOOLS.select || tool === TOOLS.lassoSelect) {
+      return;
+    }
+  
+    // CUARTO: Manejar herramientas de dibujo continuo
+    if (tool === TOOLS.paint) {
+      drawOnLayer(activeLayerId, (ctx) => {
+        const canvas = ctx.canvas;
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+  
+        const width = toolParameters.width;
+        const half = Math.floor(width / 2);
+  
+        const drawDot = (x, y) => {
+          const offset = Math.floor(width / 2);
+          for (let dy = 0; dy < width; dy++) {
+            for (let dx = 0; dx < width; dx++) {
+              const px = x + dx - offset;
+              const py = y + dy - offset;
+        
+              if (px < 0 || px >= canvas.width || py < 0 || py >= canvas.height) continue;
+        
+              const index = (py * canvas.width + px) * 4;
+              data[index] = color.r;
+              data[index + 1] = color.g;
+              data[index + 2] = color.b;
+              data[index + 3] = color.a * 255;
+            }
+          }
+        };
+  
+        if (!lastPixelRef.current) {
+          drawDot(canvasCoords.x, canvasCoords.y);
+        } else {
+          // Bresenham's line
+          const last = viewportToCanvasCoords(lastPixelRef.current.x, lastPixelRef.current.y);
+          let x0 = last.x, y0 = last.y, x1 = canvasCoords.x, y1 = canvasCoords.y;
+          let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+          let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy;
+          let x = x0, y = y0;
+  
+          while (true) {
+            drawDot(x, y);
+            if (x === x1 && y === y1) break;
+            let e2 = 2 * err;
+            if (e2 >= dy) { err += dy; x += sx; }
+            if (e2 <= dx) { err += dx; y += sy; }
+          }
+        }
+  
+        ctx.putImageData(imageData, 0, 0);
+      });
+    }
+  
+    if (tool === TOOLS.erase) {
+      drawOnLayer(activeLayerId, (ctx) => {
         ctx.globalCompositeOperation = 'destination-out';
         ctx.fillStyle = 'rgba(0,0,0,1)';
-       
-       
-
-      } else if (tool === TOOLS.paint) {
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = `
-        rgba(
-        ${toolParameters.color.r},
-        ${toolParameters.color.g},
-        ${toolParameters.color.b},
-        ${toolParameters.color.a}
-        )
-        `
-      }
-      
-      else{
-        return
-      }
-      
-      if (!lastPixelRef.current) {
-        // Primer punto - dibujar un solo píxel
-        drawBrush(ctx, canvasCoords, toolParameters.width);
-       
-      } else {
-        // Dibujar una línea desde el último punto al punto actual
-        const lastCanvasCoords = viewportToCanvasCoords(
-          lastPixelRef.current.x,
-          lastPixelRef.current.y
-        );
         
-        // Dibujar una línea usando el algoritmo de Bresenham
-        drawPixelLine(
-          ctx,
-          lastCanvasCoords.x,
-          lastCanvasCoords.y,
-          canvasCoords.x,
-          canvasCoords.y,
-          toolParameters.width
-        );
-      }
-    });
-    if(tool === TOOLS.fill){
-      rellenar(canvasCoords)
-     }
-    // Almacenar la posición actual para el siguiente frame
+        if (!lastPixelRef.current) {
+          drawBrush(ctx, canvasCoords, toolParameters.width);
+        } else {
+          const lastCanvasCoords = viewportToCanvasCoords(
+            lastPixelRef.current.x,
+            lastPixelRef.current.y
+          );
+          
+          drawPixelLine(
+            ctx,
+            lastCanvasCoords.x,
+            lastCanvasCoords.y,
+            canvasCoords.x,
+            canvasCoords.y,
+            toolParameters.width
+          );
+        }
+      });
+    }
+  
     lastPixelRef.current = viewportPixelCoords;
-  }, [isPressed, relativeToTarget, activeLayerId, drawOnLayer, viewportToCanvasCoords, drawPixelLine, drawMode,tool,toolParameters,zoom]);
+  }, [isPressed, relativeToTarget, activeLayerId, drawOnLayer, viewportToCanvasCoords, drawMode, tool, toolParameters, zoom, color, curveState]);
   
   // Manejar la navegación con teclado
   useEffect(() => {
@@ -396,34 +728,309 @@ useEffect(() => {
   useEffect(() => {
     const canvas = previewCanvasRef.current;
     if (!canvas) return;
-  
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-  
+
     // Clear the previous preview
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     // Only draw if mouse is over the canvas
     if (relativeToTarget.x >= 0 && relativeToTarget.y >= 0) {
-      // Get coordinates in the viewport
       const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
-      
-      // Convert to canvas coordinates
       const canvasCoords = viewportToCanvasCoords(viewportPixelCoords.x, viewportPixelCoords.y);
       
-      // Set preview style based on the current tool
-      if (tool === TOOLS.paint) {
+      // Preview para herramienta de curva
+      // Preview para herramienta de curva
+      if (tool === TOOLS.curve) {
+        ctx.save();
+        
+        if (curveState === 'first-point' && curveStartRef.current) {
+          // Mostrar punto inicial y línea de preview
+          const startScreenX = (curveStartRef.current.x - viewportOffset.x) * zoom;
+          const startScreenY = (curveStartRef.current.y - viewportOffset.y) * zoom;
+          const currentScreenX = (canvasCoords.x - viewportOffset.x) * zoom;
+          const currentScreenY = (canvasCoords.y - viewportOffset.y) * zoom;
+          
+          // Punto inicial (pixel art style)
+          ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.8)`;
+          ctx.fillRect(
+            Math.floor(startScreenX),
+            Math.floor(startScreenY),
+            zoom,
+            zoom
+          );
+          
+          // Línea recta de preview usando el mismo sistema que la herramienta line
+          ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.7)`;
+          
+          // Usar el algoritmo de Bresenham para preview pixel art
+          const drawPreviewLine = (x0, y0, x1, y1) => {
+            const dx = Math.abs(x1 - x0);
+            const dy = -Math.abs(y1 - y0);
+            const sx = x0 < x1 ? 1 : -1;
+            const sy = y0 < y1 ? 1 : -1;
+            let err = dx + dy;
+            let x = x0, y = y0;
+            
+            const offset = Math.floor(toolParameters.width / 2);
+            
+            while (true) {
+              // Dibujar cada pixel del brush
+              for (let dy = 0; dy < toolParameters.width; dy++) {
+                for (let dx = 0; dx < toolParameters.width; dx++) {
+                  const px = x + dx - offset;
+                  const py = y + dy - offset;
+                  const screenX = (px - viewportOffset.x) * zoom;
+                  const screenY = (py - viewportOffset.y) * zoom;
+                  
+                  if (screenX >= 0 && screenY >= 0) {
+                    ctx.fillRect(Math.floor(screenX), Math.floor(screenY), zoom, zoom);
+                  }
+                }
+              }
+              
+              if (x === x1 && y === y1) break;
+              const e2 = 2 * err;
+              if (e2 >= dy) { err += dy; x += sx; }
+              if (e2 <= dx) { err += dx; y += sy; }
+            }
+          };
+          
+          drawPreviewLine(curveStartRef.current.x, curveStartRef.current.y, canvasCoords.x, canvasCoords.y);
+          
+        } else if (curveState === 'setting-control' && curveStartRef.current && curveEndRef.current) {
+          // Preview de curva usando pixel art
+          ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.7)`;
+          
+         // En el useEffect del preview, dentro de la condición 
+// else if (curveState === 'setting-control' && curveStartRef.current && curveEndRef.current)
+// Reemplaza toda la función drawPreviewCurve con esta:
+
+const drawPreviewCurve = (start, end, control, width) => {
+  // Calcular distancia para determinar densidad de muestreo
+  const distance = Math.max(
+    Math.abs(end.x - start.x) + Math.abs(end.y - start.y),
+    Math.abs(control.x - start.x) + Math.abs(control.y - start.y),
+    Math.abs(control.x - end.x) + Math.abs(control.y - end.y)
+  );
+  
+  // Incrementar significativamente el número de pasos
+  const steps = Math.max(distance * 3, 50);
+  const points = [];
+  
+  // Generar todos los puntos de la curva Bézier
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const x = Math.round((1 - t) * (1 - t) * start.x + 2 * (1 - t) * t * control.x + t * t * end.x);
+    const y = Math.round((1 - t) * (1 - t) * start.y + 2 * (1 - t) * t * control.y + t * t * end.y);
+    points.push({ x, y });
+  }
+  
+  const offset = Math.floor(width / 2);
+  const drawnPixels = new Set();
+  
+  // Función para dibujar línea pixel perfecta en el preview
+  const drawPreviewPixelLine = (x0, y0, x1, y1) => {
+    const dx = Math.abs(x1 - x0);
+    const dy = -Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1;
+    const sy = y0 < y1 ? 1 : -1;
+    let err = dx + dy;
+    let x = x0, y = y0;
+    
+    while (true) {
+      // Dibujar el brush en la posición actual
+      for (let brushY = 0; brushY < width; brushY++) {
+        for (let brushX = 0; brushX < width; brushX++) {
+          const px = x + brushX - offset;
+          const py = y + brushY - offset;
+          const key = `${px},${py}`;
+          
+          if (!drawnPixels.has(key)) {
+            const screenX = (px - viewportOffset.x) * zoom;
+            const screenY = (py - viewportOffset.y) * zoom;
+            
+            if (screenX >= 0 && screenY >= 0) {
+              ctx.fillRect(Math.floor(screenX), Math.floor(screenY), zoom, zoom);
+              drawnPixels.add(key);
+            }
+          }
+        }
+      }
+      
+      if (x === x1 && y === y1) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) { err += dy; x += sx; }
+      if (e2 <= dx) { err += dx; y += sy; }
+    }
+  };
+  
+  // Conectar cada punto consecutivo con líneas pixel perfectas
+  for (let i = 0; i < points.length - 1; i++) {
+    const current = points[i];
+    const next = points[i + 1];
+    
+    // Solo dibujar si los puntos son diferentes
+    if (current.x !== next.x || current.y !== next.y) {
+      drawPreviewPixelLine(current.x, current.y, next.x, next.y);
+    }
+  }
+  
+  // Asegurar que los puntos inicial y final estén dibujados
+  [start, end].forEach(point => {
+    for (let brushY = 0; brushY < width; brushY++) {
+      for (let brushX = 0; brushX < width; brushX++) {
+        const px = point.x + brushX - offset;
+        const py = point.y + brushY - offset;
+        const key = `${px},${py}`;
+        
+        if (!drawnPixels.has(key)) {
+          const screenX = (px - viewportOffset.x) * zoom;
+          const screenY = (py - viewportOffset.y) * zoom;
+          
+          if (screenX >= 0 && screenY >= 0) {
+            ctx.fillRect(Math.floor(screenX), Math.floor(screenY), zoom, zoom);
+            drawnPixels.add(key);
+          }
+        }
+      }
+    }
+  });
+};
+
+// También actualiza la parte de preview de línea recta (en curveState === 'first-point')
+// Reemplaza la función drawPreviewLine con esta:
+
+const drawPreviewLine = (x0, y0, x1, y1) => {
+  const dx = Math.abs(x1 - x0);
+  const dy = -Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1;
+  const sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy;
+  let x = x0, y = y0;
+  
+  const offset = Math.floor(toolParameters.width / 2);
+  const drawnPixels = new Set();
+  
+  while (true) {
+    // Dibujar cada pixel del brush
+    for (let dy = 0; dy < toolParameters.width; dy++) {
+      for (let dx = 0; dx < toolParameters.width; dx++) {
+        const px = x + dx - offset;
+        const py = y + dy - offset;
+        const key = `${px},${py}`;
+        
+        if (!drawnPixels.has(key)) {
+          const screenX = (px - viewportOffset.x) * zoom;
+          const screenY = (py - viewportOffset.y) * zoom;
+          
+          if (screenX >= 0 && screenY >= 0) {
+            ctx.fillRect(Math.floor(screenX), Math.floor(screenY), zoom, zoom);
+            drawnPixels.add(key);
+          }
+        }
+      }
+    }
+    
+    if (x === x1 && y === y1) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x += sx; }
+    if (e2 <= dx) { err += dx; y += sy; }
+  }
+};
+          
+          drawPreviewCurve(curveStartRef.current, curveEndRef.current, canvasCoords, toolParameters.width);
+          
+          // Puntos de control (pixel art style)
+          const controlScreenX = (canvasCoords.x - viewportOffset.x) * zoom;
+          const controlScreenY = (canvasCoords.y - viewportOffset.y) * zoom;
+          const startScreenX = (curveStartRef.current.x - viewportOffset.x) * zoom;
+          const startScreenY = (curveStartRef.current.y - viewportOffset.y) * zoom;
+          const endScreenX = (curveEndRef.current.x - viewportOffset.x) * zoom;
+          const endScreenY = (curveEndRef.current.y - viewportOffset.y) * zoom;
+          
+          // Líneas guía (más sutiles)
+          ctx.fillStyle = 'rgba(0, 150, 255, 0.3)';
+          // Línea de control desde start
+          drawPreviewLine(curveStartRef.current.x, curveStartRef.current.y, canvasCoords.x, canvasCoords.y);
+          // Línea de control desde end
+          drawPreviewLine(curveEndRef.current.x, curveEndRef.current.y, canvasCoords.x, canvasCoords.y);
+          
+          // Puntos de anclaje
+          ctx.fillStyle = 'rgba(0, 150, 255, 0.8)';
+          ctx.fillRect(Math.floor(controlScreenX), Math.floor(controlScreenY), zoom, zoom);
+          ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.8)`;
+          ctx.fillRect(Math.floor(startScreenX), Math.floor(startScreenY), zoom, zoom);
+          ctx.fillRect(Math.floor(endScreenX), Math.floor(endScreenY), zoom, zoom);
+        }
+        
+        ctx.restore();
+      }
+      else if (tool === TOOLS.paint) {
         ctx.globalCompositeOperation = 'source-over';
         ctx.fillStyle = `rgba(
-          ${toolParameters?.color.r},
-          ${toolParameters?.color.g},
-          ${toolParameters?.color.b},
+          ${color.r},
+          ${color.g},
+          ${color.b},
           ${0.7}
         )`;
       } else if (tool === TOOLS.erase) {
         ctx.globalCompositeOperation = 'source-over';
         ctx.fillStyle = 'rgba(255, 0, 0, 0.3)'; // Red transparent indicator for eraser
-      } else if (tool === TOOLS.move || tool === TOOLS.select || tool === TOOLS.lassoSelect) {
+      } else if (tool === TOOLS.line && isPressed && lineStartRef.current) {
+        const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
+        const currentCanvasCoords = viewportToCanvasCoords(viewportPixelCoords.x, viewportPixelCoords.y);
+      
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.7)`;
+      
+        const drawPreviewLine = (start, end) => {
+          let x0 = start.x;
+          let y0 = start.y;
+          let x1 = end.x;
+          let y1 = end.y;
+          
+          const dx = Math.abs(x1 - x0);
+          const dy = -Math.abs(y1 - y0);
+          const sx = x0 < x1 ? 1 : -1;
+          const sy = y0 < y1 ? 1 : -1;
+          let err = dx + dy;
+      
+          const offset = Math.floor(toolParameters.width / 2);
+      
+          while (true) {
+            const x = x0 - offset;
+            const y = y0 - offset;
+      
+            const screenX = (x - viewportOffset.x) * zoom;
+            const screenY = (y - viewportOffset.y) * zoom;
+      
+            ctx.fillRect(
+              screenX,
+              screenY,
+              toolParameters.width * zoom,
+              toolParameters.width * zoom
+            );
+      
+            if (x0 === x1 && y0 === y1) break;
+            const e2 = 2 * err;
+            if (e2 >= dy) {
+              err += dy;
+              x0 += sx;
+            }
+            if (e2 <= dx) {
+              err += dx;
+              y0 += sy;
+            }
+          }
+        };
+      
+        drawPreviewLine(lineStartRef.current, currentCanvasCoords);
+      }
+      
+      
+      else if (tool === TOOLS.move || tool === TOOLS.select || tool === TOOLS.lassoSelect) {
         return; // Don't show preview for move tool
       }
       
@@ -444,9 +1051,22 @@ useEffect(() => {
         toolParameters?.width * zoom
       );
     }
-  }, [tool, relativeToTarget, toolParameters, zoom, viewportToCanvasCoords, viewportOffset]);
+  }, [tool, relativeToTarget, toolParameters, zoom, viewportToCanvasCoords, viewportOffset, curveState, color]);
 
   //Logica para manejo del zoom con la rueda del raton:
+
+  // Agregar este useEffect después de los existentes
+useEffect(() => {
+  // Resetear estado de curva al cambiar de herramienta
+  if (tool !== TOOLS.curve) {
+    setCurveState('idle');
+    setIsSettingControl(false);
+    curveStartRef.current = null;
+    curveEndRef.current = null;
+    curveControlRef.current = null;
+    setClickStartTime(null);
+  }
+}, [tool]);
 
   // Añadir este useEffect al componente CanvasTracker
   useEffect(() => {
@@ -1342,6 +1962,10 @@ const handleSelectGroup = useCallback((pixels) => {
           alignItems: 'center',
           justifyContent: 'space-between'
         }}>
+            <ColorPicker
+            color={color}
+            onChange={setColor}
+            />
           <div className="zoom-control" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <label htmlFor="zoom">Zoom: {zoom}x</label>
             <input 
@@ -1354,35 +1978,11 @@ const handleSelectGroup = useCallback((pixels) => {
               style={{ width: '120px' }}
             />
           </div>
+
           
             {/* Coordinates info */}
-        <div style={{
-          background: 'rgba(0, 0, 0, 0.8)',
-          padding: '0.75rem',
-          borderRadius: '4px',
-          fontSize: '12px',
-          color: 'white'
-        }}>
-          <h4 style={{ margin: '0 0 8px 0', color: 'white' }}>Coordinates</h4>
-          <div>
-            Viewport Coords: X: {Math.floor(relativeToTarget.x / zoom)}, Y: {Math.floor(relativeToTarget.y / zoom)}
-          </div>
-          <div>
-            Canvas Coords: X: {Math.floor(relativeToTarget.x / zoom) + viewportOffset.x}, 
-            Y: {Math.floor(relativeToTarget.y / zoom) + viewportOffset.y}
-          </div>
-          <div style={{ marginTop: '8px' }}>
-            Viewport Size: {viewportWidth} x {viewportHeight} pixels
-          </div>
-          <div>
-            Rendered Size: {viewportWidth * zoom} x {viewportHeight * zoom} pixels
-          </div>
-          {croppedSelectionBounds && (
-            <div style={{ marginTop: '8px', color: '#00ff88' }}>
-              <strong>Selection:</strong> {croppedSelectionBounds.x},{croppedSelectionBounds.y} ({croppedSelectionBounds.width}x{croppedSelectionBounds.height})
-            </div>
-          )}
-        </div>
+          
+       
           <div className="tools" style={{ display: 'flex', gap: '8px' }}>
             
             
