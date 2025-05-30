@@ -20,6 +20,8 @@ import { LuCircle } from "react-icons/lu";
 import { BiPolygon } from "react-icons/bi";
 import { TfiLayoutLineSolid } from "react-icons/tfi";
 import { FaBezierCurve } from "react-icons/fa6";
+import { LiaFootballBallSolid } from "react-icons/lia";
+
 
 
 const EditorMain =()=>{
@@ -159,10 +161,17 @@ const EditorMain =()=>{
           onClick: () => setTool('square')
         },
         {
-          label: 'Cuadrado',
+          label: 'Circulo',
           icon:   <LuCircle  /> ,
           onClick: () => setTool('circle')
         },
+        {
+          label: 'Elipse',
+          icon:   <LiaFootballBallSolid  /> ,
+          onClick: () => setTool('ellipse')
+        },
+
+        
         {
           label: 'Cuadrado',
           icon:   <LuTriangle  /> ,
