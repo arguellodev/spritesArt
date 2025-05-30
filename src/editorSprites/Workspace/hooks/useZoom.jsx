@@ -108,10 +108,12 @@ export const useZoom = ({
   }, [viewportOffset, viewportWidth, viewportHeight, totalWidth, totalHeight, workspaceWidth, workspaceHeight, moveViewport]);
 
   // Función para zoom con rueda del mouse
-  const handleWheelZoom = useCallback((e, workspaceRef) => {
+  const handleWheelZoom = useCallback((e) => {
+    console.log("Se esta ejecuntando el handle del zoom");
     e.preventDefault();
 
-    const rect = workspaceRef.current?.getBoundingClientRect();
+    const rect = e.currentTarget.getBoundingClientRect(); // Obtenemos el rect del elemento que disparó el evento
+    
     if (!rect) return;
 
     const mouseX = e.clientX - rect.left;
@@ -146,6 +148,7 @@ export const useZoom = ({
 
     const deltaX = clampedOffsetX - viewportOffset.x;
     const deltaY = clampedOffsetY - viewportOffset.y;
+   
 
     setZoom(newZoom);
     setViewportWidth(newViewportWidth);
@@ -154,7 +157,7 @@ export const useZoom = ({
     if (deltaX !== 0 || deltaY !== 0) {
       moveViewport(deltaX, deltaY);
     }
-  }, [zoom, workspaceWidth, workspaceHeight, totalWidth, totalHeight, viewportOffset, panOffsetX, panOffsetY, moveViewport, minZoom, maxZoom]);
+  }, [zoom, workspaceWidth, workspaceHeight, totalWidth, totalHeight, viewportOffset, moveViewport, minZoom, maxZoom]);
 
   // Función para establecer zoom programáticamente
   const setZoomValue = useCallback((newZoom) => {

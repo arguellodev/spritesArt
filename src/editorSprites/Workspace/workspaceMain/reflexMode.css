@@ -1,0 +1,196 @@
+/* ReflexMode.css */
+.reflex-mode {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    position: relative;
+    height: 100%;
+    box-sizing: border-box;
+  }
+  
+  .mirror-controls {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+  }
+  
+  .mirror-btn,
+  .area-btn {
+    width: 32px;
+    height: calc(100% - 8px);
+    background: var(--button-bg);
+    border: 1px solid var(--button-border);
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    padding: 0;
+  }
+  
+  .mirror-btn:hover,
+  .area-btn:hover {
+    background: var(--button-hover);
+    border-color: var(--accent-color);
+  }
+  
+  .mirror-btn.active,
+  .area-btn.active {
+    background-color: #321e5f;
+    border-color: var(--accent-active);
+    box-shadow: 0 2px 8px rgba(140, 82, 255, 0.4);
+  }
+  
+  .mirror-btn svg,
+  .area-btn svg {
+    fill: var(--text-secondary);
+    stroke: var(--text-secondary);
+  }
+  
+  .mirror-btn.active svg,
+  .area-btn.active svg {
+    fill: white;
+    stroke: white;
+  }
+  
+  .mirror-line {
+    stroke: var(--accent-color);
+    stroke-width: 2;
+  }
+  
+  .mirror-btn.active .mirror-line {
+    stroke: white;
+  }
+  
+  /* Panel de coordenadas - siempre visible */
+  .bounds-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    
+    transition: all 0.3s ease;
+    margin-left: 8px;
+    height: calc(100% - 8px);
+    justify-content: center;
+    max-width: 150px;
+  }
+  
+  .bounds-panel.disabled {
+    opacity: 0.4;
+    pointer-events: none;
+    background: var(--bg-secondary);
+    border-color: rgba(68, 68, 68, 0.5);
+  }
+  
+  .bounds-panel.active {
+    opacity: 1;
+    pointer-events: all;
+    background: var(--bg-tertiary);
+    border-color: var(--accent-color);
+    box-shadow: 0 0 8px rgba(140, 82, 255, 0.2);
+  }
+  
+  .bounds-row {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 2px;
+  }
+  
+  .bounds-row:last-child {
+    margin-bottom: 0;
+  }
+  
+  .coord-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 1;
+  }
+  
+  .coord-group label {
+    font-size: 10px;
+    color: var(--text-secondary);
+    min-width: 16px;
+    font-weight: 500;
+  }
+  
+  .coord-group input {
+    width: 100%;
+    height: 18px;
+    background: var(--bg-primary);
+    border: 1px solid var(--button-border);
+    border-radius: 3px;
+    color: var(--text-primary);
+    font-size: 9px;
+    text-align: center;
+    padding: 0 2px;
+    box-sizing: border-box;
+  }
+  
+  .coord-group input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 1px rgba(140, 82, 255, 0.4);
+  }
+  
+  .coord-group input::-webkit-outer-spin-button,
+  .coord-group input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  
+  .coord-group input[type=number] {
+    -moz-appearance: textfield;
+  }
+  
+  /* Indicador de estado */
+  .mirror-status {
+    display: flex;
+    gap: 1px;
+    align-items: center;
+    margin-left: 4px;
+    padding-left: 4px;
+    border-left: 1px solid var(--border-color);
+  }
+  
+  .status-indicator {
+    width: 12px;
+    height: 12px;
+    background: var(--accent-color);
+    color: white;
+    border-radius: 2px;
+    font-size: 8px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+  
+  /* Responsive para toolbar muy estrecha */
+  @media (max-width: 768px) {
+    .reflex-mode {
+      padding: 2px 4px;
+      gap: 4px;
+    }
+    
+    .mirror-btn,
+    .area-btn {
+      width: 24px;
+      height: 20px;
+    }
+    
+    .bounds-panel {
+      min-width: 120px;
+      padding: 6px;
+    }
+  }

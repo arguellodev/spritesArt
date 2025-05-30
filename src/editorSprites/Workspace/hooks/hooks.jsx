@@ -931,7 +931,7 @@ const createPixelGroup = useCallback((layerId, selectedPixels, groupName) => {
   const groupLayerId = addGroupLayer(layerId);
 
  
-  //aqui hay un error
+ 
 
   // 4. Guardar grupo con referencia a su capa
   const groupId = nanoid();

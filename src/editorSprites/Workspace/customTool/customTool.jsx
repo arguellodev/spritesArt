@@ -4,6 +4,7 @@ import PencilTool from "./tools/pencilTool";
 import EraserTool from "./tools/eraserTool";
 import FillTool from "./tools/fillTool";
 import LineTool from "./tools/lineTool";
+import SquareTool from "./tools/squareTool";
 
 
 const CustomTool = ({setToolParameters, tool, toolParameters}) => {
@@ -41,6 +42,12 @@ const CustomTool = ({setToolParameters, tool, toolParameters}) => {
                 <span className="tool-icon">L</span>
             </div>
         <LineTool toolParameters={toolParameters} setToolParameters={setToolParameters}/>
+        </> : tool==='square' ? <>
+        <div className="tool-header">
+                <p className="tool-name">Cuadrado</p>
+                <span className="tool-icon">L</span>
+            </div>
+        <SquareTool toolParameters={toolParameters} setToolParameters={setToolParameters}/>
         </> : null
 
 
