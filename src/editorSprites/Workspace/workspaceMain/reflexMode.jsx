@@ -1,19 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './reflexMode.css';
+import { setPositions } from 'pixi.js';
 
-const ReflexMode = () => {
-  const [mirrorState, setMirrorState] = useState({
-    horizontal: false,
-    vertical: false,
-    customArea: false,
-    bounds: {
-      x1: 0,
-      y1: 0,
-      x2: 100,
-      y2: 100
+const ReflexMode = ({mirrorState, setMirrorState, setDrawableHeight, setDrawableWidth, totalHeight, totalWidth, setPositionCorners}) => {
+
+  useEffect(() => {
+    if (mirrorState.customArea) {
+     
+      const { x1, y1, x2, y2 } = mirrorState.bounds;
+      const newWidth = x2 - x1;
+      const newHeight = y2 - y1;
+      setDrawableWidth(newWidth);
+      setDrawableHeight(newHeight);
+
+      setPositionCorners({x1:x1, x2:x2, y1:y1, y2:y2});
+
+      //console.log("cambiaron los bounds:", mirrorState,"drawable:",newHeight,newWidth);
     }
-  });
-
+   
+    
+  }, [mirrorState.bounds, mirrorState.customArea]);
+  
   const toggleMirror = (type) => {
     setMirrorState(prev => ({
       ...prev,
@@ -22,11 +29,33 @@ const ReflexMode = () => {
   };
 
   const toggleCustomArea = () => {
-    setMirrorState(prev => ({
-      ...prev,
-      customArea: !prev.customArea
-    }));
+    const isActivating = !mirrorState.customArea;
+  
+    if (isActivating) {
+      const newBounds = { x1: 20, y1: 20, x2: 50, y2: 50 };
+      const newWidth = newBounds.x2 - newBounds.x1;
+      const newHeight = newBounds.y2 - newBounds.y1;
+  
+      setDrawableWidth(newWidth);
+      setDrawableHeight(newHeight);
+  
+      setMirrorState(prev => ({
+        ...prev,
+        customArea: true,
+        bounds: newBounds
+      }));
+    } else {
+      setDrawableWidth(totalWidth);
+      setDrawableHeight(totalHeight);
+  
+      setMirrorState(prev => ({
+        ...prev,
+        customArea: false,
+        bounds: { x1: 0, y1: 0, x2: 0, y2: 0 }
+      }));
+    }
   };
+  
 
   const updateBounds = (field, value) => {
     const numValue = parseInt(value) || 0;
@@ -123,13 +152,13 @@ const ReflexMode = () => {
      
 
       {/* Indicador de estado */}
-      {(mirrorState.horizontal || mirrorState.vertical) && (
+      {/*(mirrorState.horizontal || mirrorState.vertical) && (
         <div className="mirror-status">
           {mirrorState.horizontal && <span className="status-indicator">H</span>}
           {mirrorState.vertical && <span className="status-indicator">V</span>}
           {mirrorState.customArea && <span className="status-indicator">C</span>}
         </div>
-      )}
+      )*/}
     </div>
   );
 };

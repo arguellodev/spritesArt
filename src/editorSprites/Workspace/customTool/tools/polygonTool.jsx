@@ -4,12 +4,12 @@ import ToolColorPicker from "./toolColorPicker";
 
 // Simulación del ColorPicker component
 
-const PencilTool = ({ setToolParameters, tool }) => {
+const PolygonTool = ({ setToolParameters, tool }) => {
   // Estados para las diferentes configuraciones
   const [borderWidth, setBorderWidth] = useState(1);
   const [opacity, setOpacity] = useState(100);
-  const [borderColor, setBorderColor] = useState({ r: 255, g: 0, b: 0, a: 1 });
-  const [fillColor, setFillColor] = useState({ r: 0, g: 0, b: 0, a: 1 });
+  const [borderColor, setBorderColor] = useState({ r: 0, g: 0, b: 0, a: 1 });
+  const [fillColor, setFillColor] = useState({ r: 255, g: 0, b: 0, a: 1 });
   const [vertices, setVertices] = useState(5);
   const [rotation, setRotation] = useState(0);
   const [pattern, setPattern] = useState("solid");
@@ -92,14 +92,11 @@ const PencilTool = ({ setToolParameters, tool }) => {
       setToolParameters({
         borderColor: borderColor,
         fillColor: fillColor,
-        width: borderWidth,
+        borderWidth: borderWidth,
         vertices: vertices,
         rotation: rotation,
         pattern: pattern,
-        pressure: pressure,
-        smoothness: 0, // 0 = sin suavizado, 1 = máximo suavizado
-        blur:0,
-        paintMode: 'composite' // o 'fill'
+        pressure: pressure
       });
     }
   }, [borderWidth, opacity, borderColor, fillColor, vertices, rotation, pattern, pressure, setToolParameters]);
@@ -475,4 +472,4 @@ const PencilTool = ({ setToolParameters, tool }) => {
   );
 };
 
-export default PencilTool;
+export default PolygonTool;

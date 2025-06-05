@@ -8,6 +8,11 @@ import './workspaceContainer.css'
 import LayerManager from './layerManager';
 import ColorPicker from '../customTool/tools/colorPicker';
 import ReflexMode from './reflexMode';
+import { GrTopCorner,GrBottomCorner } from "react-icons/gr";
+// @ts-ignore
+import BoundsWorker from './boundsWorker.js?worker';
+
+const worker = new BoundsWorker();
 
 // Definición de las herramientas disponibles
 const TOOLS = {
@@ -22,21 +27,41 @@ const TOOLS = {
   square: 'square',
   triangle: 'triangle',
   circle: 'circle',
-  ellipse: 'ellipse'
+  ellipse: 'ellipse',
+  polygon:'polygon'
 }
 
 function CanvasTracker({setTool, tool,setToolParameters,toolParameters}) {
+
+  //Parametros para modo espejo (reflex mode):
+  const [mirrorState, setMirrorState] = useState({
+    horizontal: false,
+    vertical: false,
+    customArea: false,
+    bounds: {
+      x1: 0,
+      y1: 0,
+      x2: 0,
+      y2: 0
+    }
+  });
+
   // Referencias a elementos del DOM
   const workspaceRef = useRef(null);
   const canvasContainerRef = useRef(null);
   const selectionActionsRef = useRef(null);
   const artboardRef = useRef(null);
   const previewCanvasRef = useRef(null);
+  const mirrorCanvasRef = useRef(null)
+  const leftMirrorCornerRef = useRef(null);
+  const rightMirrorCornerRef = useRef(null);
+
   // Refs para inicio de herramientas
 const squareStartRef = useRef(null);
 const triangleStartRef = useRef(null);
 const circleStartRef = useRef(null);
 const ellipseStartRef = useRef(null);
+const polygonStartRef = useRef(null);
 
 
   // Estados principales
@@ -58,8 +83,12 @@ const ellipseStartRef = useRef(null);
   const lineStartRef = useRef(null);
   
   // Configuración del canvas
-  const totalWidth = 64;
-  const totalHeight = 64;
+  const [totalWidth,setTotalWidth] = useState(64);
+  const [totalHeight, setTotalHeight] = useState(64);
+
+  const [drawableWidth, setDrawableWidth] = useState(64);
+  const [drawableHeight, setDrawableHeight] = useState(64);
+ 
   
   // Estados para el viewport y navegación
   const [viewportWidth, setViewportWidth] = useState(Math.min(totalWidth, workspaceWidth.toFixed(0)/ zoom));
@@ -112,14 +141,124 @@ const ellipseStartRef = useRef(null);
   });
 
   // Hook para rastreo del puntero
-  const { position, relativeToTarget, isPressed, path } = usePointer(workspaceRef, artboardRef,selectionActionsRef);
+ 
+  const {
+    position: position,
+    relativeToTarget: relativeToTarget,
+    isPressed: isPressed,
+    path: path
+  } = usePointer(workspaceRef, artboardRef, [
+    selectionActionsRef,
+    leftMirrorCornerRef,
+    rightMirrorCornerRef
+  ]);
   const lastPixelRef = useRef(null);
   const [drawMode, setDrawMode] = useState("draw");
 
+
+
+//===============================Logica de canvas de espejo ====================================================//
+const {
+  
+  relativeToTarget: rightRelativeToTargetMirror,
+  isPressed: rightIsPressedMirror,
+ 
+} = usePointer(rightMirrorCornerRef, artboardRef,[]);
+const {
+  
+  relativeToTarget: leftRelativeToTargetMirror,
+  isPressed: leftIsPressedMirror,
+ 
+} = usePointer(leftMirrorCornerRef, artboardRef,[]);
+
+const [positionCorners,setPositionCorners] = useState({
+  x1:0,y1:0,x2:0,y2:0
+})
+
+useEffect(() => {
+
+  //para esquina izquierda
+  const leftViewportPixelCoords = getPixelCoordinates(leftRelativeToTargetMirror);
+const leftCanvasCoords = viewportToCanvasCoords(leftViewportPixelCoords.x, leftViewportPixelCoords.y);
+
+//para esquina derecha
+const rightViewportPixelCoords = getPixelCoordinates(rightRelativeToTargetMirror);
+const rightCanvasCoords = viewportToCanvasCoords(rightViewportPixelCoords.x, rightViewportPixelCoords.y);
+
+
+
+if(leftIsPressedMirror){
+  setPositionCorners(prev => ({
+    ...prev,
+    x1: leftCanvasCoords.x,
+    y1: leftCanvasCoords.y
+  }));
+  setMirrorState(prev => ({
+    ...prev,
+    bounds: {
+      ...prev.bounds,
+      x1: leftCanvasCoords.x+1,
+      y1: leftCanvasCoords.y+1,
+     
+    }
+  }));
+  
+}
+
+if(rightIsPressedMirror){
+  setPositionCorners(prev => ({
+    ...prev,
+    x2: rightCanvasCoords.x,
+    y2: rightCanvasCoords.y
+  }));
+  setMirrorState(prev => ({
+    ...prev,
+    bounds: {
+      ...prev.bounds,
+      x2: rightCanvasCoords.x-1,
+      y2: rightCanvasCoords.y-1,
+     
+    }
+  }));
+  
+}
+
+  const canvas = mirrorCanvasRef.current;
+  
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  if (mirrorState.customArea) {
+    ctx.fillStyle = 'rgba(0, 0, 255, 0.1)';
+    ctx.strokeStyle = 'rgba(0, 0, 255, 0.8)';
+    ctx.lineWidth = 4;
+
+    ctx.fillRect(
+      (mirrorState.bounds.x1 - viewportOffset.x) * zoom, 
+      (mirrorState.bounds.y1 - viewportOffset.y) * zoom,
+      (mirrorState.bounds.x2 - mirrorState.bounds.x1) * zoom,
+      (mirrorState.bounds.y2 - mirrorState.bounds.y1) * zoom
+    );
+    
+    ctx.strokeRect(
+      (mirrorState.bounds.x1 - viewportOffset.x) * zoom, 
+      (mirrorState.bounds.y1 - viewportOffset.y) * zoom,
+      (mirrorState.bounds.x2 - mirrorState.bounds.x1) * zoom,
+      (mirrorState.bounds.y2 - mirrorState.bounds.y1) * zoom
+    );
+  }
+}, [mirrorCanvasRef, zoom, mirrorState, viewportOffset,leftRelativeToTargetMirror,rightRelativeToTargetMirror]);
+
+//===============================Logica de canvas de espejo ====================================================//
+
   // Función para dibujar una curva cuadrática Bézier
-  const drawQuadraticCurve = (ctx, start, end, control, width) => {
+  const drawQuadraticCurve = useCallback((ctx, start, end, control, width) => {
     ctx.save();
-    ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
+    ctx.fillStyle = `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, ${toolParameters.fillColor.a})`;
     
     const distance = Math.max(
       Math.abs(end.x - start.x) + Math.abs(end.y - start.y),
@@ -201,7 +340,7 @@ const ellipseStartRef = useRef(null);
     }
     
     ctx.restore();
-  };
+  },[toolParameters]);
 
   // Función para dibujar preview de curva
   const drawPreviewCurve = (start, end, control, width) => {
@@ -541,8 +680,8 @@ const drawTriangle = (ctx, start, end, borderWidth, borderColor, fillColor) => {
   };
   
   // Dibujar el triángulo píxel por píxel
-  for (let py = 0; py < height; py++) {
-    for (let px = 0; px < width; px++) {
+  for (let py = 0; py <= height; py++) {  // Cambiar < por <=
+    for (let px = 0; px <= width; px++) {   // Cambiar < por <=
       const finalX = startX + px;
       const finalY = startY + py;
       
@@ -638,8 +777,8 @@ const drawPreviewTriangle = (ctx, start, end, borderWidth, borderColor, fillColo
   };
   
   // Dibujar preview píxel por píxel
-  for (let py = 0; py < height; py++) {
-    for (let px = 0; px < width; px++) {
+  for (let py = 0; py <= height; py++) {  // Cambiar < por <=
+    for (let px = 0; px <= width; px++) {   // Cambiar < por <=
       const canvasX = startX + px;
       const canvasY = startY + py;
       
@@ -780,6 +919,7 @@ const drawPreviewCircle = (ctx, center, end, borderWidth, borderColor, fillColor
           const screenX = (canvasX - viewportOffset.x) * zoom;
           const screenY = (canvasY - viewportOffset.y) * zoom;
           
+          
           if (screenX >= 0 && screenY >= 0) {
             ctx.fillStyle = `rgba(${colorToUse.r}, ${colorToUse.g}, ${colorToUse.b}, ${alpha})`;
             ctx.fillRect(Math.floor(screenX), Math.floor(screenY), zoom, zoom);
@@ -870,8 +1010,8 @@ const drawPreviewEllipse = (ctx, start, end, borderWidth, borderColor, fillColor
   
   if (canvasWidth <= 0 || canvasHeight <= 0) return;
   
-  const canvasRadiusX = canvasWidth / 2;
-  const canvasRadiusY = canvasHeight / 2;
+  const canvasRadiusX = (canvasWidth / 2);
+  const canvasRadiusY = (canvasHeight / 2);
   
   // Área de renderizado EN COORDENADAS DE CANVAS
   const left = Math.max(0, Math.floor(canvasCenterX - canvasRadiusX) - 1);
@@ -891,6 +1031,7 @@ const drawPreviewEllipse = (ctx, start, end, borderWidth, borderColor, fillColor
         (relativeX * relativeX) / (canvasRadiusX * canvasRadiusX) +
         (relativeY * relativeY) / (canvasRadiusY * canvasRadiusY) : 2;
       
+       
       const isInside = ellipseValue <= 1;
       
       if (isInside) {
@@ -940,6 +1081,181 @@ const drawPreviewEllipse = (ctx, start, end, borderWidth, borderColor, fillColor
     }
   }
 };
+
+//Funciones para herramienta de poligono =====================================
+
+// 3. Función para calcular puntos del polígono
+const calculatePolygonPoints = (centerX, centerY, radius, vertices, rotation = 0) => {
+  const points = [];
+  const angleStep = (2 * Math.PI) / vertices;
+  
+  for (let i = 0; i < vertices; i++) {
+    const angle = i * angleStep + rotation;
+    const x = Math.round(centerX + radius * Math.cos(angle));
+    const y = Math.round(centerY + radius * Math.sin(angle));
+    points.push({ x, y });
+  }
+  
+  return points;
+};
+
+// 4. Función para verificar si un punto está dentro del polígono
+const isPointInPolygonShape = (px, py, points) => {
+  let inside = false;
+  const n = points.length;
+  
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = points[i].x;
+    const yi = points[i].y;
+    const xj = points[j].x;
+    const yj = points[j].y;
+    
+    if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) {
+      inside = !inside;
+    }
+  }
+  
+  return inside;
+};
+
+// 5. Función para dibujar línea entre dos puntos (para los bordes del polígono)
+const drawPolygonLine = (ctx, x0, y0, x1, y1, width, color) => {
+  const dx = Math.abs(x1 - x0);
+  const dy = -Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1;
+  const sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy;
+  let x = x0, y = y0;
+  
+  const offset = Math.floor(width / 2);
+  const drawnPixels = new Set();
+  
+  while (true) {
+    for (let brushY = 0; brushY < width; brushY++) {
+      for (let brushX = 0; brushX < width; brushX++) {
+        const px = x + brushX - offset;
+        const py = y + brushY - offset;
+        const key = `${px},${py}`;
+        
+        if (!drawnPixels.has(key) && px >= 0 && px < ctx.canvas.width && py >= 0 && py < ctx.canvas.height) {
+          ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
+          ctx.fillRect(px, py, 1, 1);
+          drawnPixels.add(key);
+        }
+      }
+    }
+    
+    if (x === x1 && y === y1) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x += sx; }
+    if (e2 <= dx) { err += dx; y += sy; }
+  }
+};
+
+// 6. Función para dibujar polígono
+const drawPolygon = (ctx, centerX, centerY, radius, vertices, borderWidth, borderColor, fillColor, rotation = 0) => {
+  const points = calculatePolygonPoints(centerX, centerY, radius, vertices, rotation);
+  
+  // Calcular bounding box
+  const minX = Math.min(...points.map(p => p.x));
+  const maxX = Math.max(...points.map(p => p.x));
+  const minY = Math.min(...points.map(p => p.y));
+  const maxY = Math.max(...points.map(p => p.y));
+  
+  // Dibujar píxel por píxel
+  for (let py = minY; py <= maxY; py++) {
+    for (let px = minX; px <= maxX; px++) {
+      if (px >= 0 && px < ctx.canvas.width && py >= 0 && py < ctx.canvas.height) {
+        const isInside =isPointInPolygonShape (px, py, points);
+        
+        if (isInside) {
+          let shouldDraw = false;
+          let colorToUse = null;
+          
+          // Verificar si es borde
+          let isBorder = false;
+          if (borderWidth > 0) {
+            // Calcular polígono interior para detectar bordes
+            const innerRadius = Math.max(0, radius - borderWidth);
+            const innerPoints = calculatePolygonPoints(centerX, centerY, innerRadius, vertices, rotation);
+            const isInsideInner = innerRadius > 0 ? isPointInPolygonShape(px, py, innerPoints) : false;
+            isBorder = !isInsideInner;
+          }
+          
+          if (isBorder && borderColor && borderWidth > 0) {
+            shouldDraw = true;
+            colorToUse = borderColor;
+          } else if (!isBorder && fillColor) {
+            shouldDraw = true;
+            colorToUse = fillColor;
+          }
+          
+          if (shouldDraw && colorToUse) {
+            ctx.fillStyle = `rgba(${colorToUse.r}, ${colorToUse.g}, ${colorToUse.b}, ${colorToUse.a})`;
+            ctx.fillRect(px, py, 1, 1);
+          }
+        }
+      }
+    }
+  }
+};
+
+// 7. Función para dibujar preview del polígono
+const drawPreviewPolygon = (ctx, centerX, centerY, radius, vertices, borderWidth, borderColor, fillColor, rotation = 0) => {
+  const points = calculatePolygonPoints(centerX, centerY, radius, vertices, rotation);
+  
+  // Calcular bounding box
+  const minX = Math.min(...points.map(p => p.x));
+  const maxX = Math.max(...points.map(p => p.x));
+  const minY = Math.min(...points.map(p => p.y));
+  const maxY = Math.max(...points.map(p => p.y));
+  
+  // Dibujar píxel por píxel
+  for (let py = minY; py <= maxY; py++) {
+    for (let px = minX; px <= maxX; px++) {
+      const isInside = isPointInPolygonShape(px, py, points);
+      
+      if (isInside) {
+        let shouldDraw = false;
+        let colorToUse = null;
+        let alpha = 0.7;
+        
+        // Verificar si es borde
+        let isBorder = false;
+        if (borderWidth > 0) {
+          const innerRadius = Math.max(0, radius - borderWidth);
+          const innerPoints = calculatePolygonPoints(centerX, centerY, innerRadius, vertices, rotation);
+          const isInsideInner = innerRadius > 0 ? isPointInPolygonShape(px, py, innerPoints) : false;
+          isBorder = !isInsideInner;
+        }
+        
+        if (isBorder && borderColor && borderWidth > 0) {
+          shouldDraw = true;
+          colorToUse = borderColor;
+          alpha = 0.8;
+        } else if (!isBorder && fillColor) {
+          shouldDraw = true;
+          colorToUse = fillColor;
+          alpha = 0.6;
+        }
+        
+        if (shouldDraw && colorToUse) {
+          const screenX = (px - viewportOffset.x) * zoom;
+          const screenY = (py - viewportOffset.y) * zoom;
+          
+          if (screenX >= 0 && screenY >= 0) {
+            ctx.fillStyle = `rgba(${colorToUse.r}, ${colorToUse.g}, ${colorToUse.b}, ${alpha})`;
+            ctx.fillRect(Math.floor(screenX), Math.floor(screenY), zoom, zoom);
+          }
+        }
+      }
+    }
+  }
+};
+
+
+
+
 
   // Función para obtener coordenadas de píxel
   const getPixelCoordinates = (coords) => {
@@ -1066,6 +1382,9 @@ const drawPreviewEllipse = (ctx, start, end, borderWidth, borderColor, fillColor
       setDrawMode('circle');}
     else if (tool === TOOLS.ellipse) {
       setDrawMode('ellipse');}
+      else if (tool === TOOLS.polygon) { // AGREGAR ESTA LÍNEA
+        setDrawMode('polygon');
+      }
     
   }, [tool]);
 
@@ -1093,14 +1412,73 @@ const drawPreviewEllipse = (ctx, start, end, borderWidth, borderColor, fillColor
       if (justReleased) {
         if (curveState === 'setting-control') {
           if (curveStartRef.current && curveEndRef.current && curveControlRef.current) {
+            // Calcular centro basado en bounds (igual que en paint)
+            const hasBounds = mirrorState.bounds &&
+              (mirrorState.bounds.x2 > mirrorState.bounds.x1 ||
+                mirrorState.bounds.y2 > mirrorState.bounds.y1);
+    
+            const centerX = hasBounds
+              ? Math.floor((mirrorState.bounds.x1 + mirrorState.bounds.x2) / 2)
+              : Math.floor(drawableWidth / 2);
+    
+            const centerY = hasBounds
+              ? Math.floor((mirrorState.bounds.y1 + mirrorState.bounds.y2) / 2)
+              : Math.floor(drawableHeight / 2);
+    
+            // Ajustes para dimensiones impares (igual que en paint)
+            const adjustment = -1;
+            const imparAdjustmentHeight = drawableHeight % 2 !== 0 ? 1 : 0;
+            const imparAdjustmentWidth = drawableWidth % 2 !== 0 ? 1 : 0;
+    
+            const reflectHorizontal = (x) => centerX * 2 - x + adjustment + imparAdjustmentWidth;
+            const reflectVertical = (y) => centerY * 2 - y + adjustment + imparAdjustmentHeight;
+    
+            const start = curveStartRef.current;
+            const end = curveEndRef.current;
+            const control = curveControlRef.current;
+    
             drawOnLayer(activeLayerId, (ctx) => {
+              // Curva normal
               drawQuadraticCurve(
                 ctx,
-                curveStartRef.current,
-                curveEndRef.current,
-                curveControlRef.current,
+                start,
+                end,
+                control,
                 toolParameters.width
               );
+    
+              // Espejo vertical (refleja Y)
+              if (mirrorState.vertical) {
+                drawQuadraticCurve(
+                  ctx,
+                  { x: start.x, y: reflectVertical(start.y) },
+                  { x: end.x, y: reflectVertical(end.y) },
+                  { x: control.x, y: reflectVertical(control.y) },
+                  toolParameters.width
+                );
+              }
+    
+              // Espejo horizontal (refleja X)
+              if (mirrorState.horizontal) {
+                drawQuadraticCurve(
+                  ctx,
+                  { x: reflectHorizontal(start.x), y: start.y },
+                  { x: reflectHorizontal(end.x), y: end.y },
+                  { x: reflectHorizontal(control.x), y: control.y },
+                  toolParameters.width
+                );
+              }
+    
+              // Espejo diagonal (refleja X e Y)
+              if (mirrorState.horizontal && mirrorState.vertical) {
+                drawQuadraticCurve(
+                  ctx,
+                  { x: reflectHorizontal(start.x), y: reflectVertical(start.y) },
+                  { x: reflectHorizontal(end.x), y: reflectVertical(end.y) },
+                  { x: reflectHorizontal(control.x), y: reflectVertical(control.y) },
+                  toolParameters.width
+                );
+              }
             });
           }
           
@@ -1120,7 +1498,6 @@ const drawPreviewEllipse = (ctx, start, end, borderWidth, borderColor, fillColor
       
       return;
     }
-    
     if (tool === TOOLS.line) {
       if (isPressed) {
         if (!lineStartRef.current) {
@@ -1132,21 +1509,80 @@ const drawPreviewEllipse = (ctx, start, end, borderWidth, borderColor, fillColor
         if (lineStartRef.current) {
           const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
           const endCoords = viewportToCanvasCoords(viewportPixelCoords.x, viewportPixelCoords.y);
-          
+        
+          const width = toolParameters.width;
+        
+          // Calcular centro basado en bounds (igual que en paint)
+          const hasBounds = mirrorState.bounds &&
+            (mirrorState.bounds.x2 > mirrorState.bounds.x1 ||
+              mirrorState.bounds.y2 > mirrorState.bounds.y1);
+    
+          const centerX = hasBounds
+            ? Math.floor((mirrorState.bounds.x1 + mirrorState.bounds.x2) / 2)
+            : Math.floor(drawableWidth / 2);
+    
+          const centerY = hasBounds
+            ? Math.floor((mirrorState.bounds.y1 + mirrorState.bounds.y2) / 2)
+            : Math.floor(drawableHeight / 2);
+    
+          // Ajustes para dimensiones impares (igual que en paint)
+          const adjustment = -1;
+          const imparAdjustmentHeight = drawableHeight % 2 !== 0 ? 1 : 0;
+          const imparAdjustmentWidth = drawableWidth % 2 !== 0 ? 1 : 0;
+    
+          const reflectHorizontal = (x) => centerX * 2 - x + adjustment + imparAdjustmentWidth;
+          const reflectVertical = (y) => centerY * 2 - y + adjustment + imparAdjustmentHeight;
+        
+          const start = lineStartRef.current;
+          const startX = start.x;
+          const startY = start.y;
+          const endX = endCoords.x;
+          const endY = endCoords.y;
+        
           drawOnLayer(activeLayerId, (ctx) => {
             ctx.globalCompositeOperation = 'source-over';
-            ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
-            
-            drawPixelLine(
-              ctx,
-              lineStartRef.current.x,
-              lineStartRef.current.y,
-              endCoords.x,
-              endCoords.y,
-              toolParameters.width
-            );
+            ctx.fillStyle = `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, ${toolParameters.fillColor.a})`;
+        
+            // Línea normal
+            drawPixelLine(ctx, startX, startY, endX, endY, width);
+        
+            // Espejo vertical (refleja Y)
+            if (mirrorState.vertical) {
+              drawPixelLine(
+                ctx,
+                startX,
+                reflectVertical(startY),
+                endX,
+                reflectVertical(endY),
+                width
+              );
+            }
+    
+            // Espejo horizontal (refleja X)
+            if (mirrorState.horizontal) {
+              drawPixelLine(
+                ctx,
+                reflectHorizontal(startX),
+                startY,
+                reflectHorizontal(endX),
+                endY,
+                width
+              );
+            }
+        
+            // Espejo diagonal (refleja X e Y)
+            if (mirrorState.horizontal && mirrorState.vertical) {
+              drawPixelLine(
+                ctx,
+                reflectHorizontal(startX),
+                reflectVertical(startY),
+                reflectHorizontal(endX),
+                reflectVertical(endY),
+                width
+              );
+            }
           });
-          
+        
           lineStartRef.current = null;
         }
       }
@@ -1310,6 +1746,54 @@ if (tool === TOOLS.ellipse) {
   }
   return;
 }
+
+if (tool === TOOLS.polygon) {
+  if (isPressed) {
+    if (!polygonStartRef.current) {
+      const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
+      const canvasCoords = viewportToCanvasCoords(viewportPixelCoords.x, viewportPixelCoords.y);
+      polygonStartRef.current = canvasCoords;
+    }
+  } else {
+    if (polygonStartRef.current) {
+      const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
+      const endCoords = viewportToCanvasCoords(viewportPixelCoords.x, viewportPixelCoords.y);
+      
+      drawOnLayer(activeLayerId, (ctx) => {
+        ctx.globalCompositeOperation = 'source-over';
+        
+        // Calcular centro y radio
+        const centerX = polygonStartRef.current.x;
+        const centerY = polygonStartRef.current.y;
+        const dx = endCoords.x - centerX;
+        const dy = endCoords.y - centerY;
+        const radius = Math.sqrt(dx * dx + dy * dy);
+        
+        // Obtener parámetros de la herramienta
+        const borderColor = toolParameters.borderColor || null;
+        const fillColor = toolParameters.fillColor || color;
+        const borderWidth = toolParameters.borderWidth || 0;
+        const vertices = toolParameters.vertices || 6; // Default hexágono
+        const rotation = (toolParameters.rotation || 0) * Math.PI / 180; // Convertir a radianes
+        
+        drawPolygon(
+          ctx,
+          centerX,
+          centerY,
+          radius,
+          vertices,
+          borderWidth,
+          borderColor,
+          fillColor,
+          rotation
+        );
+      });
+      
+      polygonStartRef.current = null;
+    }
+  }
+  return;
+}
   
     if (!isPressed || !activeLayerId || drawMode === "move") {
       lastPixelRef.current = null;
@@ -1334,51 +1818,224 @@ if (tool === TOOLS.ellipse) {
     if (tool === TOOLS.paint) {
       drawOnLayer(activeLayerId, (ctx) => {
         const canvas = ctx.canvas;
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-  
-        const width = toolParameters.width;
-        const half = Math.floor(width / 2);
-  
-        const drawDot = (x, y) => {
-          const offset = Math.floor(width / 2);
-          for (let dy = 0; dy < width; dy++) {
-            for (let dx = 0; dx < width; dx++) {
-              const px = x + dx - offset;
-              const py = y + dy - offset;
+        const width = toolParameters?.width;
+        const offset = Math.floor(width / 2);
+        const blur = 0.5 || 0; // Parámetro blur de 0 a 1
+        const paintMode = toolParameters?.paintMode || 'manual'; // 'manual' o 'composite'
         
-              if (px < 0 || px >= canvas.width || py < 0 || py >= canvas.height) continue;
+        const hasBounds = mirrorState.bounds &&
+          (mirrorState.bounds.x2 > mirrorState.bounds.x1 ||
+            mirrorState.bounds.y2 > mirrorState.bounds.y1);
         
-              const index = (py * canvas.width + px) * 4;
-              data[index] = color.r;
-              data[index + 1] = color.g;
-              data[index + 2] = color.b;
-              data[index + 3] = color.a * 255;
+        const centerX = hasBounds
+          ? Math.floor((mirrorState.bounds.x1 + mirrorState.bounds.x2) / 2)
+          : Math.floor(drawableWidth / 2);
+        
+        const centerY = hasBounds
+          ? Math.floor((mirrorState.bounds.y1 + mirrorState.bounds.y2) / 2)
+          : Math.floor(drawableHeight / 2);
+        
+        const adjustment = -1;
+        const imparAdjustmentHeight = drawableHeight % 2 !== 0 ? 1 : 0;
+        const imparAdjustmentWidth = drawableWidth % 2 !== 0 ? 1 : 0;
+        
+        const reflectHorizontal = (x) => centerX * 2 - x + adjustment + imparAdjustmentWidth;
+        const reflectVertical = (y) => centerY * 2 - y + adjustment + imparAdjustmentHeight;
+        
+        if (paintMode === 'composite') {
+          // Modo usando globalCompositeOperation
+          const originalComposite = ctx.globalCompositeOperation;
+          ctx.globalCompositeOperation = 'source-over';
+          
+          // Configurar el estilo del pincel
+          ctx.fillStyle = `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, ${toolParameters.fillColor.a})`;
+          
+          // Función para calcular la opacidad basada en la distancia al centro (para gradiente)
+          const calculateAlpha = (dx, dy) => {
+            if (blur === 0) {
+              return toolParameters.fillColor.a;
+            }
+            
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const maxDistance = offset;
+            const blurStartDistance = blur * maxDistance;
+            
+            if (distance <= blurStartDistance) {
+              return toolParameters.fillColor.a;
+            } else {
+              const blurDistance = distance - blurStartDistance;
+              const remainingDistance = maxDistance - blurStartDistance;
+              
+              if (remainingDistance <= 0) {
+                return toolParameters.fillColor.a;
+              }
+              
+              const blurRatio = blurDistance / remainingDistance;
+              const minAlpha = 0.1;
+              const alphaReduction = (1 - minAlpha) * blurRatio;
+              
+              return Math.max(minAlpha, toolParameters.fillColor.a * (1 - alphaReduction));
+            }
+          };
+          
+          const drawDot = (x, y) => {
+            if (blur === 0) {
+              // Sin blur, dibujar círculo sólido
+              ctx.beginPath();
+              ctx.arc(x, y, offset, 0, 2 * Math.PI);
+              ctx.fill();
+            } else {
+              // Con blur, crear gradiente radial
+              const gradient = ctx.createRadialGradient(x, y, 0, x, y, offset);
+              const centerAlpha = toolParameters.fillColor.a;
+              const edgeAlpha = calculateAlpha(offset, 0);
+              
+              gradient.addColorStop(0, `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, ${centerAlpha})`);
+              gradient.addColorStop(blur, `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, ${centerAlpha})`);
+              gradient.addColorStop(1, `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, ${edgeAlpha})`);
+              
+              ctx.fillStyle = gradient;
+              ctx.beginPath();
+              ctx.arc(x, y, offset, 0, 2 * Math.PI);
+              ctx.fill();
+              
+              // Restaurar el color original para próximas iteraciones
+              ctx.fillStyle = `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, ${toolParameters.fillColor.a})`;
+            }
+          };
+          
+          const drawWithMirrors = (x, y) => {
+            drawDot(x, y); // Original
+            
+            if (mirrorState.vertical) {
+              drawDot(x, reflectVertical(y));
+            }
+            if (mirrorState.horizontal) {
+              drawDot(reflectHorizontal(x), y);
+            }
+            if (mirrorState.vertical && mirrorState.horizontal) {
+              drawDot(reflectHorizontal(x), reflectVertical(y));
+            }
+          };
+          
+          if (!lastPixelRef.current) {
+            drawWithMirrors(canvasCoords.x, canvasCoords.y);
+          } else {
+            const last = viewportToCanvasCoords(lastPixelRef.current.x, lastPixelRef.current.y);
+            let x0 = last.x, y0 = last.y;
+            let x1 = canvasCoords.x, y1 = canvasCoords.y;
+            let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+            let sx = x0 < x1 ? 1 : -1;
+            let sy = y0 < y1 ? 1 : -1;
+            let err = dx + dy;
+            let x = x0, y = y0;
+            
+            while (true) {
+              drawWithMirrors(x, y);
+              if (x === x1 && y === y1) break;
+              const e2 = 2 * err;
+              if (e2 >= dy) { err += dy; x += sx; }
+              if (e2 <= dx) { err += dx; y += sy; }
             }
           }
-        };
-  
-        if (!lastPixelRef.current) {
-          drawDot(canvasCoords.x, canvasCoords.y);
+          
+          // Restaurar el composite operation original
+          ctx.globalCompositeOperation = originalComposite;
+          
         } else {
-          const last = viewportToCanvasCoords(lastPixelRef.current.x, lastPixelRef.current.y);
-          let x0 = last.x, y0 = last.y, x1 = canvasCoords.x, y1 = canvasCoords.y;
-          let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
-          let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy;
-          let x = x0, y = y0;
-  
-          while (true) {
-            drawDot(x, y);
-            if (x === x1 && y === y1) break;
-            let e2 = 2 * err;
-            if (e2 >= dy) { err += dy; x += sx; }
-            if (e2 <= dx) { err += dx; y += sy; }
+          // Modo manual (original) - manipulación directa de imageData
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const data = imageData.data;
+          
+          // Función para calcular la opacidad basada en la distancia al centro
+          const calculateAlpha = (dx, dy) => {
+            if (blur === 0) {
+              return toolParameters.fillColor.a;
+            }
+            
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const maxDistance = offset;
+            const blurStartDistance = blur * maxDistance;
+            
+            if (distance <= blurStartDistance) {
+              return toolParameters.fillColor.a;
+            } else {
+              const blurDistance = distance - blurStartDistance;
+              const remainingDistance = maxDistance - blurStartDistance;
+              
+              if (remainingDistance <= 0) {
+                return toolParameters.fillColor.a;
+              }
+              
+              const blurRatio = blurDistance / remainingDistance;
+              const minAlpha = 0.1;
+              const alphaReduction = (1 - minAlpha) * blurRatio;
+              
+              return Math.max(minAlpha, toolParameters.fillColor.a * (1 - alphaReduction));
+            }
+          };
+          
+          const drawDot = (x, y) => {
+            for (let dy = 0; dy < width; dy++) {
+              for (let dx = 0; dx < width; dx++) {
+                const px = x + dx - offset;
+                const py = y + dy - offset;
+                
+                if (px < 0 || px >= canvas.width || py < 0 || py >= canvas.height) continue;
+                
+                const relativeX = dx - offset;
+                const relativeY = dy - offset;
+                const alpha = calculateAlpha(relativeX, relativeY);
+                
+                const index = (py * canvas.width + px) * 4;
+                data[index] = toolParameters.fillColor.r;
+                data[index + 1] = toolParameters.fillColor.g;
+                data[index + 2] = toolParameters.fillColor.b;
+                data[index + 3] = alpha * 255;
+              }
+            }
+          };
+          
+          const drawWithMirrors = (x, y) => {
+            drawDot(x, y); // Original
+            
+            if (mirrorState.vertical) {
+              drawDot(x, reflectVertical(y));
+            }
+            if (mirrorState.horizontal) {
+              drawDot(reflectHorizontal(x), y);
+            }
+            if (mirrorState.vertical && mirrorState.horizontal) {
+              drawDot(reflectHorizontal(x), reflectVertical(y));
+            }
+          };
+          
+          if (!lastPixelRef.current) {
+            drawWithMirrors(canvasCoords.x, canvasCoords.y);
+          } else {
+            const last = viewportToCanvasCoords(lastPixelRef.current.x, lastPixelRef.current.y);
+            let x0 = last.x, y0 = last.y;
+            let x1 = canvasCoords.x, y1 = canvasCoords.y;
+            let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+            let sx = x0 < x1 ? 1 : -1;
+            let sy = y0 < y1 ? 1 : -1;
+            let err = dx + dy;
+            let x = x0, y = y0;
+            
+            while (true) {
+              drawWithMirrors(x, y);
+              if (x === x1 && y === y1) break;
+              const e2 = 2 * err;
+              if (e2 >= dy) { err += dy; x += sx; }
+              if (e2 <= dx) { err += dx; y += sy; }
+            }
           }
+          
+          ctx.putImageData(imageData, 0, 0);
         }
-  
-        ctx.putImageData(imageData, 0, 0);
       });
     }
+    
   
     if (tool === TOOLS.erase) {
       drawOnLayer(activeLayerId, (ctx) => {
@@ -1406,7 +2063,7 @@ if (tool === TOOLS.ellipse) {
     }
   
     lastPixelRef.current = viewportPixelCoords;
-  }, [isPressed, relativeToTarget, activeLayerId, drawOnLayer, viewportToCanvasCoords, drawMode, tool, toolParameters, zoom, color, curveState]);
+  }, [isPressed, relativeToTarget, activeLayerId, drawOnLayer, viewportToCanvasCoords, drawMode, tool, toolParameters, zoom, color, curveState,mirrorState]);
 
   // Efecto para manejar navegación con teclado
   useEffect(() => {
@@ -1459,22 +2116,34 @@ if (tool === TOOLS.ellipse) {
       if (tool === TOOLS.curve) {
         ctx.save();
         
+        // Calcular centro basado en bounds (igual que en paint)
+        const hasBounds = mirrorState.bounds &&
+          (mirrorState.bounds.x2 > mirrorState.bounds.x1 ||
+            mirrorState.bounds.y2 > mirrorState.bounds.y1);
+      
+        const centerX = hasBounds
+          ? Math.floor((mirrorState.bounds.x1 + mirrorState.bounds.x2) / 2)
+          : Math.floor(drawableWidth / 2);
+      
+        const centerY = hasBounds
+          ? Math.floor((mirrorState.bounds.y1 + mirrorState.bounds.y2) / 2)
+          : Math.floor(drawableHeight / 2);
+      
+        // Ajustes para dimensiones impares (igual que en paint)
+        const adjustment = -1;
+        const imparAdjustmentHeight = drawableHeight % 2 !== 0 ? 1 : 0;
+        const imparAdjustmentWidth = drawableWidth % 2 !== 0 ? 1 : 0;
+      
+        const reflectHorizontal = (x) => centerX * 2 - x + adjustment + imparAdjustmentWidth;
+        const reflectVertical = (y) => centerY * 2 - y + adjustment + imparAdjustmentHeight;
+        
         if (curveState === 'first-point' && curveStartRef.current) {
-          const startScreenX = (curveStartRef.current.x - viewportOffset.x) * zoom;
-          const startScreenY = (curveStartRef.current.y - viewportOffset.y) * zoom;
-          const currentScreenX = (canvasCoords.x - viewportOffset.x) * zoom;
-          const currentScreenY = (canvasCoords.y - viewportOffset.y) * zoom;
-          
-          ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.8)`;
-          ctx.fillRect(
-            Math.floor(startScreenX),
-            Math.floor(startScreenY),
-            zoom,
-            zoom
-          );
-          
-          ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.7)`;
-          
+          const drawPointPreview = (point) => {
+            const screenX = (point.x - viewportOffset.x) * zoom;
+            const screenY = (point.y - viewportOffset.y) * zoom;
+            ctx.fillRect(Math.floor(screenX), Math.floor(screenY), zoom, zoom);
+          };
+      
           const drawPreviewLine = (x0, y0, x1, y1) => {
             const dx = Math.abs(x1 - x0);
             const dy = -Math.abs(y1 - y0);
@@ -1505,12 +2174,54 @@ if (tool === TOOLS.ellipse) {
               if (e2 <= dx) { err += dx; y += sy; }
             }
           };
+      
+          // Punto de inicio original
+          ctx.fillStyle = `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, 0.7)`;
+          drawPointPreview(curveStartRef.current);
+      
+          // Puntos de inicio reflejados
+          if (mirrorState.vertical) {
+            drawPointPreview({ x: curveStartRef.current.x, y: reflectVertical(curveStartRef.current.y) });
+          }
+          if (mirrorState.horizontal) {
+            drawPointPreview({ x: reflectHorizontal(curveStartRef.current.x), y: curveStartRef.current.y });
+          }
+          if (mirrorState.vertical && mirrorState.horizontal) {
+            drawPointPreview({ x: reflectHorizontal(curveStartRef.current.x), y: reflectVertical(curveStartRef.current.y) });
+          }
           
+          ctx.fillStyle = `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, 0.7)`;
+          
+          // Línea original
           drawPreviewLine(curveStartRef.current.x, curveStartRef.current.y, canvasCoords.x, canvasCoords.y);
           
-        } else if (curveState === 'setting-control' && curveStartRef.current && curveEndRef.current) {
-          ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.7)`;
+          // Líneas reflejadas
+          if (mirrorState.vertical) {
+            drawPreviewLine(
+              curveStartRef.current.x, 
+              reflectVertical(curveStartRef.current.y), 
+              canvasCoords.x, 
+              reflectVertical(canvasCoords.y)
+            );
+          }
+          if (mirrorState.horizontal) {
+            drawPreviewLine(
+              reflectHorizontal(curveStartRef.current.x), 
+              curveStartRef.current.y, 
+              reflectHorizontal(canvasCoords.x), 
+              canvasCoords.y
+            );
+          }
+          if (mirrorState.vertical && mirrorState.horizontal) {
+            drawPreviewLine(
+              reflectHorizontal(curveStartRef.current.x), 
+              reflectVertical(curveStartRef.current.y), 
+              reflectHorizontal(canvasCoords.x), 
+              reflectVertical(canvasCoords.y)
+            );
+          }
           
+        } else if (curveState === 'setting-control' && curveStartRef.current && curveEndRef.current) {
           const drawPreviewCurve = (start, end, control, width) => {
             const distance = Math.max(
               Math.abs(end.x - start.x) + Math.abs(end.y - start.y),
@@ -1594,25 +2305,134 @@ if (tool === TOOLS.ellipse) {
               }
             });
           };
+      
+          const drawPointPreview = (point, fillStyle) => {
+            const screenX = (point.x - viewportOffset.x) * zoom;
+            const screenY = (point.y - viewportOffset.y) * zoom;
+            ctx.fillStyle = fillStyle;
+            ctx.fillRect(Math.floor(screenX), Math.floor(screenY), zoom, zoom);
+          };
+      
+          const drawPreviewLine = (x0, y0, x1, y1) => {
+            const dx = Math.abs(x1 - x0);
+            const dy = -Math.abs(y1 - y0);
+            const sx = x0 < x1 ? 1 : -1;
+            const sy = y0 < y1 ? 1 : -1;
+            let err = dx + dy;
+            let x = x0, y = y0;
+            
+            const offset = Math.floor(toolParameters.width / 2);
+            
+            while (true) {
+              for (let dy = 0; dy < toolParameters.width; dy++) {
+                for (let dx = 0; dx < toolParameters.width; dx++) {
+                  const px = x + dx - offset;
+                  const py = y + dy - offset;
+                  const screenX = (px - viewportOffset.x) * zoom;
+                  const screenY = (py - viewportOffset.y) * zoom;
+                  
+                  if (screenX >= 0 && screenY >= 0) {
+                    ctx.fillRect(Math.floor(screenX), Math.floor(screenY), zoom, zoom);
+                  }
+                }
+              }
+              
+              if (x === x1 && y === y1) break;
+              const e2 = 2 * err;
+              if (e2 >= dy) { err += dy; x += sx; }
+              if (e2 <= dx) { err += dx; y += sy; }
+            }
+          };
           
+          ctx.fillStyle = `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, 0.7)`;
+          
+          // Curva original
           drawPreviewCurve(curveStartRef.current, curveEndRef.current, canvasCoords, toolParameters.width);
           
-          const controlScreenX = (canvasCoords.x - viewportOffset.x) * zoom;
-          const controlScreenY = (canvasCoords.y - viewportOffset.y) * zoom;
-          const startScreenX = (curveStartRef.current.x - viewportOffset.x) * zoom;
-          const startScreenY = (curveStartRef.current.y - viewportOffset.y) * zoom;
-          const endScreenX = (curveEndRef.current.x - viewportOffset.x) * zoom;
-          const endScreenY = (curveEndRef.current.y - viewportOffset.y) * zoom;
+          // Curvas reflejadas
+          if (mirrorState.vertical) {
+            drawPreviewCurve(
+              { x: curveStartRef.current.x, y: reflectVertical(curveStartRef.current.y) },
+              { x: curveEndRef.current.x, y: reflectVertical(curveEndRef.current.y) },
+              { x: canvasCoords.x, y: reflectVertical(canvasCoords.y) },
+              toolParameters.width
+            );
+          }
+          if (mirrorState.horizontal) {
+            drawPreviewCurve(
+              { x: reflectHorizontal(curveStartRef.current.x), y: curveStartRef.current.y },
+              { x: reflectHorizontal(curveEndRef.current.x), y: curveEndRef.current.y },
+              { x: reflectHorizontal(canvasCoords.x), y: canvasCoords.y },
+              toolParameters.width
+            );
+          }
+          if (mirrorState.vertical && mirrorState.horizontal) {
+            drawPreviewCurve(
+              { x: reflectHorizontal(curveStartRef.current.x), y: reflectVertical(curveStartRef.current.y) },
+              { x: reflectHorizontal(curveEndRef.current.x), y: reflectVertical(curveEndRef.current.y) },
+              { x: reflectHorizontal(canvasCoords.x), y: reflectVertical(canvasCoords.y) },
+              toolParameters.width
+            );
+          }
           
-          ctx.fillStyle = 'rgba(0, 150, 255, 0.3)';
+          // Líneas de guía originales
+          ctx.fillStyle = 'rgba(234, 0, 255, 0.2)';
           drawPreviewLine(curveStartRef.current.x, curveStartRef.current.y, canvasCoords.x, canvasCoords.y);
           drawPreviewLine(curveEndRef.current.x, curveEndRef.current.y, canvasCoords.x, canvasCoords.y);
           
-          ctx.fillStyle = 'rgba(0, 150, 255, 0.8)';
-          ctx.fillRect(Math.floor(controlScreenX), Math.floor(controlScreenY), zoom, zoom);
-          ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.8)`;
-          ctx.fillRect(Math.floor(startScreenX), Math.floor(startScreenY), zoom, zoom);
-          ctx.fillRect(Math.floor(endScreenX), Math.floor(endScreenY), zoom, zoom);
+          // Líneas de guía reflejadas
+          if (mirrorState.vertical) {
+            drawPreviewLine(
+              curveStartRef.current.x, reflectVertical(curveStartRef.current.y), 
+              canvasCoords.x, reflectVertical(canvasCoords.y)
+            );
+            drawPreviewLine(
+              curveEndRef.current.x, reflectVertical(curveEndRef.current.y), 
+              canvasCoords.x, reflectVertical(canvasCoords.y)
+            );
+          }
+          if (mirrorState.horizontal) {
+            drawPreviewLine(
+              reflectHorizontal(curveStartRef.current.x), curveStartRef.current.y, 
+              reflectHorizontal(canvasCoords.x), canvasCoords.y
+            );
+            drawPreviewLine(
+              reflectHorizontal(curveEndRef.current.x), curveEndRef.current.y, 
+              reflectHorizontal(canvasCoords.x), canvasCoords.y
+            );
+          }
+          if (mirrorState.vertical && mirrorState.horizontal) {
+            drawPreviewLine(
+              reflectHorizontal(curveStartRef.current.x), reflectVertical(curveStartRef.current.y), 
+              reflectHorizontal(canvasCoords.x), reflectVertical(canvasCoords.y)
+            );
+            drawPreviewLine(
+              reflectHorizontal(curveEndRef.current.x), reflectVertical(curveEndRef.current.y), 
+              reflectHorizontal(canvasCoords.x), reflectVertical(canvasCoords.y)
+            );
+          }
+          
+          // Puntos de control originales
+          drawPointPreview(canvasCoords, 'rgba(0, 150, 255, 0.8)');
+          drawPointPreview(curveStartRef.current, `rgba(${color.r}, ${color.g}, ${color.b}, 0.8)`);
+          drawPointPreview(curveEndRef.current, `rgba(${color.r}, ${color.g}, ${color.b}, 0.8)`);
+          
+          // Puntos de control reflejados
+          if (mirrorState.vertical) {
+            drawPointPreview({ x: canvasCoords.x, y: reflectVertical(canvasCoords.y) }, 'rgba(0, 150, 255, 0.8)');
+            drawPointPreview({ x: curveStartRef.current.x, y: reflectVertical(curveStartRef.current.y) }, `rgba(${color.r}, ${color.g}, ${color.b}, 0.8)`);
+            drawPointPreview({ x: curveEndRef.current.x, y: reflectVertical(curveEndRef.current.y) }, `rgba(${color.r}, ${color.g}, ${color.b}, 0.8)`);
+          }
+          if (mirrorState.horizontal) {
+            drawPointPreview({ x: reflectHorizontal(canvasCoords.x), y: canvasCoords.y }, 'rgba(0, 150, 255, 0.8)');
+            drawPointPreview({ x: reflectHorizontal(curveStartRef.current.x), y: curveStartRef.current.y }, `rgba(${color.r}, ${color.g}, ${color.b}, 0.8)`);
+            drawPointPreview({ x: reflectHorizontal(curveEndRef.current.x), y: curveEndRef.current.y }, `rgba(${color.r}, ${color.g}, ${color.b}, 0.8)`);
+          }
+          if (mirrorState.vertical && mirrorState.horizontal) {
+            drawPointPreview({ x: reflectHorizontal(canvasCoords.x), y: reflectVertical(canvasCoords.y) }, 'rgba(0, 150, 255, 0.8)');
+            drawPointPreview({ x: reflectHorizontal(curveStartRef.current.x), y: reflectVertical(curveStartRef.current.y) }, `rgba(${color.r}, ${color.g}, ${color.b}, 0.8)`);
+            drawPointPreview({ x: reflectHorizontal(curveEndRef.current.x), y: reflectVertical(curveEndRef.current.y) }, `rgba(${color.r}, ${color.g}, ${color.b}, 0.8)`);
+          }
         }
         
         ctx.restore();
@@ -1620,9 +2440,9 @@ if (tool === TOOLS.ellipse) {
       else if (tool === TOOLS.paint) {
         ctx.globalCompositeOperation = 'source-over';
         ctx.fillStyle = `rgba(
-          ${color.r},
-          ${color.g},
-          ${color.b},
+          ${toolParameters.fillColor.r},
+          ${toolParameters.fillColor.g},
+          ${toolParameters.fillColor.b},
           ${0.7}
         )`;
       } else if (tool === TOOLS.erase) {
@@ -1633,53 +2453,90 @@ if (tool === TOOLS.ellipse) {
         const currentCanvasCoords = viewportToCanvasCoords(viewportPixelCoords.x, viewportPixelCoords.y);
       
         ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.7)`;
+        ctx.fillStyle = `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, ${1})`;
+      
+        const offset = Math.floor(toolParameters.width / 2);
+      
+        // Calcular centro basado en bounds (igual que en paint)
+        const hasBounds = mirrorState.bounds &&
+          (mirrorState.bounds.x2 > mirrorState.bounds.x1 ||
+            mirrorState.bounds.y2 > mirrorState.bounds.y1);
+      
+        const centerX = hasBounds
+          ? Math.floor((mirrorState.bounds.x1 + mirrorState.bounds.x2) / 2)
+          : Math.floor(drawableWidth / 2);
+      
+        const centerY = hasBounds
+          ? Math.floor((mirrorState.bounds.y1 + mirrorState.bounds.y2) / 2)
+          : Math.floor(drawableHeight / 2);
+      
+        // Ajustes para dimensiones impares (igual que en paint)
+        const adjustment = -1;
+        const imparAdjustmentHeight = drawableHeight % 2 !== 0 ? 1 : 0;
+        const imparAdjustmentWidth = drawableWidth % 2 !== 0 ? 1 : 0;
+      
+        const reflectHorizontal = (x) => centerX * 2 - x + adjustment + imparAdjustmentWidth;
+        const reflectVertical = (y) => centerY * 2 - y + adjustment + imparAdjustmentHeight;
       
         const drawPreviewLine = (start, end) => {
           let x0 = start.x;
           let y0 = start.y;
           let x1 = end.x;
           let y1 = end.y;
-          
+      
           const dx = Math.abs(x1 - x0);
           const dy = -Math.abs(y1 - y0);
           const sx = x0 < x1 ? 1 : -1;
           const sy = y0 < y1 ? 1 : -1;
           let err = dx + dy;
       
-          const offset = Math.floor(toolParameters.width / 2);
-      
           while (true) {
-            const x = x0 - offset;
-            const y = y0 - offset;
+            const drawDotAt = (px, py) => {
+              const x = px - offset;
+              const y = py - offset;
       
-            const screenX = (x - viewportOffset.x) * zoom;
-            const screenY = (y - viewportOffset.y) * zoom;
+              const screenX = (x - viewportOffset.x) * zoom;
+              const screenY = (y - viewportOffset.y) * zoom;
       
-            ctx.fillRect(
-              screenX,
-              screenY,
-              toolParameters.width * zoom,
-              toolParameters.width * zoom
-            );
+              ctx.fillRect(
+                screenX,
+                screenY,
+                toolParameters.width * zoom,
+                toolParameters.width * zoom
+              );
+            };
+      
+            // Punto original
+            drawDotAt(x0, y0);
+      
+            // Espejo vertical (refleja Y)
+            if (mirrorState.vertical) {
+              drawDotAt(x0, reflectVertical(y0));
+            }
+      
+            // Espejo horizontal (refleja X)
+            if (mirrorState.horizontal) {
+              drawDotAt(reflectHorizontal(x0), y0);
+            }
+      
+            // Espejo diagonal (ambos ejes)
+            if (mirrorState.vertical && mirrorState.horizontal) {
+              drawDotAt(reflectHorizontal(x0), reflectVertical(y0));
+            }
       
             if (x0 === x1 && y0 === y1) break;
             const e2 = 2 * err;
-            if (e2 >= dy) {
-              err += dy;
-              x0 += sx;
-            }
-            if (e2 <= dx) {
-              err += dx;
-              y0 += sy;
-            }
+            if (e2 >= dy) { err += dy; x0 += sx; }
+            if (e2 <= dx) { err += dx; y0 += sy; }
           }
         };
       
         drawPreviewLine(lineStartRef.current, currentCanvasCoords);
       }
+      
 
       else if (tool === TOOLS.square && isPressed && squareStartRef.current) {
+    
         const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
         const currentCanvasCoords = viewportToCanvasCoords(viewportPixelCoords.x, viewportPixelCoords.y);
       
@@ -1764,26 +2621,100 @@ else if (tool === TOOLS.ellipse && isPressed && ellipseStartRef.current) {
     fillColor
   );
 }
+else if (tool === TOOLS.polygon && isPressed && polygonStartRef.current) {
+  const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
+  const currentCanvasCoords = viewportToCanvasCoords(viewportPixelCoords.x, viewportPixelCoords.y);
+
+  ctx.globalCompositeOperation = 'source-over';
+  
+  // Calcular centro y radio
+  const centerX = polygonStartRef.current.x;
+  const centerY = polygonStartRef.current.y;
+  const dx = currentCanvasCoords.x - centerX;
+  const dy = currentCanvasCoords.y - centerY;
+  const radius = Math.sqrt(dx * dx + dy * dy);
+  
+  // Obtener parámetros de la herramienta
+  const borderColor = toolParameters.borderColor || null;
+  const fillColor = toolParameters.fillColor || color;
+  const borderWidth = toolParameters.borderWidth || 0;
+  const vertices = toolParameters.vertices || 6; // Default hexágono
+  const rotation = (toolParameters.rotation || 0) * Math.PI / 180; // Convertir a radianes
+  
+  drawPreviewPolygon(
+    ctx,
+    centerX,
+    centerY,
+    radius,
+    vertices,
+    borderWidth,
+    borderColor,
+    fillColor,
+    rotation
+  );
+}
       
       else if (tool === TOOLS.move || tool === TOOLS.select || tool === TOOLS.lassoSelect) {
         return;
       }
       
-      const offset = Math.floor(toolParameters?.width / 2);
-      const x = canvasCoords.x - offset;
-      const y = canvasCoords.y - offset;
+      const width = toolParameters?.width || 1;
+      const offset = Math.floor(width / 2);
       
-      const screenX = (x - viewportOffset.x) * zoom;
-      const screenY = (y - viewportOffset.y) * zoom;
+      // Verificar si los bounds están definidos y son válidos
+      const hasBounds = mirrorState.bounds && 
+        (mirrorState.bounds.x2 > mirrorState.bounds.x1 || 
+         mirrorState.bounds.y2 > mirrorState.bounds.y1);
       
-      ctx.fillRect(
-        screenX, 
-        screenY, 
-        toolParameters?.width * zoom, 
-        toolParameters?.width * zoom
-      );
+      // Calcular centros: usar bounds si están disponibles, sino usar totalWidth/totalHeight
+      const centerX = hasBounds 
+        ? Math.floor((mirrorState.bounds.x1 + mirrorState.bounds.x2) / 2)
+        : Math.floor(totalWidth / 2);
+        
+      const centerY = hasBounds 
+        ? Math.floor((mirrorState.bounds.y1 + mirrorState.bounds.y2) / 2)
+        : Math.floor(totalHeight / 2);
+      
+      // Ajuste de -1 solo cuando hay bounds válidos
+      const adjustment = -1;
+
+     //Ajuste para numeros impares, sumar 1, ya que el centro al dividirse desfasa el reflejo 
+      const imparAdjustmentHeight = drawableHeight % 2 !== 0 ? 1 : 0;
+        const imparAdjustmentWidth = drawableWidth % 2 !== 0 ? 1 : 0;
+      
+      // Función para reflejar coordenadas
+      const reflectHorizontal = (x) => centerX * 2 - x + adjustment + imparAdjustmentWidth;
+      const reflectVertical = (y) => centerY * 2 - y + adjustment + imparAdjustmentHeight;
+  
+      
+      const drawPreviewAt = (canvasX, canvasY) => {
+        const x = canvasX - offset;
+        const y = canvasY - offset;
+        const screenX = (x - viewportOffset.x) * zoom;
+        const screenY = (y - viewportOffset.y) * zoom;
+        ctx.fillRect(screenX, screenY, width * zoom, width * zoom);
+      };
+      
+      // Punto original
+      drawPreviewAt(canvasCoords.x, canvasCoords.y);
+      
+      // Espejos
+      if (mirrorState.vertical) {
+        drawPreviewAt(canvasCoords.x, reflectVertical(canvasCoords.y));
+      }
+      if (mirrorState.horizontal) {
+        drawPreviewAt(reflectHorizontal(canvasCoords.x), canvasCoords.y);
+      }
+      if (mirrorState.vertical && mirrorState.horizontal) {
+        drawPreviewAt(
+          reflectHorizontal(canvasCoords.x),
+          reflectVertical(canvasCoords.y)
+        );
+      }
+      
+      
     }
-  }, [tool, relativeToTarget, toolParameters, zoom, viewportToCanvasCoords, viewportOffset, curveState, color]);
+  }, [tool, relativeToTarget, toolParameters, zoom, viewportToCanvasCoords, viewportOffset, curveState, color,mirrorState]);
 
   // Efecto para manejar zoom con rueda del ratón
   useEffect(() => {
@@ -1800,10 +2731,14 @@ else if (tool === TOOLS.ellipse && isPressed && ellipseStartRef.current) {
       const canvasMouseY = viewportMouseY + viewportOffset.y;
   
       const zoomDirection = e.deltaY > 0 ? -1 : 1;
-      const zoomFactor = 1.1;
+      const zoomFactor = 1.2;
       const newZoomRaw = zoom * Math.pow(zoomFactor, zoomDirection);
   
-      const newZoom = Math.max(1, Math.min(40, Math.round(newZoomRaw)));
+      const newZoom = Math.max(1, Math.min(50, 
+        newZoomRaw < 10 
+          ? Math.round(newZoomRaw * 10) / 10  // 1 decimal para zoom < 10
+          : Math.round(newZoomRaw)            // enteros para zoom >= 10
+      ));
   
       if (newZoom === zoom) return;
   
@@ -1864,6 +2799,9 @@ if (tool !== TOOLS.circle) {
 }
 if (tool !== TOOLS.circle) {
   circleStartRef.current = null;
+}
+if (tool !== TOOLS.polygon) {
+  polygonStartRef.current = null;
 }
   }, [tool]);
 
@@ -1974,36 +2912,71 @@ const calculateLassoBounds = useCallback(() => {
   });
 }, [lassoPoints]);
 
-// Función para encontrar los límites de los pixeles no transparentes
 const findNonEmptyBounds = useCallback((imageData, width, height) => {
-  let minX = width;
-  let minY = height;
-  let maxX = 0;
-  let maxY = 0;
-  let hasNonEmptyPixels = false;
-  
-  for (let y = 0; y < height; y++) {
+  const data = imageData.data;
+
+  let top = 0, bottom = height - 1;
+  let left = 0, right = width - 1;
+
+  let found = false;
+
+  // Buscar el primer top con alpha > 0
+  for (; top < height; top++) {
     for (let x = 0; x < width; x++) {
-      const pixelIndex = (y * width + x) * 4;
-      const alpha = imageData.data[pixelIndex + 3];
-      
-      if (alpha > 0) {
-        hasNonEmptyPixels = true;
-        minX = Math.min(minX, x);
-        minY = Math.min(minY, y);
-        maxX = Math.max(maxX, x);
-        maxY = Math.max(maxY, y);
+      if (data[(top * width + x) * 4 + 3] > 0) {
+        found = true;
+        break;
       }
     }
+    if (found) break;
   }
-  
-  return hasNonEmptyPixels ? {
-    x: minX,
-    y: minY,
-    width: maxX - minX + 1,
-    height: maxY - minY + 1
-  } : null;
+
+  // Buscar el primer bottom con alpha > 0
+  found = false;
+  for (; bottom >= top; bottom--) {
+    for (let x = 0; x < width; x++) {
+      if (data[(bottom * width + x) * 4 + 3] > 0) {
+        found = true;
+        break;
+      }
+    }
+    if (found) break;
+  }
+
+  // Buscar el primer left con alpha > 0
+  found = false;
+  for (; left < width; left++) {
+    for (let y = top; y <= bottom; y++) {
+      if (data[(y * width + left) * 4 + 3] > 0) {
+        found = true;
+        break;
+      }
+    }
+    if (found) break;
+  }
+
+  // Buscar el primer right con alpha > 0
+  found = false;
+  for (; right >= left; right--) {
+    for (let y = top; y <= bottom; y++) {
+      if (data[(y * width + right) * 4 + 3] > 0) {
+        found = true;
+        break;
+      }
+    }
+    if (found) break;
+  }
+
+  if (left > right || top > bottom) return null; // No se encontró ningún pixel visible
+
+  return {
+    x: left,
+    y: top,
+    width: right - left + 1,
+    height: bottom - top + 1
+  };
 }, []);
+
 
 // Función para limpiar la selección actual
 const clearCurrentSelection = useCallback(() => {
@@ -2041,9 +3014,10 @@ const clearCurrentSelection = useCallback(() => {
   }
 
   // 3. Resetear todos los estados
+  setSelectionCoords([])
   setSelectedPixels([]);
   setOriginalPixelColors([]);
-  setSelectionCoords([{ x: 0, y: 0 }]);
+  
   setCroppedSelectionBounds(null);
   setDragOffset({ x: 0, y: 0 });
   setSelectionActive(false);
@@ -2068,97 +3042,259 @@ const clearCurrentSelection = useCallback(() => {
 
 
 // Auto-crop de la selección
+
+
+
 const autoCropSelection = useCallback(async () => {
   if (!activeLayerId || !selectionCoords || selectionCoords.length < 1) return;
-  console.log("autoCropSelection - selectionCoords:", selectionCoords); // 👈 ¿Se reciben las coordenadas?
-  const start = selectionCoords[0];
-  const end = selectionCoords[selectionCoords.length - 1];
+  console.log("autoCropSelection - selectionCoords:", selectionCoords);
 
-  const x = Math.min(start.x, end.x);
-  const y = Math.min(start.y, end.y);
-  const width = Math.abs(end.x - start.x) + 1;
-  const height = Math.abs(end.y - start.y) + 1;
+  // Calcular los bounds de TODOS los puntos de selección
+  let minX = Infinity, minY = Infinity;
+  let maxX = -Infinity, maxY = -Infinity;
   
-  
-  const imageData = await getLayerData(activeLayerId, x, y, width, height);
-  if (!imageData) return;
-  
-  const bounds = findNonEmptyBounds(imageData, width, height);
-  
-  if (bounds) {
+  selectionCoords.forEach(coord => {
+    minX = Math.min(minX, coord.x);
+    minY = Math.min(minY, coord.y);
+    maxX = Math.max(maxX, coord.x);
+    maxY = Math.max(maxY, coord.y);
+  });
+
+  const x = minX;
+  const y = minY;
+  const width = maxX - minX + 1;
+  const height = maxY - minY + 1;
+  const totalPixels = width * height;
+
+  console.log(`Calculated bounds: x=${x}, y=${y}, width=${width}, height=${height}, totalPixels=${totalPixels}`);
+
+  // Si el área es muy grande, usar estrategia optimizada
+  if (totalPixels > 1000000) { // 1 millón de píxeles
+    console.log("Área muy grande, usando estrategia optimizada");
+    
+    // Usar directamente las coordenadas de selección para calcular bounds
     const croppedBounds = {
-      x: x + bounds.x,
-      y: y + bounds.y,
-      width: bounds.width,
-      height: bounds.height
+      x: minX,
+      y: minY,
+      width: width,
+      height: height,
     };
+    
     setCroppedSelectionBounds(croppedBounds);
-  
-    // Verificar si al menos un pixel dentro de los bounds recortados pertenece a un grupo
-    let groupFound = false;
-    let foundGroupName = null;
-    let groupData = null;
-    // Iterar a través de todos los píxeles en el área recortada
-    for (let py = croppedBounds.y; py < croppedBounds.y + croppedBounds.height; py++) {
-      for (let px = croppedBounds.x; px < croppedBounds.x + croppedBounds.width; px++) {
-        const groupInfo = getPixelGroupAt(px, py, activeLayerId);
-        if (groupInfo) {
-          groupFound = true;
-          foundGroupName = groupInfo.group.name;
-          groupData = groupInfo;
-          break; // Salir del bucle al encontrar el primer grupo
-        }
-      }
-      if (groupFound) break; // Romper también el bucle exterior
-    }
-  
-    if (groupFound) {
-      console.log(`Pixel con grupo encontrado: ${JSON.stringify(groupData, null, 2)}`);
-    } else {
-      console.log("Ningún pixel dentro del área recortada pertenece a un grupo");
-    }
-  
     setSelectionCoords([]);
-  }else {
-    setCroppedSelectionBounds({ x, y, width, height });
+    return;
   }
- 
-}, [activeLayerId, selectionCoords,layers, findNonEmptyBounds, getLayerData]);
+
+  try {
+    const imageData = await getLayerData(activeLayerId, x, y, width, height);
+    if (!imageData) {
+      console.log("No se pudo obtener imageData");
+      return;
+    }
+
+    // Timeout dinámico basado en el tamaño
+    const timeoutMs = Math.min(30000, Math.max(5000, totalPixels / 50000));
+    console.log(`Using timeout: ${timeoutMs}ms for ${totalPixels} pixels`);
+
+    const bounds = await new Promise((resolve, reject) => {
+      const worker = new BoundsWorker();
+      
+      const timeout = setTimeout(() => {
+        console.log("Worker timeout reached");
+        worker.terminate();
+        reject(new Error("Worker timeout"));
+      }, timeoutMs);
+      
+      worker.onmessage = (e) => {
+        clearTimeout(timeout);
+        console.log("Worker completed successfully", e.data);
+        resolve(e.data);
+        worker.terminate();
+      };
+      
+      worker.onerror = (error) => {
+        clearTimeout(timeout);
+        console.error("Worker error:", error);
+        worker.terminate();
+        reject(error);
+      };
+      
+      // Verificar que el buffer sea válido
+      if (!imageData.data || !imageData.data.buffer) {
+        clearTimeout(timeout);
+        worker.terminate();
+        reject(new Error("Invalid imageData buffer"));
+        return;
+      }
+      
+      // Transferir el buffer
+      worker.postMessage(
+        { width, height, buffer: imageData.data.buffer },
+        [imageData.data.buffer]
+      );
+    });
+    
+    if (bounds) {
+      const croppedBounds = {
+        x: x + bounds.x,
+        y: y + bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+      };
+      setCroppedSelectionBounds(croppedBounds);
+
+      // Verificar si algún pixel del área recortada pertenece a un grupo
+      let groupFound = false;
+      let groupData = null;
+
+      for (let py = croppedBounds.y; py < croppedBounds.y + croppedBounds.height; py++) {
+        for (let px = croppedBounds.x; px < croppedBounds.x + croppedBounds.width; px++) {
+          const groupInfo = getPixelGroupAt(px, py, activeLayerId);
+          if (groupInfo) {
+            groupFound = true;
+            groupData = groupInfo;
+            break;
+          }
+        }
+        if (groupFound) break;
+      }
+
+      if (groupFound) {
+        console.log(`Pixel con grupo encontrado: ${JSON.stringify(groupData, null, 2)}`);
+      } else {
+        console.log("Ningún pixel dentro del área recortada pertenece a un grupo");
+      }
+
+      setSelectionCoords([]);
+    } else {
+      console.log("Worker returned null bounds, using original bounds");
+      setCroppedSelectionBounds({ x, y, width, height });
+      setSelectionCoords([]);
+    }
+    
+  } catch (error) {
+    console.error("Error in autoCropSelection:", error);
+    
+    // Fallback: usar los bounds originales si el worker falla
+    console.log("Using fallback bounds due to error");
+    setCroppedSelectionBounds({ x, y, width, height });
+    setSelectionCoords([]);
+  }
+}, [activeLayerId, selectionCoords, getLayerData]);
 
 const autoCropLasso = useCallback(async () => {
   if (!activeLayerId || !lassoPoints || lassoPoints.length < 1) return;
+  console.log("autoCropLasso - lassoPoints length:", lassoPoints.length);
 
-  // Calcular bounding box
-  const xs = lassoPoints.map(p => p.x);
-  const ys = lassoPoints.map(p => p.y);
-  const x = Math.min(...xs);
-  const y = Math.min(...ys);
-  const maxX = Math.max(...xs);
-  const maxY = Math.max(...ys);
-  const width = maxX - x + 1;
-  const height = maxY - y + 1;
+  // Calcular bounding box de manera más eficiente
+  let minX = Infinity, minY = Infinity;
+  let maxX = -Infinity, maxY = -Infinity;
+  
+  lassoPoints.forEach(point => {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  });
 
-  // Obtener datos de imagen en el bounding box
-  const imageData = await getLayerData(activeLayerId, x, y, width, height);
-  if (!imageData) return;
+  const x = minX;
+  const y = minY;
+  const width = maxX - minX + 1;
+  const height = maxY - minY + 1;
+  const totalPixels = width * height;
 
-  // Buscar el área no vacía dentro del bounding box
-  const bounds = findNonEmptyBounds(imageData, width, height);
+  console.log(`Lasso bounds: x=${x}, y=${y}, width=${width}, height=${height}, totalPixels=${totalPixels}`);
 
-  if (bounds) {
-    setCroppedSelectionBounds({
-      x: x + bounds.x,
-      y: y + bounds.y,
-      width: bounds.width,
-      height: bounds.height
-    });
-  } else {
-    setCroppedSelectionBounds({ x, y, width, height });
+  // Si el área es muy grande, usar estrategia optimizada
+  if (totalPixels > 1000000) { // 1 millón de píxeles
+    console.log("Área de lasso muy grande, usando estrategia optimizada");
+    
+    // Usar directamente el bounding box del lasso
+    const croppedBounds = {
+      x: x,
+      y: y,
+      width: width,
+      height: height,
+    };
+    
+    setCroppedSelectionBounds(croppedBounds);
+    return;
   }
 
-  
-}, [activeLayerId, lassoPoints, findNonEmptyBounds, getLayerData]);
+  try {
+    // Obtener datos de imagen en el bounding box
+    const imageData = await getLayerData(activeLayerId, x, y, width, height);
+    if (!imageData) {
+      console.log("No se pudo obtener imageData para lasso");
+      return;
+    }
 
+    // Timeout dinámico basado en el tamaño
+    const timeoutMs = Math.min(30000, Math.max(5000, totalPixels / 50000));
+    console.log(`Using timeout for lasso: ${timeoutMs}ms for ${totalPixels} pixels`);
+
+    // Usar el worker optimizado para buscar bounds
+    const bounds = await new Promise((resolve, reject) => {
+      const worker = new BoundsWorker();
+      
+      const timeout = setTimeout(() => {
+        console.log("Lasso worker timeout reached");
+        worker.terminate();
+        reject(new Error("Lasso worker timeout"));
+      }, timeoutMs);
+      
+      worker.onmessage = (e) => {
+        clearTimeout(timeout);
+        console.log("Lasso worker completed successfully", e.data);
+        resolve(e.data);
+        worker.terminate();
+      };
+      
+      worker.onerror = (error) => {
+        clearTimeout(timeout);
+        console.error("Lasso worker error:", error);
+        worker.terminate();
+        reject(error);
+      };
+      
+      // Verificar que el buffer sea válido
+      if (!imageData.data || !imageData.data.buffer) {
+        clearTimeout(timeout);
+        worker.terminate();
+        reject(new Error("Invalid lasso imageData buffer"));
+        return;
+      }
+      
+      // Transferir el buffer
+      worker.postMessage(
+        { width, height, buffer: imageData.data.buffer },
+        [imageData.data.buffer]
+      );
+    });
+
+    if (bounds) {
+      const croppedBounds = {
+        x: x + bounds.x,
+        y: y + bounds.y,
+        width: bounds.width,
+        height: bounds.height
+      };
+      
+      console.log("Lasso cropped bounds:", croppedBounds);
+      setCroppedSelectionBounds(croppedBounds);
+    } else {
+      console.log("Lasso worker returned null bounds, using original bounds");
+      setCroppedSelectionBounds({ x, y, width, height });
+    }
+    
+  } catch (error) {
+    console.error("Error in autoCropLasso:", error);
+    
+    // Fallback: usar el bounding box original si el worker falla
+    console.log("Using fallback lasso bounds due to error");
+    setCroppedSelectionBounds({ x, y, width, height });
+  }
+}, [activeLayerId, lassoPoints, getLayerData]);
 
 // Lógica para nueva selección
 useEffect(() => {
@@ -2549,6 +3685,9 @@ useEffect(() => {
 useEffect(()=>{
   // Solo borrar y redibujar píxeles cuando se completa una operación de arrastre 
   // o cuando realmente cambiamos el offset, no durante el arrastre
+  if(selectedPixels<=0){
+  setSelectionCoords([]);
+  }
  
   if (selectedPixels.length > 0 ) {
     selectedPixels.forEach(pixel => {
@@ -2657,25 +3796,45 @@ const rellenar = useCallback((coords) => {
 
 // En tu componente padre
 
-
 const groupSelection = useCallback(() => {
-  if (selectedPixels.length > 0) {
-    // Aplicar el desplazamiento actual a las coordenadas de los píxeles
-    const pixelsWithOffset = selectedPixels.map(pixel => ({
-      ...pixel,
-      x: pixel.x + dragOffset.x,
-      y: pixel.y + dragOffset.y
-    }));
-    
-    const groupId = createPixelGroup(activeLayerId, pixelsWithOffset, 'Nuevo Grupo');
-    
-    // Resetear el desplazamiento después de agrupar
-    setDragOffset({ x: 0, y: 0 });
-    
-    // Opcional: seleccionar el grupo recién creado
-    selectPixelGroup(groupId);
+  if (!selectedPixels?.length) {
+    alert('Selecciona píxeles primero');
+    return;
   }
+
+  const groupName = `Grupo ${getLayerGroups(activeLayerId).length + 1}`;
+
+   // Aplicar el desplazamiento actual a las coordenadas de los píxeles
+   const pixelsWithOffset = selectedPixels.map(pixel => ({
+    ...pixel,
+    x: pixel.x + dragOffset.x,
+    y: pixel.y + dragOffset.y
+  }));
+  
+
+
+  // Creamos el grupo y obtenemos su ID
+  const newGroupId = createPixelGroup(activeLayerId, pixelsWithOffset, groupName);
+
+  // Seleccionamos el grupo recién creado
+  if (newGroupId) {
+    selectPixelGroup(activeLayerId, newGroupId);
+  }
+  console.log(newGroupId);
+
+  setActiveLayerId(newGroupId.groupLayerId);
+  
+  // Limpiamos
+ /*
+  setShowCreateGroup(null);
+  setExpandedLayers(prev => ({ ...prev, [activeLayerId]: true }));
+  setNewGroupName('');*/
+
 }, [selectedPixels, dragOffset, activeLayerId, createPixelGroup, selectPixelGroup]);
+
+
+
+
 
 const ungroupSelection = useCallback(() => {
   
@@ -2723,6 +3882,63 @@ const handleSelectGroup = useCallback((pixels) => {
   
 }, []);
 
+/////////////FUncion de prueba para seleccion de canvas//////////////////////////////////////////////////
+// Función para seleccionar todo el contenido de una capa
+// Función para seleccionar todo el contenido de una capa
+const selectAllCanvas = useCallback(async (canvasWidth = totalWidth, canvasHeight = totalHeight) => {
+
+   setTool(TOOLS.select);
+   
+  // Verificar que la capa existe
+
+  try {
+    // 1. Limpiar selección anterior si existe
+    if (selectionActive || selectedPixels.length > 0) {
+      clearCurrentSelection();
+    }
+
+    // 2. Simular el comportamiento de una selección rectangular completa
+    // Definir las coordenadas desde (0,0) hasta (canvasWidth-1, canvasHeight-1)
+    const startCoord = { x: 0, y: 0 };
+    const endCoord = { x: canvasWidth - 1, y: canvasHeight - 1 };
+    
+    // 3. Establecer las coordenadas de selección (necesita ambos puntos para autoCropSelection)
+    setSelectionCoords([startCoord, endCoord]);
+    
+    // 4. Establecer que la selección está activa temporalmente
+    // Esto permitirá que el useEffect de autoCropSelection se ejecute
+    setSelectionActive(true);
+    
+    console.log(`Iniciando selección completa en capa ${activeLayerId} (${canvasWidth}x${canvasHeight})`);
+    console.log("Coordenadas establecidas:", [startCoord, endCoord]);
+    
+    // La función autoCropSelection se ejecutará automáticamente por el useEffect
+    // cuando detecte que selectionCoords tiene valores y selectionActive es true
+    
+  } catch (error) {
+    console.error("Error al seleccionar todo el canvas:", error);
+    // Limpiar estados en caso de error
+    setSelectionActive(false);
+    setCroppedSelectionBounds(null);
+    setSelectedPixels([]);
+    setOriginalPixelColors([]);
+    setSelectionCoords([]);
+  }
+}, [
+totalHeight,
+totalWidth,
+  layers,
+  activeLayerId,
+  selectionActive,
+  selectedPixels,
+  clearCurrentSelection,
+  setSelectionCoords,
+  setSelectionActive,
+  setCroppedSelectionBounds,
+  setSelectedPixels,
+  setOriginalPixelColors
+]);
+
 
   return (
     <div className="workspace2-container" style={{ position: 'relative', display: 'flex' }}>
@@ -2748,16 +3964,16 @@ const handleSelectGroup = useCallback((pixels) => {
             />
           </div>
 
-          
+        
             {/* Coordinates info */}
           
        
           <div className="tools" style={{ display: 'flex', gap: '8px' }}>
             
-            
+          {
             <button 
               className={drawMode === "move" ? "tool-btn active" : "tool-btn"}
-              onClick={() => setDrawMode("move")}
+              onClick={() => selectAllCanvas()}
               style={{ 
                 padding: '6px', 
                 borderRadius: '4px', 
@@ -2767,6 +3983,7 @@ const handleSelectGroup = useCallback((pixels) => {
             >
               <LuPointerOff size={16} /> Move (M)
             </button>
+            }
             <div 
                       className={activeGrid ? "grid-control active" : "grid-control"}
                       onClick={()=>{setActiveGrid(!activeGrid)}}
@@ -2777,12 +3994,9 @@ const handleSelectGroup = useCallback((pixels) => {
                       
           </div>
           
-              <ReflexMode/>
+          <ReflexMode mirrorState={mirrorState} setMirrorState={setMirrorState} totalHeight={totalHeight} totalWidth={totalWidth} setTotalHeight={setTotalHeight} setTotalWidth={setTotalWidth} setDrawableHeight={setDrawableHeight} setDrawableWidth={setDrawableWidth} setPositionCorners={setPositionCorners}/>
         
-          <ColorPicker
-            color={color}
-            onChange={setColor}
-            />
+        
         </div>
         
         <div 
@@ -2841,7 +4055,7 @@ const handleSelectGroup = useCallback((pixels) => {
           <p className='action-text'>Borrar</p>
          
       </button>
-      <button className='action-button'>
+      <button className='action-button' >
           <span className='icon'>
             <LuPaintBucket/>
           </span>
@@ -2868,6 +4082,58 @@ const handleSelectGroup = useCallback((pixels) => {
     </div>
 
   </div>
+)}  
+   {mirrorState.customArea && !isPressed &&(
+    <>
+    {/* Punto de arrastre inferior derecho */}
+<div 
+  ref={rightMirrorCornerRef}
+  className='canvas-resize-handle-container' 
+  style={{
+    position: 'absolute',
+    top: (positionCorners.y2-viewportOffset.y) * zoom,
+    left: (positionCorners.x2-viewportOffset.x) * zoom,
+    zIndex: 10,
+    pointerEvents: 'auto'
+  }}
+>
+  <div className='resize-handle-wrapper'>
+    <button className='resize-handle resize-handle-se' >
+      <span className='resize-handle-icon'>
+        <GrBottomCorner />
+      </span>
+      
+    </button>
+    
+  </div>
+</div>
+  {/* Punto de arrastre superior izquierdo */}
+<div 
+  ref={leftMirrorCornerRef}
+  
+  className='canvas-resize-handle-container' 
+  style={{
+    position: 'absolute',
+    top: (positionCorners.y1-viewportOffset.y) * zoom-30,
+    left: (positionCorners.x1-viewportOffset.x) * zoom-30,
+    zIndex: 10,
+    pointerEvents: 'auto'
+  }}
+>
+  <div className='resize-handle-wrapper'>
+    <button className='resize-handle resize-handle-nw' >
+      <span className='resize-handle-icon'>
+        <GrTopCorner />
+      </span>
+    </button>
+    <p className='area-canvas-size-text'>{mirrorState.bounds.x2-mirrorState.bounds.x1}x{mirrorState.bounds.y2-mirrorState.bounds.y1}</p>
+  </div>
+</div>
+
+
+    </>
+ 
+  
 )}  
 
               {/* Composite Canvas - only this canvas is actually in the DOM */}
@@ -2906,6 +4172,21 @@ const handleSelectGroup = useCallback((pixels) => {
                   zIndex: 11
                 }}
               />
+
+                <canvas
+                ref={mirrorCanvasRef}
+                width={viewportWidth * zoom}
+                height={viewportHeight * zoom}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  pointerEvents: 'none',
+                  zIndex: 11
+                }}
+              />
+              
+
               
               {/* Pixel Grid */}
               {activeGrid && (
@@ -2957,7 +4238,7 @@ const handleSelectGroup = useCallback((pixels) => {
           clearLayer={clearLayer}
           activeLayerId={activeLayerId}
           setActiveLayerId={setActiveLayerId}
-          
+         
           // Nuevas props para grupos
           pixelGroups={pixelGroups}
           selectedGroup={selectedGroup}
@@ -2975,6 +4256,7 @@ const handleSelectGroup = useCallback((pixels) => {
           handleSelectGroup={handleSelectGroup}
 
           //estados
+          dragOffset={dragOffset}
           setSelectionCoords={setSelectionCoords}
           setSelectionActive={setSelectionActive}
           setCroppedSelectionBounds={setCroppedSelectionBounds}
@@ -2987,6 +4269,10 @@ const handleSelectGroup = useCallback((pixels) => {
           getHierarchicalLayers= {getHierarchicalLayers}
    getMainLayers={getMainLayers}
    getGroupLayersForParent= {getGroupLayersForParent}
+   selectionActive={selectionActive}
+//Funcion para seleccionar pixeles de grupos y de capas:
+selectAllCanvas={selectAllCanvas}
+
         />
       </div>
       
@@ -2996,4 +4282,3 @@ const handleSelectGroup = useCallback((pixels) => {
 
 export default CanvasTracker;
 
-//Es necesario refactorizar el codigo para importar las funciones desde otro jsx, separar la logica de renderizado de canvas de seleccion y canvas de preview

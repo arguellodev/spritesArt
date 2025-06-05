@@ -115,21 +115,13 @@ const EditorMain =()=>{
           icon:   <LuLassoSelect />,
           onClick: () => setTool('lassoSelect')
         },
-        {
-          label: 'Gotero',
-          icon:   <LuPipette />,
-          onClick: () => setTool('gotero')
-        },
+        
         {
           label: 'Text',
           icon:   <LuType />,
           onClick: () => setTool('text')
         },
-        {
-          label: 'Pluma',
-          icon:   <LuPenTool />,
-          onClick: () => setTool('pen')
-        },
+       
         {
           label: 'Poligono',
           icon:   <FaDrawPolygon />,
@@ -145,16 +137,7 @@ const EditorMain =()=>{
           icon:   <LuMoon /> ,
           onClick: () => setTool('darken')
         },
-        {
-          label: 'Reflejo horizontal',
-          icon:   <BiReflectHorizontal /> ,
-          onClick: () => setTool('darken')
-        },
-        {
-          label: 'Reflejo Vertical',
-          icon:   <BiReflectVertical /> ,
-          onClick: () => setTool('darken')
-        },
+   
         {
           label: 'Cuadrado',
           icon:   <LuSquare  /> ,
@@ -242,9 +225,7 @@ const EditorMain =()=>{
       onItemClick={(item) => console.log('Clicked item:', item)}
     />
 
-      <aside className="color-section-container">
-       
-      </aside>
+     
 
     </div>
     

@@ -8,75 +8,51 @@ import SquareTool from "./tools/squareTool";
 import TriangleTool from "./tools/triangleTool";
 import CircleTool from "./tools/circleTool";
 import EllipseTool from "./tools/ellipseTool";
+import PolygonTool from "./tools/polygonTool";
+import CurveTool from "./tools/curveTool";
+import { BsChevronCompactDown, BsChevronCompactUp  } from "react-icons/bs";
 
-const CustomTool = ({setToolParameters, tool, toolParameters}) => {
-    
+const CustomTool = ({ setToolParameters, tool, toolParameters }) => {
+    const [minimized, setMinimized] = useState(false);
+
+    const toggleMinimize = () => setMinimized(prev => !prev);
+
+    const toolInfo = {
+        pencil: { name: "Pincel", icon: "P", component: PencilTool },
+        eraser: { name: "Borrador", icon: "B", component: EraserTool },
+        fill: { name: "Rellenar", icon: "R", component: FillTool },
+        line: { name: "Línea", icon: "L", component: LineTool },
+        square: { name: "Cuadrado", icon: "L", component: SquareTool },
+        triangle: { name: "Triángulo", icon: "L", component: TriangleTool },
+        circle: { name: "Círculo", icon: "L", component: CircleTool },
+        ellipse: { name: "Elipse", icon: "L", component: EllipseTool },
+        polygon: { name: "Polígono", icon: "L", component: PolygonTool },
+        curve: { name: "Linea Curva", icon: "C", component: CurveTool },
+    };
+
+    const currentTool = toolInfo[tool];
+
+    if (!currentTool) return null;
+
+    const ToolComponent = currentTool.component;
 
     return (
-        /*Aqui se hara un renderizado condicional dependiendo de la herramienta actual */
         <div className="customTool-section">
-           
-    {
-        tool ==='pencil' ?<>
-        <div className="tool-header">
-                <p className="tool-name">Pincel</p>
-                <span className="tool-icon">P</span>
+            <div className="tool-header" onClick={toggleMinimize} style={{ cursor: "pointer" }}>
+            <span className="tool-icon">{currentTool.icon}</span>
+                <p className="tool-name">{currentTool.name}</p>
+                
+                <span className="minimize-toggle">{minimized ? <BsChevronCompactDown/> : <BsChevronCompactUp/>}</span>
             </div>
-            <PencilTool toolParameters={toolParameters} setToolParameters={setToolParameters}/>
-        </> :
-        tool==='eraser' ? <>
-        <div className="tool-header">
-                <p className="tool-name">Borrador</p>
-                <span className="tool-icon">B</span>
-            </div>
-        <EraserTool toolParameters={toolParameters} setToolParameters={setToolParameters}/>
-        </>
 
-        : tool==='fill' ? <>
-        <div className="tool-header">
-                <p className="tool-name">Rellenar</p>
-                <span className="tool-icon">R</span>
+            <div className={`tool-content ${minimized ? 'hidden' : ''}`}>
+                <ToolComponent
+                    toolParameters={toolParameters}
+                    setToolParameters={setToolParameters}
+                />
             </div>
-        <FillTool toolParameters={toolParameters} setToolParameters={setToolParameters}/>
-        </> : tool==='line' ? <>
-        <div className="tool-header">
-                <p className="tool-name">Linea</p>
-                <span className="tool-icon">L</span>
-            </div>
-        <LineTool toolParameters={toolParameters} setToolParameters={setToolParameters}/>
-        </> : tool==='square' ? <>
-        <div className="tool-header">
-                <p className="tool-name">Cuadrado</p>
-                <span className="tool-icon">L</span>
-            </div>
-        <SquareTool toolParameters={toolParameters} setToolParameters={setToolParameters}/>
-        </> : tool==='triangle' ? <>
-        <div className="tool-header">
-                <p className="tool-name">Triangulo</p>
-                <span className="tool-icon">L</span>
-            </div>
-        <TriangleTool toolParameters={toolParameters} setToolParameters={setToolParameters}/>
-        </> : tool==='circle' ? <>
-        <div className="tool-header">
-                <p className="tool-name">Circulo</p>
-                <span className="tool-icon">L</span>
-            </div>
-        <CircleTool toolParameters={toolParameters} setToolParameters={setToolParameters}/>
-        </> : tool==='ellipse' ? <>
-        <div className="tool-header">
-                <p className="tool-name">Elipse</p>
-                <span className="tool-icon">L</span>
-            </div>
-        <EllipseTool toolParameters={toolParameters} setToolParameters={setToolParameters}/>
-        </> : null
-
-
-       
-    }
-        {/*AQui se importaran mas UIX de modificadores de herramientas */}
         </div>
     );
 };
 
 export default CustomTool;
-

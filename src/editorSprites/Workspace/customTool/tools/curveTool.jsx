@@ -4,7 +4,7 @@ import ToolColorPicker from "./toolColorPicker";
 
 // Simulación del ColorPicker component
 
-const PencilTool = ({ setToolParameters, tool }) => {
+const CurveTool = ({ setToolParameters, tool }) => {
   // Estados para las diferentes configuraciones
   const [borderWidth, setBorderWidth] = useState(1);
   const [opacity, setOpacity] = useState(100);
@@ -96,10 +96,7 @@ const PencilTool = ({ setToolParameters, tool }) => {
         vertices: vertices,
         rotation: rotation,
         pattern: pattern,
-        pressure: pressure,
-        smoothness: 0, // 0 = sin suavizado, 1 = máximo suavizado
-        blur:0,
-        paintMode: 'composite' // o 'fill'
+        pressure: pressure
       });
     }
   }, [borderWidth, opacity, borderColor, fillColor, vertices, rotation, pattern, pressure, setToolParameters]);
@@ -475,4 +472,4 @@ const PencilTool = ({ setToolParameters, tool }) => {
   );
 };
 
-export default PencilTool;
+export default CurveTool;

@@ -5,77 +5,175 @@ import React from 'react';
 /**
  * Custom hook for tracking pointer/mouse interactions
  */
-export function usePointer(containerRef, targetRef, ignoreRef) {
+
+
+export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {}) {
+  const { endPressOnLeave = false } = options;
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [relativeToTarget, setRelativeToTarget] = useState({ x: 0, y: 0 });
   const [isPressed, setIsPressed] = useState(false);
   const [path, setPath] = useState([]);
 
+  // Usar refs para valores que cambian frecuentemente
+  const isPressedRef = useRef(false);
+  const pathRef = useRef([]);
+
+  // Sincronizar el ref con el state
   useEffect(() => {
-    const container = containerRef.current;
-    const target = targetRef.current;
-    const ignore = ignoreRef?.current;
+    isPressedRef.current = isPressed;
+  }, [isPressed]);
 
-    if (!container || !target) return;
+  useEffect(() => {
+    pathRef.current = path;
+  }, [path]);
 
-    const isInsideIgnore = (e) => {
+  // Función para verificar si el evento está dentro de algún elemento a ignorar
+  const isInsideIgnore = useCallback((e) => {
+    const refsArray = Array.isArray(ignoreRefs) ? ignoreRefs : [ignoreRefs];
+    
+    return refsArray.some(ignoreRef => {
       const ignore = ignoreRef?.current;
       if (!ignore) return false;
       return ignore.contains(e.target) || e.composedPath?.().includes(ignore);
-    };
+    });
+  }, [ignoreRefs]);
+
+  // Función para verificar si el punto está dentro del contenedor
+  const isInsideContainer = useCallback((e) => {
+    const container = containerRef.current;
+    if (!container) return false;
     
+    const rect = container.getBoundingClientRect();
+    return (
+      e.clientX >= rect.left &&
+      e.clientX <= rect.right &&
+      e.clientY >= rect.top &&
+      e.clientY <= rect.bottom
+    );
+  }, [containerRef]);
 
-    const updatePosition = (e) => {
-      const rect = container.getBoundingClientRect();
-      const targetRect = target.getBoundingClientRect();
+  // Función para actualizar posiciones
+  const updatePosition = useCallback((e) => {
+    const container = containerRef.current;
+    const target = targetRef.current;
+    
+    if (!container || !target) return null;
 
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      setPosition({ x, y });
+    const rect = container.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
 
-      const relX = e.clientX - targetRect.left;
-      const relY = e.clientY - targetRect.top;
-      setRelativeToTarget({ x: relX, y: relY });
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    const relX = e.clientX - targetRect.left;
+    const relY = e.clientY - targetRect.top;
 
-      return { container: { x, y }, target: { x: relX, y: relY } };
+    setPosition({ x, y });
+    setRelativeToTarget({ x: relX, y: relY });
+
+    return { 
+      container: { x, y }, 
+      target: { x: relX, y: relY } 
     };
+  }, [containerRef, targetRef]);
+
+  // Función para finalizar el pressed state
+  const endPress = useCallback(() => {
+    isPressedRef.current = false;
+    setIsPressed(false);
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const target = targetRef.current;
+
+    if (!container || !target) return;
 
     const handlePointerDown = (e) => {
       if (isInsideIgnore(e)) return;
+      
       const positions = updatePosition(e);
+      if (!positions) return;
+
+      isPressedRef.current = true;
       setIsPressed(true);
-      setPath([positions.target]);
+      
+      const newPath = [positions.target];
+      pathRef.current = newPath;
+      setPath(newPath);
     };
 
     const handlePointerMove = (e) => {
       if (isInsideIgnore(e)) return;
+      
       const positions = updatePosition(e);
-      if (isPressed) {
-        setPath((prev) => [...prev, positions.target]);
+      if (!positions) return;
+
+      // Solo actualizar el path si ESTA instancia específica está presionada
+      if (isPressedRef.current) {
+        const newPath = [...pathRef.current, positions.target];
+        pathRef.current = newPath;
+        setPath(newPath);
+      }
+
+      // Solo terminar el press al salir si la opción está habilitada Y esta instancia está activa
+      if (endPressOnLeave && isPressedRef.current && !isInsideContainer(e)) {
+        endPress();
       }
     };
 
     const handlePointerUp = (e) => {
+      // Solo procesar pointerUp si ESTA instancia está actualmente presionada
+      if (!isPressedRef.current) return;
+      
       if (isInsideIgnore(e)) return;
+      
       updatePosition(e);
-      setIsPressed(false);
+      endPress();
     };
 
+    // Manejar cuando el puntero sale del contenedor mientras está presionado
+    const handlePointerLeave = (e) => {
+      if (endPressOnLeave && isPressedRef.current) {
+        endPress();
+      }
+    };
+
+    // Event listeners
     container.addEventListener('pointerdown', handlePointerDown);
+    if (endPressOnLeave) {
+      container.addEventListener('pointerleave', handlePointerLeave);
+    }
+    
+    // Los eventos globales siguen siendo necesarios para seguir el movimiento fuera del contenedor
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
 
+    // Cleanup
     return () => {
       container.removeEventListener('pointerdown', handlePointerDown);
+      if (endPressOnLeave) {
+        container.removeEventListener('pointerleave', handlePointerLeave);
+      }
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
     };
-  }, [containerRef, targetRef, ignoreRef, isPressed]);
+  }, [containerRef, targetRef, ignoreRefs, isInsideIgnore, updatePosition, isInsideContainer, endPress, endPressOnLeave]);
 
-  return { position, relativeToTarget, isPressed, path };
+  // Función para limpiar el path manualmente
+  const clearPath = useCallback(() => {
+    pathRef.current = [];
+    setPath([]);
+  }, []);
+
+  return { 
+    position, 
+    relativeToTarget, 
+    isPressed, 
+    path,
+    clearPath
+  };
 }
-
-
 /**
  * Improved Layer Manager hook
  * Uses a composite rendering approach for better performance

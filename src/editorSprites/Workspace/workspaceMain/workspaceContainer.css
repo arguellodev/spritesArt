@@ -143,7 +143,7 @@
 
 /* Right panel */
 .right-panel {
-  overflow: auto;
+  
   padding: 20px;
   width: 300px;
   background: var(--bg-secondary);
@@ -551,3 +551,184 @@ cursor: grab;
 .workspace-selection-canvas:active{
   cursor: grabbing;
   }
+
+  /*Puntos de arraste para en canvas de modo espejo:*/
+
+  /* Contenedor principal del punto de arrastre */
+.canvas-resize-handle-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Wrapper del handle */
+.resize-handle-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+}
+
+/* Estilo base del punto de arrastre */
+.resize-handle {
+  width: 30px;
+  height: 30px;
+  border: 2px solid #4A90E2;
+  background: #ffffff;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  margin: 0;
+  position: relative;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.15s ease;
+  outline: none;
+  z-index: 20;
+}
+
+/* Hover states */
+.resize-handle:hover {
+  border-color: #357ABD;
+  background: #f8f9fa;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+  transform: scale(1.1);
+}
+
+.resize-handle:active {
+  background: #e9ecef;
+  transform: scale(0.95);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Cursores específicos para cada esquina */
+.resize-handle-nw {
+  cursor: nw-resize;
+}
+
+.resize-handle-se {
+  cursor: se-resize;
+}
+
+.resize-handle-ne {
+  cursor: ne-resize;
+}
+
+.resize-handle-sw {
+  cursor: sw-resize;
+}
+
+/* Cursor para bordes laterales */
+.resize-handle-n,
+.resize-handle-s {
+  cursor: ns-resize;
+}
+
+.resize-handle-e,
+.resize-handle-w {
+  cursor: ew-resize;
+}
+
+/* Ícono dentro del handle */
+.resize-handle-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #4A90E2;
+  transition: color 0.15s ease;
+  pointer-events: none;
+  width: 100%;
+  height: 100%;
+}
+
+.resize-handle:hover .resize-handle-icon {
+  color: #357ABD;
+}
+
+/* Estados de focus para accesibilidad */
+.resize-handle:focus {
+  border-color: #357ABD;
+  box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+}
+
+/* Variante para handles más grandes en touch devices */
+@media (hover: none) and (pointer: coarse) {
+  .resize-handle {
+    width: 24px;
+    height: 24px;
+    border-width: 3px;
+    padding: 3px;
+  }
+  
+  .resize-handle-icon {
+    font-size: 16px;
+  }
+}
+
+/* Animación sutil cuando aparecen */
+@keyframes handleFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.canvas-resize-handle-container {
+  animation: handleFadeIn 0.2s ease-out;
+}
+
+/* Variante para handles en estado "active" durante el resize */
+.resize-handle.resizing {
+  border-color: #357ABD;
+  background: #e3f2fd;
+  box-shadow: 0 4px 12px rgba(53, 122, 189, 0.3);
+  transform: scale(1.15);
+}
+
+.resize-handle.resizing .resize-handle-icon {
+  color: #357ABD;
+}
+
+/* Estilo alternativo más minimalista */
+.resize-handle.minimal {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #666;
+  background: #fff;
+  border-radius: 50%;
+}
+
+.resize-handle.minimal:hover {
+  border-color: #4A90E2;
+  background: #4A90E2;
+}
+
+/* Estilo para handles con líneas de textura */
+.resize-handle.textured::before {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background-image: 
+    linear-gradient(45deg, transparent 40%, #4A90E2 40%, #4A90E2 60%, transparent 60%),
+    linear-gradient(-45deg, transparent 40%, #4A90E2 40%, #4A90E2 60%, transparent 60%);
+  background-size: 3px 3px;
+  opacity: 0.6;
+}
+
+.area-canvas-size-text{
+  margin-left: 10px;
+  color: black;
+  font-weight: 300;
+}
