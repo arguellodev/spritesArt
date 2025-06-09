@@ -98,6 +98,18 @@ const LineTool = ({ setToolParameters, tool }) => {
         pattern: pattern,
         pressure: pressure
       });
+
+      setToolParameters(prev => ({
+        ...prev,
+        borderColor: borderColor,
+        fillColor: fillColor,
+        width: borderWidth,
+        vertices: vertices,
+        rotation: rotation,
+        pattern: pattern,
+        pressure: pressure
+      
+      }));
     }
   }, [borderWidth, opacity, borderColor, fillColor, vertices, rotation, pattern, pressure, setToolParameters]);
 

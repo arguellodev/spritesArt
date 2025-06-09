@@ -89,7 +89,12 @@ const CurveTool = ({ setToolParameters, tool }) => {
     if (typeof borderWidth === 'number' && 
         typeof vertices === 'number' && 
         typeof rotation === 'number') {
-      setToolParameters({
+
+     
+
+
+      setToolParameters(prev => ({
+        ...prev,
         borderColor: borderColor,
         fillColor: fillColor,
         width: borderWidth,
@@ -97,7 +102,8 @@ const CurveTool = ({ setToolParameters, tool }) => {
         rotation: rotation,
         pattern: pattern,
         pressure: pressure
-      });
+      
+      }));
     }
   }, [borderWidth, opacity, borderColor, fillColor, vertices, rotation, pattern, pressure, setToolParameters]);
 

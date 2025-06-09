@@ -8,14 +8,14 @@ import React from 'react';
 
 
 export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {}) {
-  const { endPressOnLeave = false } = options;
+  const { endPressOnLeave = false, preventContextMenu = true } = options;
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [relativeToTarget, setRelativeToTarget] = useState({ x: 0, y: 0 });
-  const [isPressed, setIsPressed] = useState(false);
+  const [isPressed, setIsPressed] = useState(null); // null | 'left' | 'right'
   const [path, setPath] = useState([]);
 
   // Usar refs para valores que cambian frecuentemente
-  const isPressedRef = useRef(false);
+  const isPressedRef = useRef(null);
   const pathRef = useRef([]);
 
   // Sincronizar el ref con el state
@@ -26,6 +26,15 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
   useEffect(() => {
     pathRef.current = path;
   }, [path]);
+
+  // Función para detectar qué botón fue presionado
+  const getButtonType = useCallback((e) => {
+    // Para pointer events, usamos e.button
+    // 0 = botón izquierdo, 2 = botón derecho
+    if (e.button === 0) return 'left';
+    if (e.button === 2) return 'right';
+    return null;
+  }, []);
 
   // Función para verificar si el evento está dentro de algún elemento a ignorar
   const isInsideIgnore = useCallback((e) => {
@@ -79,8 +88,8 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
 
   // Función para finalizar el pressed state
   const endPress = useCallback(() => {
-    isPressedRef.current = false;
-    setIsPressed(false);
+    isPressedRef.current = null;
+    setIsPressed(null);
   }, []);
 
   useEffect(() => {
@@ -92,11 +101,14 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
     const handlePointerDown = (e) => {
       if (isInsideIgnore(e)) return;
       
+      const buttonType = getButtonType(e);
+      if (!buttonType) return; // Solo procesar left y right clicks
+      
       const positions = updatePosition(e);
       if (!positions) return;
 
-      isPressedRef.current = true;
-      setIsPressed(true);
+      isPressedRef.current = buttonType;
+      setIsPressed(buttonType);
       
       const newPath = [positions.target];
       pathRef.current = newPath;
@@ -139,8 +151,18 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
       }
     };
 
+    // Prevenir el menú contextual si está habilitado
+    const handleContextMenu = (e) => {
+      if (preventContextMenu) {
+        e.preventDefault();
+      }
+    };
+
     // Event listeners
     container.addEventListener('pointerdown', handlePointerDown);
+    if (preventContextMenu) {
+      container.addEventListener('contextmenu', handleContextMenu);
+    }
     if (endPressOnLeave) {
       container.addEventListener('pointerleave', handlePointerLeave);
     }
@@ -152,13 +174,16 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
     // Cleanup
     return () => {
       container.removeEventListener('pointerdown', handlePointerDown);
+      if (preventContextMenu) {
+        container.removeEventListener('contextmenu', handleContextMenu);
+      }
       if (endPressOnLeave) {
         container.removeEventListener('pointerleave', handlePointerLeave);
       }
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
     };
-  }, [containerRef, targetRef, ignoreRefs, isInsideIgnore, updatePosition, isInsideContainer, endPress, endPressOnLeave]);
+  }, [containerRef, targetRef, ignoreRefs, isInsideIgnore, updatePosition, isInsideContainer, endPress, endPressOnLeave, getButtonType, preventContextMenu]);
 
   // Función para limpiar el path manualmente
   const clearPath = useCallback(() => {
@@ -169,7 +194,7 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
   return { 
     position, 
     relativeToTarget, 
-    isPressed, 
+    isPressed, // Ahora retorna 'left', 'right', or null
     path,
     clearPath
   };
@@ -923,7 +948,7 @@ function normalizeToRGBA(color) {
         r: Math.round(r), 
         g: Math.round(g), 
         b: Math.round(b), 
-        a: Math.round(a) 
+        a: Math.round(a*255) 
       };
     }
   }
@@ -1630,5 +1655,8 @@ updatePixelGroup,
    getHierarchicalLayers,
    getMainLayers,
    getGroupLayersForParent,
+   setLayers,
+   setPixelGroups
+
 };
 }

@@ -89,15 +89,16 @@ const PolygonTool = ({ setToolParameters, tool }) => {
     if (typeof borderWidth === 'number' && 
         typeof vertices === 'number' && 
         typeof rotation === 'number') {
-      setToolParameters({
-        borderColor: borderColor,
-        fillColor: fillColor,
+     
+
+      setToolParameters(prev => ({
+        ...prev,
         borderWidth: borderWidth,
         vertices: vertices,
         rotation: rotation,
         pattern: pattern,
         pressure: pressure
-      });
+      }));
     }
   }, [borderWidth, opacity, borderColor, fillColor, vertices, rotation, pattern, pressure, setToolParameters]);
 

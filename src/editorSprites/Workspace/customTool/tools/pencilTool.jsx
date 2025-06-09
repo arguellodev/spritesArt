@@ -16,6 +16,9 @@ const PencilTool = ({ setToolParameters, tool }) => {
   const [pressure, setPressure] = useState(50);
   const [hexFillColor, setFillHexColor] = useState('#FF0000');
   const [hexBorderColor, setHexBorderColor] = useState('#FF0000');
+  const [sharpen, setSharpen] = useState(0);
+  const [paintMode, setPaintMode] = useState('hybrid');
+  const [velocitySensibility, setVelocitySensibility] = useState(0)
 
   const rgbToHex = ({ r, g, b }) => {
     return (
@@ -89,74 +92,30 @@ const PencilTool = ({ setToolParameters, tool }) => {
     if (typeof borderWidth === 'number' && 
         typeof vertices === 'number' && 
         typeof rotation === 'number') {
-      setToolParameters({
-        borderColor: borderColor,
-        fillColor: fillColor,
+     
+
+      setToolParameters(prev => ({
+        ...prev,
         width: borderWidth,
         vertices: vertices,
         rotation: rotation,
         pattern: pattern,
         pressure: pressure,
         smoothness: 0, // 0 = sin suavizado, 1 = máximo suavizado
-        blur:0,
-        paintMode: 'composite' // o 'fill'
-      });
+        blur:sharpen,
+        paintMode: paintMode, // o 'manual' 'composite' o 'hybrid'
+        velocitySensibility: velocitySensibility
+      }));
+
     }
-  }, [borderWidth, opacity, borderColor, fillColor, vertices, rotation, pattern, pressure, setToolParameters]);
+  }, [borderWidth, opacity, borderColor, fillColor, vertices, rotation, pattern, pressure, setToolParameters,sharpen, paintMode, velocitySensibility]);
 
   return (
     <>
       <div className="polygon-tool-container">
         <div className="tool-configs">
           {/* Configuración de colores */}
-          <div className="color-section">
-           
-            
-            {/* Color de borde */}
-            <div className="config-item color-config">
-              <label className="tool-label">Border Color</label>
-              <div className="color-input-container">
-                <div 
-                  className={`color-button ${showBorderColorPicker ? 'active' : ''}`}
-                  style={{ backgroundColor: `
-                    rgba(${borderColor.r}, 
-                    ${borderColor.g}, 
-                    ${borderColor.b}, 
-                    ${borderColor.a})` }}
-
-                  onClick={() => {
-                    setShowBorderColorPicker(!showBorderColorPicker);
-                    setShowFillColorPicker(false);
-                  }}
-                >
-                  {showBorderColorPicker && <div className="color-arrow"></div>}
-                </div>
-                <span className="color-value">{hexBorderColor}</span>
-              </div>
-            </div>
-
-            {/* Color de relleno */}
-            <div className="config-item color-config">
-              <label className="tool-label">Fill Color</label>
-              <div className="color-input-container">
-                <div 
-                  className={`color-button ${showFillColorPicker ? 'active' : ''}`}
-                  style={{ backgroundColor: `
-                    rgba(${fillColor.r}, 
-                    ${fillColor.g}, 
-                    ${fillColor.b}, 
-                    ${fillColor.a})` }}
-                  onClick={() => {
-                    setShowFillColorPicker(!showFillColorPicker);
-                    setShowBorderColorPicker(false);
-                  }}
-                >
-                  {showFillColorPicker && <div className="color-arrow"></div>}
-                </div>
-                <span className="color-value">{hexFillColor}</span>
-              </div>
-            </div>
-          </div>
+          
 
           {/* Configuración de grosor */}
           <div className="config-item">
@@ -194,138 +153,115 @@ const PencilTool = ({ setToolParameters, tool }) => {
             </div>
           </div>
 
-         {/* Configuración de vértices */}
-         <div className="config-item">
-            <label className="tool-label">Vertices</label>
-            <div className="input-container">
-             
-              <input 
-                type="number" 
-                min="3" 
-                max="12" 
-                value={vertices} 
-                onChange={(e) => {
-                  const value = e.target.value;
-                  
-                  // Permitir string vacío temporalmente
-                  if (value === '') {
-                    setVertices('');
-                    return;
-                  }
-                  
-                  const numValue = Number(value);
-                  if (!isNaN(numValue)) {
-                    setVertices(numValue);
-                  }
-                }}
-                onBlur={(e) => {
-                  const value = e.target.value;
-                  if (value === '' || isNaN(Number(value))) {
-                    setVertices(5); // Valor por defecto
-                    return;
-                  }
-                  
-                  const numValue = Number(value);
-                  if (numValue < 3) setVertices(3);
-                  if (numValue > 12) setVertices(12);
-                }}
-                className="number-input" 
-              />
-              <div className="increment-buttons-container">
-              <button 
-                type="button"
-                onClick={() => {
-                  const currentVertices = typeof vertices === 'number' ? vertices : 5;
-                  setVertices(Math.min(12, currentVertices + 1));
-                }}
-                className="increment-btn"
-                disabled={(typeof vertices === 'number' ? vertices : 5) >= 12}
-              >
-               <LuChevronUp />
-              </button>
-              <button 
-                type="button"
-                onClick={() => {
-                  const currentVertices = typeof vertices === 'number' ? vertices : 5;
-                  setVertices(Math.max(3, currentVertices - 1));
-                }}
-                className="increment-btn"
-                disabled={(typeof vertices === 'number' ? vertices : 5) <= 3}
-              >
-                <LuChevronDown />
-              </button>
-              </div>
-             
-            </div>
-          </div>
+        {/* Configuración de Sharpen */}
+<div className="config-item">
+  <label className="tool-label">Sharpen</label>
+  <div className="input-container">
+    <input 
+      type="number" 
+      min="0" 
+      max="1" 
+      step="0.1"
+      value={sharpen} 
+      onChange={(e) => {
+        const value = e.target.value;
+        if (value === '') {
+          setSharpen('');
+          return;
+        }
+        const numValue = Number(value);
+        if (!isNaN(numValue)) {
+          setSharpen(numValue);
+        }
+      }}
+      onBlur={(e) => {
+        const value = e.target.value;
+        if (value === '' || isNaN(Number(value))) {
+          setSharpen(1); // Valor por defecto
+          return;
+        }
+
+        const numValue = Number(value);
+        if (numValue < 0) setSharpen(0);
+        else if (numValue > 1) setSharpen(1);
+      }}
+      className="number-input" 
+    />
+    <div className="increment-buttons-container">
+      <button 
+        type="button"
+        onClick={() => {
+          const currentSharpen = typeof sharpen === 'number' ? sharpen : 1;
+          setSharpen(Math.min(1, parseFloat((currentSharpen + 0.1).toFixed(2))));
+        }}
+        className="increment-btn"
+        disabled={sharpen >= 1}
+      >
+        <LuChevronUp />
+      </button>
+      <button 
+        type="button"
+        onClick={() => {
+          const currentSharpen = typeof sharpen === 'number' ? sharpen : 1;
+          setSharpen(Math.max(0, parseFloat((currentSharpen - 0.1).toFixed(2))));
+        }}
+        className="increment-btn"
+        disabled={sharpen <= 0}
+      >
+        <LuChevronDown />
+      </button>
+    </div>
+  </div>
+</div>
 
           {/* Configuración de rotación */}
           <div className="config-item">
-            <label className="tool-label">Rotation</label>
-            <div className="input-container">
-              
-              <input 
-                type="number" 
-                min="0" 
-                max="360" 
-                value={rotation} 
-                onChange={(e) => {
-                  const value = e.target.value;
-                  
-                  // Permitir string vacío temporalmente
-                  if (value === '') {
-                    setRotation('');
-                    return;
-                  }
-                  
-                  const numValue = Number(value);
-                  if (!isNaN(numValue)) {
-                    setRotation(numValue);
-                  }
-                }}
-                onBlur={(e) => {
-                  const value = e.target.value;
-                  if (value === '' || isNaN(Number(value))) {
-                    setRotation(0); // Valor por defecto
-                    return;
-                  }
-                  
-                  const numValue = Number(value);
-                  if (numValue < 0) setRotation(0);
-                  if (numValue > 360) setRotation(360);
-                }}
-                className="number-input" 
-              />
-              <span className="tool-value">°</span>
-              <div className="increment-buttons-container">
-              <button 
-                type="button"
-                onClick={() => {
-                  const currentRotation = typeof rotation === 'number' ? rotation : 0;
-                  setRotation(Math.min(360, currentRotation + 5));
-                }}
-                className="increment-btn"
-                disabled={(typeof rotation === 'number' ? rotation : 0) >= 360}
-              >
-                <LuChevronUp />
-              </button>
-              <button 
-                type="button"
-                onClick={() => {
-                  const currentRotation = typeof rotation === 'number' ? rotation : 0;
-                  setRotation(Math.max(0, currentRotation - 5));
-                }}
-                className="increment-btn"
-                disabled={(typeof rotation === 'number' ? rotation : 0) <= 0}
-              >
-                <LuChevronDown />
-              </button>
-              
-              </div>
-              
-              
-            </div>
+  <label className="tool-label">Paint Mode</label>
+  <div className="input-container">
+    <select
+      value={paintMode}
+      onChange={(e) => setPaintMode(e.target.value)}
+      className="select-input"
+    >
+      <option value="manual">Manual</option>
+      <option value="composite">Composite</option>
+      <option value="hybrid">Hybrid</option>
+    </select>
+  </div>
+</div>
+
+{/*COnfiguracion de velcoidad 
+
+<div className="config-item">
+  <label className="tool-label">Velocity Sensibility</label>
+  <div className="horizontal-slider-container">
+    <div className="slider-track-horizontal">
+      <input
+        type="range"
+        min="0"
+        max="10"
+        step="1"
+        value={velocitySensibility}
+        onChange={(e) => setVelocitySensibility(parseInt(e.target.value))}
+        className="horizontal-slider"
+      />
+      <div className="slider-marks-horizontal">
+        {Array.from({ length: 11 }, (_, i) => (
+          <div
+            key={i}
+            className={`slider-mark-horizontal ${velocitySensibility === i ? 'active' : ''}`}
+            style={{ left: `${(i / 10) * 100}%` }}
+          >
+            <span className="mark-value-horizontal">{i}</span>
           </div>
+        ))}
+      </div>
+    </div>
+    
+  </div>
+</div>
+*/}
+
 
           {/* Configuración de opacidad 
           <div className="config-item">
@@ -412,7 +348,7 @@ const PencilTool = ({ setToolParameters, tool }) => {
           
         </div>
 
-        {/* Vista previa de la herramienta */}
+        {/* Vista previa de la herramienta 
         <div className="tool-preview">
           <div className="preview-label">Preview</div>
           <div className="preview-container">
@@ -443,7 +379,7 @@ const PencilTool = ({ setToolParameters, tool }) => {
               />
             </svg>
           </div>
-        </div>
+        </div>*/}
 
         {/* Color Pickers */}
         {showBorderColorPicker && (

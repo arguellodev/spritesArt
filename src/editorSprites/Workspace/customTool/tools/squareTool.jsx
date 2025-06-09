@@ -89,15 +89,17 @@ const SquareTool = ({ setToolParameters, tool }) => {
     if (typeof borderWidth === 'number' && 
         typeof borderRadius === 'number' && 
         typeof rotation === 'number') {
-      setToolParameters({
-        borderColor: borderColor,
-        fillColor: fillColor,
+    
+
+      setToolParameters(prev => ({
+        ...prev,
         borderWidth: borderWidth,
         borderRadius: borderRadius,
         rotation: rotation,
         pattern: pattern,
         pressure: pressure
-      });
+      }));
+
     }
   }, [borderWidth, opacity, borderColor, fillColor, borderRadius, rotation, pattern, pressure, setToolParameters]);
 

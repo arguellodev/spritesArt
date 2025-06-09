@@ -123,9 +123,9 @@ const EditorMain =()=>{
         },
        
         {
-          label: 'Poligono',
+          label: 'Creador de formas',
           icon:   <FaDrawPolygon />,
-          onClick: () => setTool('polygon')
+          onClick: () => setTool('polygonPencil')
         },
         {
           label: 'Luminosidad',
@@ -183,7 +183,7 @@ const EditorMain =()=>{
         variant: 'vertical',
         theme: 'dark',
         showOnlyIcons: true,
-        twoColumns: true
+        twoColumns: false
       });
      ///////////////////////////////////
 
@@ -211,10 +211,10 @@ const EditorMain =()=>{
     <div style={{display:'flex', flexDirection:'column'}}>
 
     <NavbarLateral
-      logo={<div style={{ fontWeight: '400', fontSize: '1rem', marginTop:'50px', display:'flex', gap: '10px',
-        alignContent:'center', justifyContent:'center'
+      logo={<div style={{ fontWeight: '400', fontSize: '1rem', marginTop:'0px', display:'flex', gap: '10px',
+        alignContent:'center', justifyContent:'center', width: "60px"
        }}>
-        <p style={{fontWeight:'600'}}>Herramientas</p>
+        
         <GoTools style={{fontSize:'1.2rem'}}/>
       </div>}
       items={navItemsLateral}
@@ -222,7 +222,6 @@ const EditorMain =()=>{
       theme={navConfigLateral.theme}
       showOnlyIcons={navConfigLateral.showOnlyIcons}
       twoColumns={navConfigLateral.twoColumns}
-      onItemClick={(item) => console.log('Clicked item:', item)}
     />
 
      
@@ -240,10 +239,7 @@ const EditorMain =()=>{
      setTool={setTool}
      />
     </div>
-   {/*
-   <div className=" right-panel">
-      <CustomTool setToolParameters={setToolParameters} tool={tool}/>
-    </div> */} 
+
   </div>
  
         </div>

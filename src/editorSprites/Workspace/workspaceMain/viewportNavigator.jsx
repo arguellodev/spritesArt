@@ -8,7 +8,8 @@ const ViewportNavigator = ({
   viewportHeight,
   viewportOffset,
   zoom,
-  onViewportMove 
+  onViewportMove,
+  onZoomChange = () => {} // Valor por defecto para evitar errores
 }) => {
   const navigatorRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -57,12 +58,15 @@ const ViewportNavigator = ({
 
   const handlePointerUp = useCallback((e) => {
     setIsDragging(false);
-    
     navigatorRef.current.releasePointerCapture(e.pointerId);
-    
   }, []);
 
-  
+  const handleZoomChange = useCallback((e) => {
+    if (onZoomChange) {
+      onZoomChange(e); // Pasar el evento completo
+    }
+  }, [onZoomChange]);
+
   const visibleAreaPercentage = ((viewportWidth * viewportHeight) / (totalWidth * totalHeight) * 100).toFixed(1);
 
   return (
@@ -74,6 +78,20 @@ const ViewportNavigator = ({
         <span className="info-item">
           Área visible: <strong>{visibleAreaPercentage}%</strong>
         </span>
+      </div>
+
+      {/* Control de Zoom integrado */}
+      <div className="zoom-control">
+        <label htmlFor="zoom-slider">Zoom: {zoom}x</label>
+        <input
+          type="range"
+          id="zoom-slider"
+          min="1"
+          max="40"
+          value={zoom}
+          onChange={handleZoomChange}
+          className="zoom-slider"
+        />
       </div>
 
       <div 

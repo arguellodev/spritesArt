@@ -1,182 +1,475 @@
 import { useEffect, useState } from "react";
+import { LuChevronUp, LuChevronDown } from "react-icons/lu";
+import ToolColorPicker from "./toolColorPicker";
 
+// Simulación del ColorPicker component
 
+const CircleTool = ({ setToolParameters, tool }) => {
+  // Estados para las diferentes configuraciones
+  const [borderWidth, setBorderWidth] = useState(1);
+  const [opacity, setOpacity] = useState(100);
+  const [borderColor, setBorderColor] = useState({ r: 0, g: 0, b: 0, a: 1 });
+  const [fillColor, setFillColor] = useState({ r: 255, g: 0, b: 0, a: 1 });
+  const [vertices, setVertices] = useState(5);
+  const [rotation, setRotation] = useState(0);
+  const [pattern, setPattern] = useState("solid");
+  const [pressure, setPressure] = useState(50);
+  const [hexFillColor, setFillHexColor] = useState('#FF0000');
+  const [hexBorderColor, setHexBorderColor] = useState('#FF0000');
 
-
-const CircleTool = ({setToolParameters, tool}) => {
-    // Estados para las diferentes configuraciones del lápiz
-    const [pixelSize, setPixelSize] = useState(1);
-    const [opacity, setOpacity] = useState(100);
-    const [color, setColor] = useState("#FFFFFF");
-    const [pressure, setPressure] = useState(50);
-    const [pattern, setPattern] = useState("solid");
-
-    // Patrones disponibles para el lápiz
-    const patterns = ["solid", "dotted", "dashed", "pixel dust"];
-
-    // Controlar la visibilidad de las opciones avanzadas
-    const [showAdvanced, setShowAdvanced] = useState(false);
-
-    useEffect(() => {
-        setToolParameters({
-            borderRadius: 3,           // Radio de las esquinas redondeadas
-            borderWidth: 2,           // Ancho del borde en píxeles
-            borderColor: {            // Color del borde
-              r: 255, g: 0, b: 0, a: 1
-            },
-            fillColor: {              // Color del relleno
-              r: 0, g: 255, b: 0, a: 0.8
-            }
-          });
-
-       
-        console.log('el pixel size es: ', pixelSize)
-    }, [pixelSize]);
-    
-
+  const rgbToHex = ({ r, g, b }) => {
     return (
-       
-       <>
+      "#" +
+      [r, g, b]
+        .map((x) => {
+          const hex = x.toString(16);
+          return hex.length === 1 ? "0" + hex : hex;
+        })
+        .join("")
+    );
+  };
+  
+  useEffect(() => {
+    setHexBorderColor(rgbToHex(borderColor));
+    setFillHexColor(rgbToHex(fillColor));
+  }, [borderColor, fillColor]);
+  
+  // Estados para color pickers
+  const [showBorderColorPicker, setShowBorderColorPicker] = useState(false);
+  const [showFillColorPicker, setShowFillColorPicker] = useState(false);
 
+  // Estados para opciones avanzadas
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const patterns = ["solid", "dotted", "dashed", "pixel dust"];
+
+  // Función para convertir hex a rgb
+  const hexToRgb = (hex) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16)
+    } : { r: 0, g: 0, b: 0 };
+  };
+
+  // Función para manejar cambios en el grosor con botones
+  const handleBorderWidthChange = (increment) => {
+    const currentWidth = typeof borderWidth === 'number' ? borderWidth : 3;
+    const newWidth = Math.max(1, Math.min(20, currentWidth + increment));
+    setBorderWidth(newWidth);
+  };
+
+  // Función para manejar input directo del grosor
+  const handleBorderWidthInput = (e) => {
+    const value = e.target.value;
+    
+    // Permitir string vacío temporalmente
+    if (value === '') {
+      setBorderWidth('');
+      return;
+    }
+    
+    const numValue = parseInt(value);
+    if (!isNaN(numValue)) {
+      setBorderWidth(Math.max(1, Math.min(20, numValue)));
+    }
+  };
+
+  // Función para manejar cuando se pierde el foco en border width
+  const handleBorderWidthBlur = (e) => {
+    const value = e.target.value;
+    if (value === '' || isNaN(parseInt(value))) {
+      setBorderWidth(3); // Valor por defecto
+    }
+  };
+
+  useEffect(() => {
+    // Solo actualizar si todos los valores son números válidos
+    if (typeof borderWidth === 'number' && 
+        typeof vertices === 'number' && 
+        typeof rotation === 'number') {
+      setToolParameters({
+        borderColor: borderColor,
+        fillColor: fillColor,
+        borderWidth: borderWidth,
+        vertices: vertices,
+        rotation: rotation,
+        pattern: pattern,
+        pressure: pressure
+      });
+    }
+  }, [borderWidth, opacity, borderColor, fillColor, vertices, rotation, pattern, pressure, setToolParameters]);
+
+  return (
+    <>
+      <div className="polygon-tool-container">
+        <div className="tool-configs">
+          {/* Configuración de colores */}
+          <div className="color-section">
+           
             
-   
-         <div className="tool-configs">
-                {/* Configuración de color */}
-               
+            {/* Color de borde */}
+            <div className="config-item color-config">
+              <label className="tool-label">Border Color</label>
+              <div className="color-input-container">
+                <div 
+                  className={`color-button ${showBorderColorPicker ? 'active' : ''}`}
+                  style={{ backgroundColor: `
+                    rgba(${borderColor.r}, 
+                    ${borderColor.g}, 
+                    ${borderColor.b}, 
+                    ${borderColor.a})` }}
 
-                {/* Configuración de tamaño de pixel */}
-                <div className="config-item">
-                    <label className="tool-label">Pixel Size</label>
-                    <div className="slider-container">
-                        <input 
-                            type="range" 
-                            min="1" 
-                            max="10" 
-                            value={pixelSize} 
-                            onChange={(e) => setPixelSize(Number(e.target.value))} 
-                            className="slider" 
-                        />
-                        <span className="tool-value">{pixelSize}px</span>
-                    </div>
-                </div>
-
-                {/* Configuración de opacidad */}
-                <div className="config-item">
-                    <label className="tool-label">Opacity</label>
-                    <div className="slider-container">
-                        <input 
-                            type="range" 
-                            min="0" 
-                            max="100" 
-                            value={opacity} 
-                            onChange={(e) => setOpacity(Number(e.target.value))} 
-                            className="slider" 
-                        />
-                        <span className="tool-value">{opacity}%</span>
-                    </div>
-                </div>
-
-                {/* Selector de patrón */}
-                <div className="config-item">
-                    <label className="tool-label">Pattern</label>
-                    <select 
-                        value={pattern} 
-                        onChange={(e) => setPattern(e.target.value)}
-                        className="pattern-selector"
-                    >
-                        {patterns.map((p) => (
-                            <option key={p} value={p}>{p}</option>
-                        ))}
-                    </select>
-                </div>
-
-                {/* Botón para mostrar/ocultar opciones avanzadas */}
-                <button 
-                    className="advanced-toggle"
-                    onClick={() => setShowAdvanced(!showAdvanced)}
+                  onClick={() => {
+                    setShowBorderColorPicker(!showBorderColorPicker);
+                    setShowFillColorPicker(false);
+                  }}
                 >
-                    {showAdvanced ? "Hide Advanced" : "Show Advanced"}
-                </button>
+                  {showBorderColorPicker && <div className="color-arrow"></div>}
+                </div>
+                <span className="color-value">{hexBorderColor}</span>
+              </div>
+            </div>
 
-                {/* Opciones avanzadas */}
-                {showAdvanced && (
-                    <div className="advanced-options">
-                        {/* Sensibilidad a la presión (para tabletas gráficas) */}
-                        <div className="config-item">
-                            <label className="tool-label">Pressure Sensitivity</label>
-                            <div className="slider-container">
-                                <input 
-                                    type="range" 
-                                    min="0" 
-                                    max="100" 
-                                    value={pressure} 
-                                    onChange={(e) => setPressure(Number(e.target.value))} 
-                                    className="slider" 
-                                />
-                                <span className="tool-value">{pressure}%</span>
-                            </div>
-                        </div>
+            {/* Color de relleno */}
+            <div className="config-item color-config">
+              <label className="tool-label">Fill Color</label>
+              <div className="color-input-container">
+                <div 
+                  className={`color-button ${showFillColorPicker ? 'active' : ''}`}
+                  style={{ backgroundColor: `
+                    rgba(${fillColor.r}, 
+                    ${fillColor.g}, 
+                    ${fillColor.b}, 
+                    ${fillColor.a})` }}
+                  onClick={() => {
+                    setShowFillColorPicker(!showFillColorPicker);
+                    setShowBorderColorPicker(false);
+                  }}
+                >
+                  {showFillColorPicker && <div className="color-arrow"></div>}
+                </div>
+                <span className="color-value">{hexFillColor}</span>
+              </div>
+            </div>
+          </div>
 
-                        {/* Atajos de teclado */}
-                        <div className="config-item">
-                            <label className="tool-label">Keyboard Shortcut</label>
-                            <div className="shortcut-display">
-                                <span className="key">P</span>
-                                <button 
-                                    className="edit-shortcut"
-                                   
-                                >
-                                    Edit
-                                </button>
-                            </div>
-                        </div>
+          {/* Configuración de grosor */}
+          <div className="config-item">
+            <label className="tool-label">Border Width</label>
+            <div className="input-container">
+             
+              <input 
+                type="number"
+                min="1"
+                max="20"
+                value={borderWidth}
+                onChange={handleBorderWidthInput}
+                onBlur={handleBorderWidthBlur}
+                className="number-input" 
+              />
+              <span className="tool-value">px</span>
+               <div className="increment-buttons-container">
+               <button 
+                 className="increment-btn"
+                onClick={() => handleBorderWidthChange(1)}
+                disabled={(typeof borderWidth === 'number' ? borderWidth : 3) >= 20}
+              >
+                <LuChevronUp />
+              </button>
+              <button 
+                className="increment-btn"
+                onClick={() => handleBorderWidthChange(-1)}
+                disabled={(typeof borderWidth === 'number' ? borderWidth : 3) <= 1}
+              >
+               <LuChevronDown />
+              </button>
+               </div>
+              
+              
+            </div>
+          </div>
 
-                        {/* Anti-aliasing toggle */}
-                        <div className="config-item">
-                            <label className="tool-label">Anti-aliasing</label>
-                            <div className="toggle-switch">
-                                <input type="checkbox" id="antialiasing" className="toggle-input" />
-                                <label htmlFor="antialiasing" className="toggle-label"></label>
-                            </div>
-                        </div>
+         {/* Configuración de vértices */}
+         <div className="config-item">
+            <label className="tool-label">Vertices</label>
+            <div className="input-container">
+             
+              <input 
+                type="number" 
+                min="3" 
+                max="12" 
+                value={vertices} 
+                onChange={(e) => {
+                  const value = e.target.value;
+                  
+                  // Permitir string vacío temporalmente
+                  if (value === '') {
+                    setVertices('');
+                    return;
+                  }
+                  
+                  const numValue = Number(value);
+                  if (!isNaN(numValue)) {
+                    setVertices(numValue);
+                  }
+                }}
+                onBlur={(e) => {
+                  const value = e.target.value;
+                  if (value === '' || isNaN(Number(value))) {
+                    setVertices(5); // Valor por defecto
+                    return;
+                  }
+                  
+                  const numValue = Number(value);
+                  if (numValue < 3) setVertices(3);
+                  if (numValue > 12) setVertices(12);
+                }}
+                className="number-input" 
+              />
+              <div className="increment-buttons-container">
+              <button 
+                type="button"
+                onClick={() => {
+                  const currentVertices = typeof vertices === 'number' ? vertices : 5;
+                  setVertices(Math.min(12, currentVertices + 1));
+                }}
+                className="increment-btn"
+                disabled={(typeof vertices === 'number' ? vertices : 5) >= 12}
+              >
+               <LuChevronUp />
+              </button>
+              <button 
+                type="button"
+                onClick={() => {
+                  const currentVertices = typeof vertices === 'number' ? vertices : 5;
+                  setVertices(Math.max(3, currentVertices - 1));
+                }}
+                className="increment-btn"
+                disabled={(typeof vertices === 'number' ? vertices : 5) <= 3}
+              >
+                <LuChevronDown />
+              </button>
+              </div>
+             
+            </div>
+          </div>
 
-                        {/* Pixel perfect toggle */}
-                        <div className="config-item">
-                            <label className="tool-label">Pixel Perfect</label>
-                            <div className="toggle-switch">
-                                <input type="checkbox" id="pixelperfect" className="toggle-input" defaultChecked />
-                                <label htmlFor="pixelperfect" className="toggle-label"></label>
-                            </div>
-                        </div>
-                    </div>
-                )}
+          {/* Configuración de rotación */}
+          <div className="config-item">
+            <label className="tool-label">Rotation</label>
+            <div className="input-container">
+              
+              <input 
+                type="number" 
+                min="0" 
+                max="360" 
+                value={rotation} 
+                onChange={(e) => {
+                  const value = e.target.value;
+                  
+                  // Permitir string vacío temporalmente
+                  if (value === '') {
+                    setRotation('');
+                    return;
+                  }
+                  
+                  const numValue = Number(value);
+                  if (!isNaN(numValue)) {
+                    setRotation(numValue);
+                  }
+                }}
+                onBlur={(e) => {
+                  const value = e.target.value;
+                  if (value === '' || isNaN(Number(value))) {
+                    setRotation(0); // Valor por defecto
+                    return;
+                  }
+                  
+                  const numValue = Number(value);
+                  if (numValue < 0) setRotation(0);
+                  if (numValue > 360) setRotation(360);
+                }}
+                className="number-input" 
+              />
+              <span className="tool-value">°</span>
+              <div className="increment-buttons-container">
+              <button 
+                type="button"
+                onClick={() => {
+                  const currentRotation = typeof rotation === 'number' ? rotation : 0;
+                  setRotation(Math.min(360, currentRotation + 5));
+                }}
+                className="increment-btn"
+                disabled={(typeof rotation === 'number' ? rotation : 0) >= 360}
+              >
+                <LuChevronUp />
+              </button>
+              <button 
+                type="button"
+                onClick={() => {
+                  const currentRotation = typeof rotation === 'number' ? rotation : 0;
+                  setRotation(Math.max(0, currentRotation - 5));
+                }}
+                className="increment-btn"
+                disabled={(typeof rotation === 'number' ? rotation : 0) <= 0}
+              >
+                <LuChevronDown />
+              </button>
+              
+              </div>
+              
+              
+            </div>
+          </div>
+
+          {/* Configuración de opacidad 
+          <div className="config-item">
+            <label className="tool-label">Opacity</label>
+            <div className="slider-container">
+              <input 
+                type="range" 
+                min="0" 
+                max="100" 
+                value={opacity} 
+                onChange={(e) => setOpacity(Number(e.target.value))} 
+                className="slider" 
+              />
+              <span className="tool-value">{opacity}%</span>
+            </div>
+          </div>
+*/}
+          {/* Selector de patrón 
+          <div className="config-item">
+            <label className="tool-label">Pattern</label>
+            <select 
+              value={pattern} 
+              onChange={(e) => setPattern(e.target.value)}
+              className="pattern-selector"
+            >
+              {patterns.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>*/}
+
+          {/* Botón para mostrar/ocultar opciones avanzadas 
+          <button 
+            className="advanced-toggle"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+          >
+            {showAdvanced ? "Hide Advanced" : "Show Advanced"}
+          </button>*/}
+
+          {/* Opciones avanzadas */}
+         {/* showAdvanced && (
+            <div className="advanced-options">
+              <div className="config-item">
+                <label className="tool-label">Pressure Sensitivity</label>
+                <div className="slider-container">
+                  <input 
+                    type="range" 
+                    min="0" 
+                    max="100" 
+                    value={pressure} 
+                    onChange={(e) => setPressure(Number(e.target.value))} 
+                    className="slider" 
+                  />
+                  <span className="tool-value">{pressure}%</span>
+                </div>
+              </div>
+
+              <div className="config-item">
+                <label className="tool-label">Keyboard Shortcut</label>
+                <div className="shortcut-display">
+                  <span className="key">P</span>
+                  <button className="edit-shortcut">Edit</button>
+                </div>
+              </div>
+
+              <div className="config-item">
+                <label className="tool-label">Anti-aliasing</label>
+                <div className="toggle-switch">
+                  <input type="checkbox" id="antialiasing" className="toggle-input" />
+                  <label htmlFor="antialiasing" className="toggle-label"></label>
+                </div>
+              </div>
+
+              <div className="config-item">
+                <label className="tool-label">Pixel Perfect</label>
+                <div className="toggle-switch">
+                  <input type="checkbox" id="pixelperfect" className="toggle-input" defaultChecked />
+                  <label htmlFor="pixelperfect" className="toggle-label"></label>
+                </div>
+              </div>
+            </div>
+          )*/}
+
+          
         </div>
 
-            {/* Vista previa de la herramienta */}
-            <div className="tool-preview">
-                <div className="preview-label">Preview</div>
-                <div 
-                    className="preview-box"
-                    style={{
-                        backgroundColor: pattern === "solid" ? color : "transparent",
-                        backgroundImage: pattern !== "solid" ? `url(#${pattern}-pattern)` : "none",
-                        opacity: opacity / 100
-                    }}
-                ></div>
-            </div>
+        {/* Vista previa de la herramienta */}
+        <div className="tool-preview">
+          <div className="preview-label">Preview</div>
+          <div className="preview-container">
+            <svg width="80" height="80" viewBox="0 0 80 80" className="preview-svg">
+              <polygon
+                points={Array.from({ length: typeof vertices === 'number' ? vertices : 5 }, (_, i) => {
+                  const currentVertices = typeof vertices === 'number' ? vertices : 5;
+                  const currentRotation = typeof rotation === 'number' ? rotation : 0;
+                  const angle = (i * 2 * Math.PI / currentVertices) + (currentRotation * Math.PI / 180);
+                  const x = 40 + 25 * Math.cos(angle);
+                  const y = 40 + 25 * Math.sin(angle);
+                  return `${x},${y}`;
+                }).join(' ')}
+                fill={`rgba(
+                    ${fillColor.r},
+                    ${fillColor.g},
+                    ${fillColor.b},
+                    ${fillColor.a}
+                    )`}
+                stroke={`rgba(
+                    ${borderColor.r},
+                    ${borderColor.g},
+                    ${borderColor.b},
+                    ${borderColor.a}
+                    )`}
+                strokeWidth={typeof borderWidth === 'number' ? borderWidth : 3}
+                opacity={opacity / 100}
+              />
+            </svg>
+          </div>
+        </div>
 
-            {/* Historial de colores recientes */}
-            <div className="recent-colors">
-                <div className="color-dot" style={{ backgroundColor: "#FF0000" }}></div>
-                <div className="color-dot" style={{ backgroundColor: "#00FF00" }}></div>
-                <div className="color-dot" style={{ backgroundColor: "#0000FF" }}></div>
-                <div className="color-dot" style={{ backgroundColor: "#FFFF00" }}></div>
-                <div className="color-dot" style={{ backgroundColor: "#FF00FF" }}></div>
-            </div>
+        {/* Color Pickers */}
+        {showBorderColorPicker && (
+         <>
        
-       </>
-                );
+           <ToolColorPicker
+            color={borderColor}
+            onChange={setBorderColor}
+            hexColor={hexBorderColor}
+            setHexColor={setHexBorderColor}
+            />
+         </>
+        )}
+
+        {showFillColorPicker && (
+        <>
+        <ToolColorPicker
+            color={fillColor}
+            onChange={setFillColor}
+            hexColor={hexFillColor}
+            setHexColor={setFillHexColor}
+            />
+        </>
+        )}
+      </div>
+
+      
+    </>
+  );
 };
 
 export default CircleTool;
-

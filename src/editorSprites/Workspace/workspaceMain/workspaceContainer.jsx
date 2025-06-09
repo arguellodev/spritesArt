@@ -4,11 +4,16 @@ import { LuEye, LuEyeOff, LuTrash2, LuEraser, LuGroup ,LuUngroup, LuMousePointer
 import { SlLayers } from "react-icons/sl";
 import ViewportNavigator from './viewportNavigator';
 import CustomTool from '../customTool/customTool';
+import CustomTool2 from '../customTool/customTool2';
 import './workspaceContainer.css'
 import LayerManager from './layerManager';
 import ColorPicker from '../customTool/tools/colorPicker';
 import ReflexMode from './reflexMode';
 import { GrTopCorner,GrBottomCorner } from "react-icons/gr";
+import { MdOutlineRotate90DegreesCcw } from "react-icons/md";
+import { MdOutlineRotate90DegreesCw } from "react-icons/md";
+import LayerColor from '../customTool/layerColor';
+import LayerAnimation from './layerAnimation';
 // @ts-ignore
 import BoundsWorker from './boundsWorker.js?worker';
 
@@ -28,10 +33,11 @@ const TOOLS = {
   triangle: 'triangle',
   circle: 'circle',
   ellipse: 'ellipse',
-  polygon:'polygon'
+  polygon:'polygon',
+  polygonPencil: 'polygonPencil'
 }
 
-function CanvasTracker({setTool, tool,setToolParameters,toolParameters}) {
+function CanvasTracker({setTool, tool}) {
 
   //Parametros para modo espejo (reflex mode):
   const [mirrorState, setMirrorState] = useState({
@@ -55,6 +61,7 @@ function CanvasTracker({setTool, tool,setToolParameters,toolParameters}) {
   const mirrorCanvasRef = useRef(null)
   const leftMirrorCornerRef = useRef(null);
   const rightMirrorCornerRef = useRef(null);
+  const animationLayerRef = useRef(null);
 
   // Refs para inicio de herramientas
 const squareStartRef = useRef(null);
@@ -97,6 +104,21 @@ const polygonStartRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
+
+  //Inicializadores de color:
+const [foregroundColor, setForegroundColor] = useState({r:0,g:0,b:0,a:255});
+const [backgroundCOlor, setBackgroundColor] = useState({r:0,g:0,b:0,a:255});
+const [fillColor, setFillColor] = useState({r:0,g:0,b:0,a:255});
+const [borderColor, setBorderColor]=useState({r:0,g:0,b:0,a:255});
+
+const [toolParameters, setToolParameters] = useState({
+fillColor: fillColor,
+backgroundColor: backgroundCOlor,
+borderColor: borderColor,
+foregroundColor: foregroundColor
+
+});
+
   // Hook para gestión de capas
   const {
     layers,
@@ -132,6 +154,8 @@ const polygonStartRef = useRef(null);
     getHierarchicalLayers,
     getMainLayers,
     getGroupLayersForParent,
+    setLayers,
+   setPixelGroups
   } = useLayerManager({
     width: totalWidth,
     height: totalHeight,
@@ -150,7 +174,8 @@ const polygonStartRef = useRef(null);
   } = usePointer(workspaceRef, artboardRef, [
     selectionActionsRef,
     leftMirrorCornerRef,
-    rightMirrorCornerRef
+    rightMirrorCornerRef,
+    animationLayerRef
   ]);
   const lastPixelRef = useRef(null);
   const [drawMode, setDrawMode] = useState("draw");
@@ -1254,7 +1279,129 @@ const drawPreviewPolygon = (ctx, centerX, centerY, radius, vertices, borderWidth
 };
 
 
+//Funcion para pincel de poligono creador de formas: /////////
+// Estados necesarios para la herramienta (agregar al componente principal)
+const [polygonPoints, setPolygonPoints] = useState([]);
+const [polygonCurvePoints, setPolygonCurvePoints] = useState(new Map());
+const [isSettingCurve, setIsSettingCurve] = useState(false);
+const [currentCurveIndex, setCurrentCurveIndex] = useState(-1);
+const polygonStartTimeRef = useRef(null);
 
+const drawPolygonWithCurves = (ctx, points, curvePoints, borderWidth, borderColor, fillColor, isPreview = false) => {
+  if (points.length < 3) return;
+
+  // Crear path del polígono con curvas
+  const createPolygonPath = () => {
+    const path = [];
+    
+    for (let i = 0; i < points.length; i++) {
+      const currentPoint = points[i];
+      const nextPoint = points[(i + 1) % points.length];
+      const curveKey = `${i}-${(i + 1) % points.length}`;
+      
+      if (i === 0) {
+        path.push({ x: currentPoint.x, y: currentPoint.y, type: 'move' });
+      }
+      
+      if (curvePoints.has(curveKey)) {
+        const controlPoint = curvePoints.get(curveKey);
+        // Generar puntos de la curva cuadrática
+        const curveSteps = 20;
+        for (let t = 0; t <= curveSteps; t++) {
+          const ratio = t / curveSteps;
+          const x = Math.round((1 - ratio) * (1 - ratio) * currentPoint.x + 
+                              2 * (1 - ratio) * ratio * controlPoint.x + 
+                              ratio * ratio * nextPoint.x);
+          const y = Math.round((1 - ratio) * (1 - ratio) * currentPoint.y + 
+                              2 * (1 - ratio) * ratio * controlPoint.y + 
+                              ratio * ratio * nextPoint.y);
+          if (t > 0) path.push({ x, y, type: 'line' });
+        }
+      } else {
+        path.push({ x: nextPoint.x, y: nextPoint.y, type: 'line' });
+      }
+    }
+    
+    return path;
+  };
+
+  const pathPoints = createPolygonPath();
+  
+  // Calcular bounding box
+  const minX = Math.min(...pathPoints.map(p => p.x));
+  const maxX = Math.max(...pathPoints.map(p => p.x));
+  const minY = Math.min(...pathPoints.map(p => p.y));
+  const maxY = Math.max(...pathPoints.map(p => p.y));
+
+  // Dibujar píxel por píxel
+  for (let py = minY; py <= maxY; py++) {
+    for (let px = minX; px <= maxX; px++) {
+      const isInside = isPointInPolygonShape(px, py, pathPoints.filter(p => p.type !== 'move'));
+      
+      if (isInside) {
+        let shouldDraw = false;
+        let colorToUse = null;
+        let alpha = isPreview ? 0.7 : 1.0;
+        
+        // Verificar si es borde (simplificado para polígonos irregulares)
+        let isBorder = false;
+        if (borderWidth > 0) {
+          // Revisar si está cerca del borde
+          let minDistance = Infinity;
+          for (let i = 0; i < pathPoints.length - 1; i++) {
+            const p1 = pathPoints[i];
+            const p2 = pathPoints[i + 1];
+            const distance = distanceToLineSegment(px, py, p1.x, p1.y, p2.x, p2.y);
+            minDistance = Math.min(minDistance, distance);
+          }
+          isBorder = minDistance <= borderWidth;
+        }
+        
+        if (isBorder && borderColor && borderWidth > 0) {
+          shouldDraw = true;
+          colorToUse = borderColor;
+          alpha = isPreview ? 0.8 : 1.0;
+        } else if (!isBorder && fillColor) {
+          shouldDraw = true;
+          colorToUse = fillColor;
+          alpha = isPreview ? 0.6 : 1.0;
+        }
+        
+        if (shouldDraw && colorToUse) {
+          if (isPreview) {
+            const screenX = (px - viewportOffset.x) * zoom;
+            const screenY = (py - viewportOffset.y) * zoom;
+            if (screenX >= 0 && screenY >= 0) {
+              ctx.fillStyle = `rgba(${colorToUse.r}, ${colorToUse.g}, ${colorToUse.b}, ${alpha})`;
+              ctx.fillRect(Math.floor(screenX), Math.floor(screenY), zoom, zoom);
+            }
+          } else {
+            if (px >= 0 && px < ctx.canvas.width && py >= 0 && py < ctx.canvas.height) {
+              ctx.fillStyle = `rgba(${colorToUse.r}, ${colorToUse.g}, ${colorToUse.b}, ${alpha})`;
+              ctx.fillRect(px, py, 1, 1);
+            }
+          }
+        }
+      }
+    }
+  }
+};
+
+const distanceToLineSegment = (px, py, x1, y1, x2, y2) => {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const length = Math.sqrt(dx * dx + dy * dy);
+  
+  if (length === 0) {
+    return Math.sqrt((px - x1) * (px - x1) + (py - y1) * (py - y1));
+  }
+  
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (length * length)));
+  const projX = x1 + t * dx;
+  const projY = y1 + t * dy;
+  
+  return Math.sqrt((px - projX) * (px - projX) + (py - projY) * (py - projY));
+};
 
 
   // Función para obtener coordenadas de píxel
@@ -1345,6 +1492,10 @@ const drawPreviewPolygon = (ctx, centerX, centerY, radius, vertices, borderWidth
   const handleEndDrag = useCallback(() => {
     setIsDragging(false);
   }, []);
+
+  const rellenar = useCallback((coords) => {
+    floodFill(activeLayerId, coords.x, coords.y, toolParameters.fillColor);
+  }, [layers,activeLayerId,toolParameters,zoom]);
 
   // Efecto para añadir event listeners de arrastre
   useEffect(() => {
@@ -1794,6 +1945,91 @@ if (tool === TOOLS.polygon) {
   }
   return;
 }
+
+if (tool === TOOLS.polygonPencil) {
+  const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
+  const canvasCoords = viewportToCanvasCoords(viewportPixelCoords.x, viewportPixelCoords.y);
+  
+  const justPressed = isPressed && !lastPressState;
+  const justReleased = !isPressed && lastPressState;
+  
+  if (justPressed) {
+    polygonStartTimeRef.current = Date.now();
+    
+    if (!isSettingCurve) {
+      // Verificar si se está cerrando el polígono (click cerca del primer punto)
+      if (polygonPoints.length >= 3) {
+        const firstPoint = polygonPoints[0];
+        const distance = Math.sqrt(
+          Math.pow(canvasCoords.x - firstPoint.x, 2) + 
+          Math.pow(canvasCoords.y - firstPoint.y, 2)
+        );
+        
+        if (distance <= 10) { // Umbral de cierre
+          // Finalizar polígono
+          if (polygonPoints.length >= 3) {
+            drawOnLayer(activeLayerId, (ctx) => {
+              drawPolygonWithCurves(
+                ctx,
+                polygonPoints,
+                polygonCurvePoints,
+                toolParameters.width,
+                toolParameters.borderColor,
+                toolParameters.fillColor,
+                false
+              );
+            });
+          }
+          
+          setPolygonPoints([]);
+          setPolygonCurvePoints(new Map());
+          setIsSettingCurve(false);
+          setCurrentCurveIndex(-1);
+          return;
+        }
+      }
+      
+      // Agregar nuevo punto de ancla
+      setPolygonPoints(prev => [...prev, canvasCoords]);
+    }
+  }
+  
+  // Detectar hold mientras se mantiene presionado
+  if (isPressed && !isSettingCurve && polygonPoints.length >= 1) {
+    const holdTime = Date.now() - (polygonStartTimeRef.current || 0);
+    if (holdTime > 300) { // 300ms para activar modo curva
+      setIsSettingCurve(true);
+      setCurrentCurveIndex(polygonPoints.length - 1); // El último punto agregado
+    }
+  }
+  
+  if (justReleased) {
+    if (isSettingCurve) {
+      // Finalizar configuración de curva
+      const nextIndex = (currentCurveIndex + 1) % Math.max(polygonPoints.length, 1);
+      const curveKey = `${currentCurveIndex}-${nextIndex}`;
+      
+      if (currentCurveIndex >= 0) {
+        setPolygonCurvePoints(prev => new Map(prev.set(curveKey, canvasCoords)));
+      }
+      setIsSettingCurve(false);
+      setCurrentCurveIndex(-1);
+    }
+    
+    polygonStartTimeRef.current = null;
+  }
+  
+  // Actualizar punto de control de la curva mientras se mueve en modo curva
+  if (isSettingCurve && isPressed && currentCurveIndex >= 0) {
+    const nextIndex = currentCurveIndex < polygonPoints.length - 1 ? currentCurveIndex + 1 : 0;
+    const curveKey = `${currentCurveIndex}-${nextIndex}`;
+    setPolygonCurvePoints(prev => new Map(prev.set(curveKey, canvasCoords)));
+  }
+  
+  setLastPressState(isPressed);
+  return;
+}
+
   
     if (!isPressed || !activeLayerId || drawMode === "move") {
       lastPixelRef.current = null;
@@ -1816,12 +2052,31 @@ if (tool === TOOLS.polygon) {
     }
   
     if (tool === TOOLS.paint) {
+      /*
+      Implementación: el color dado debe ser elegido en función del isPressed,
+      si este es 'left' el color sera toolParameters.foregroundColor,
+      pero si es 'right' sera toolParameters.backgroundColor
+      */
+      
+      // Determinar el color basado en el botón presionado
+      let selectedColor;
+      if (isPressed === 'left') {
+        selectedColor = toolParameters.foregroundColor;
+      } else if (isPressed === 'right') {
+        selectedColor = toolParameters.backgroundColor;
+      } else {
+        // Fallback al color por defecto si no hay información del botón
+        selectedColor = toolParameters.fillColor || toolParameters.foregroundColor;
+      }
+    
       drawOnLayer(activeLayerId, (ctx) => {
         const canvas = ctx.canvas;
         const width = toolParameters?.width;
-        const offset = Math.floor(width / 2);
-        const blur = 0.5 || 0; // Parámetro blur de 0 a 1
-        const paintMode = toolParameters?.paintMode || 'manual'; // 'manual' o 'composite'
+        const blur = toolParameters.blur; // Parámetro blur de 0 a 1
+        const paintMode = toolParameters?.paintMode || 'manual'; // 'manual', 'composite' o 'hybrid'
+        const velocitySensibility = toolParameters?.velocitySensibility||0;
+        // El radio máximo está limitado por el width
+        const maxRadius = width / 2;
         
         const hasBounds = mirrorState.bounds &&
           (mirrorState.bounds.x2 > mirrorState.bounds.x1 ||
@@ -1842,66 +2097,255 @@ if (tool === TOOLS.polygon) {
         const reflectHorizontal = (x) => centerX * 2 - x + adjustment + imparAdjustmentWidth;
         const reflectVertical = (y) => centerY * 2 - y + adjustment + imparAdjustmentHeight;
         
+        // Función para calcular opacidad basada en la velocidad del trazo
+        const calculateOpacity = (currentX, currentY, lastX, lastY) => {
+          console.log(velocitySensibility);
+          
+          // Si la sensibilidad es 0, retorna la opacidad original ajustada por width
+          if (velocitySensibility === 0) {
+            // Ajuste base por width para evitar sobreposición
+            const widthFactor = Math.max(1, toolParameters.width / 8); // Factor de ajuste basado en width
+            return selectedColor.a / widthFactor;
+          }
+          
+          // Calcular distancia (velocidad)
+          const distance = Math.sqrt(Math.pow(currentX - lastX, 2) + Math.pow(currentY - lastY, 2));
+          
+          // Escalado de sensibilidad: más sensible = distancia máxima menor
+          const baseSensitivity = 58;
+          const sensitivityCurve = Math.pow((11 - velocitySensibility) / 10, 1.5);
+          const maxDistance = 200 * sensitivityCurve; // En lugar de 58
+          
+          
+          // Normalizar velocidad (0 = parado, 1 = máxima velocidad detectada)
+          const normalizedVelocity = Math.min(distance / maxDistance, 1);
+          
+          // Calcular factor de compensación por width
+          // Pinceles más grandes necesitan opacidad menor para evitar sobreposición
+          const widthCompensation = Math.max(1, toolParameters.width / 6);
+          
+          // Opacidad base ajustada por width
+          const baseOpacity = selectedColor.a / widthCompensation;
+          
+          // Factor de reducción por velocidad
+          // Velocidad alta = más reducción de opacidad
+          const velocityReduction = normalizedVelocity * 0.8; // Máximo 80% de reducción
+          
+          // Cálculo final: opacidad base * (1 - reducción por velocidad)
+          const finalOpacity = baseOpacity * (1 - velocityReduction);
+          
+          // Asegurar opacidad mínima para mantener visibilidad
+          const minOpacity = baseOpacity * 0.05; // En lugar de 0.2 (5% en lugar de 20%)
+          
+          return Math.max(finalOpacity, minOpacity);
+        };
+        
+        // Versión alternativa con curva más suave
+        const calculateOpacitySmooth = (currentX, currentY, lastX, lastY) => {
+          console.log(velocitySensibility);
+          
+          if (velocitySensibility === 0) {
+            // Ajuste logarítmico para width grandes
+            const widthFactor = 1 + Math.log(toolParameters.width) / 3;
+            return selectedColor.a / widthFactor;
+          }
+          
+          const distance = Math.sqrt(Math.pow(currentX - lastX, 2) + Math.pow(currentY - lastY, 2));
+          
+          // Sensibilidad con curva exponencial para transiciones más naturales
+          const sensitivityCurve = Math.pow((11 - velocitySensibility) / 10, 1.5);
+          const maxDistance = 58 * sensitivityCurve;
+          
+          const normalizedVelocity = Math.min(distance / maxDistance, 1);
+          
+          // Compensación por width con curva suave
+          const widthCompensation = 1 + (Math.sqrt(toolParameters.width) / 4);
+          const baseOpacity = selectedColor.a / widthCompensation;
+          
+          // Curva de velocidad más suave (función sigmoidea)
+          const velocityCurve = 1 / (1 + Math.exp(-8 * (normalizedVelocity - 0.5)));
+          const velocityReduction = velocityCurve * 0.75;
+          
+          const finalOpacity = baseOpacity * (1 - velocityReduction);
+          const minOpacity = baseOpacity * 0.2;
+          
+          return Math.max(finalOpacity, minOpacity);
+        };
+        
         if (paintMode === 'composite') {
           // Modo usando globalCompositeOperation
           const originalComposite = ctx.globalCompositeOperation;
           ctx.globalCompositeOperation = 'source-over';
           
-          // Configurar el estilo del pincel
-          ctx.fillStyle = `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, ${toolParameters.fillColor.a})`;
-          
-          // Función para calcular la opacidad basada en la distancia al centro (para gradiente)
-          const calculateAlpha = (dx, dy) => {
+          const drawDot = (x, y, opacity = 1) => {
+            // Guardar el alpha original
+            const originalAlpha = ctx.globalAlpha;
+            ctx.globalAlpha = opacity;
+            
+            // Configurar el estilo del pincel con el color seleccionado
+            ctx.fillStyle = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, ${selectedColor.a})`;
+            
             if (blur === 0) {
-              return toolParameters.fillColor.a;
+              // Sin blur: área cuadrada exacta de width×width
+              const halfWidth = Math.floor(width / 2);
+              const startX = x - halfWidth;
+              const startY = y - halfWidth;
+              
+              ctx.fillRect(startX, startY, width, width);
+            } else {
+              // Con blur: gradiente igual que en hybrid mode
+              const halfWidth = Math.floor(width / 2);
+              const blurRadius = blur * maxRadius;
+              const coreRadius = Math.max(0.5, (1 - blur) * maxRadius);
+              
+              // Crear gradiente radial con el mismo comportamiento que hybrid
+              const gradient = ctx.createRadialGradient(x, y, 0, x, y, maxRadius);
+              
+              // Núcleo sólido hasta coreRadius
+              const coreStop = coreRadius / maxRadius;
+              gradient.addColorStop(0, `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, ${selectedColor.a})`);
+              gradient.addColorStop(coreStop, `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, ${selectedColor.a})`);
+              
+              // Transición suave hasta el borde
+              const minAlpha = 0.1;
+              const edgeAlpha = selectedColor.a * minAlpha;
+              gradient.addColorStop(1, `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, ${edgeAlpha})`);
+              
+              const originalFillStyle = ctx.fillStyle;
+              ctx.fillStyle = gradient;
+              
+              // Dibujar círculo que NO excede el área width×width
+              ctx.beginPath();
+              ctx.arc(x, y, maxRadius, 0, 2 * Math.PI);
+              ctx.fill();
+              
+              ctx.fillStyle = originalFillStyle;
             }
             
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            const maxDistance = offset;
-            const blurStartDistance = blur * maxDistance;
+            // Restaurar el alpha original
+            ctx.globalAlpha = originalAlpha;
+          };
+          
+          const drawWithMirrors = (x, y, opacity = 1) => {
+            drawDot(x, y, opacity); // Original
             
-            if (distance <= blurStartDistance) {
-              return toolParameters.fillColor.a;
-            } else {
-              const blurDistance = distance - blurStartDistance;
-              const remainingDistance = maxDistance - blurStartDistance;
-              
-              if (remainingDistance <= 0) {
-                return toolParameters.fillColor.a;
-              }
-              
-              const blurRatio = blurDistance / remainingDistance;
-              const minAlpha = 0.1;
-              const alphaReduction = (1 - minAlpha) * blurRatio;
-              
-              return Math.max(minAlpha, toolParameters.fillColor.a * (1 - alphaReduction));
+            if (mirrorState.vertical) {
+              drawDot(x, reflectVertical(y), opacity);
+            }
+            if (mirrorState.horizontal) {
+              drawDot(reflectHorizontal(x), y, opacity);
+            }
+            if (mirrorState.vertical && mirrorState.horizontal) {
+              drawDot(reflectHorizontal(x), reflectVertical(y), opacity);
             }
           };
           
-          const drawDot = (x, y) => {
-            if (blur === 0) {
-              // Sin blur, dibujar círculo sólido
-              ctx.beginPath();
-              ctx.arc(x, y, offset, 0, 2 * Math.PI);
-              ctx.fill();
-            } else {
-              // Con blur, crear gradiente radial
-              const gradient = ctx.createRadialGradient(x, y, 0, x, y, offset);
-              const centerAlpha = toolParameters.fillColor.a;
-              const edgeAlpha = calculateAlpha(offset, 0);
+          if (!lastPixelRef.current) {
+            drawWithMirrors(canvasCoords.x, canvasCoords.y, 1.0); // Primer punto con opacidad completa
+          } else {
+            const last = viewportToCanvasCoords(lastPixelRef.current.x, lastPixelRef.current.y);
+            let x0 = last.x, y0 = last.y;
+            let x1 = canvasCoords.x, y1 = canvasCoords.y;
+            let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+            let sx = x0 < x1 ? 1 : -1;
+            let sy = y0 < y1 ? 1 : -1;
+            let err = dx + dy;
+            let x = x0, y = y0;
+            let prevX = x0, prevY = y0;
+            
+            while (true) {
+              // Calcular opacidad basada en la velocidad desde el punto anterior
+              const opacity = calculateOpacity(x, y, prevX, prevY);
+              drawWithMirrors(x, y, opacity);
               
-              gradient.addColorStop(0, `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, ${centerAlpha})`);
-              gradient.addColorStop(blur, `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, ${centerAlpha})`);
-              gradient.addColorStop(1, `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, ${edgeAlpha})`);
+              if (x === x1 && y === y1) break;
               
-              ctx.fillStyle = gradient;
-              ctx.beginPath();
-              ctx.arc(x, y, offset, 0, 2 * Math.PI);
-              ctx.fill();
+              // Guardar posición actual como anterior para el siguiente cálculo
+              prevX = x;
+              prevY = y;
               
-              // Restaurar el color original para próximas iteraciones
-              ctx.fillStyle = `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, ${toolParameters.fillColor.a})`;
+              const e2 = 2 * err;
+              if (e2 >= dy) { err += dy; x += sx; }
+              if (e2 <= dx) { err += dx; y += sy; }
             }
+          }
+          
+          // Restaurar el composite operation original
+          ctx.globalCompositeOperation = originalComposite;
+          
+        } else if (paintMode === 'hybrid') {
+          // Modo híbrido: núcleo sólido con imageData + gradiente con canvas
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const data = imageData.data;
+          
+          const originalComposite = ctx.globalCompositeOperation;
+          ctx.globalCompositeOperation = 'source-over';
+          
+          const drawDot = (x, y) => {
+            const halfWidth = Math.floor(width / 2);
+            const startX = x - halfWidth;
+            const startY = y - halfWidth;
+            
+            if (blur === 0) {
+              // Sin blur: área cuadrada exacta de width×width
+              for (let dy = 0; dy < width; dy++) {
+                for (let dx = 0; dx < width; dx++) {
+                  const px = startX + dx;
+                  const py = startY + dy;
+                  
+                  if (px < 0 || px >= canvas.width || py < 0 || py >= canvas.height) continue;
+                  
+                  const index = (py * canvas.width + px) * 4;
+                  data[index] = selectedColor.r;
+                  data[index + 1] = selectedColor.g;
+                  data[index + 2] = selectedColor.b;
+                  data[index + 3] = selectedColor.a * 255;
+                }
+              }
+            } else {
+              // Con blur: todo dentro del área width×width
+              const blurRadius = blur * maxRadius;
+              const coreRadius = Math.max(0.5, (1 - blur) * maxRadius);
+              
+              // Solo trabajar dentro del área width×width
+              for (let dy = 0; dy < width; dy++) {
+                for (let dx = 0; dx < width; dx++) {
+                  const px = startX + dx;
+                  const py = startY + dy;
+                  
+                  if (px < 0 || px >= canvas.width || py < 0 || py >= canvas.height) continue;
+                  
+                  // Calcular distancia desde el centro del pincel
+                  const distanceFromCenter = Math.sqrt(Math.pow(px - x, 2) + Math.pow(py - y, 2));
+                  
+                  // Calcular alpha basado en la distancia y el blur
+                  let alpha;
+                  if (distanceFromCenter <= coreRadius) {
+                    alpha = selectedColor.a;
+                  } else if (distanceFromCenter <= maxRadius) {
+                    // Transición suave desde core hasta el borde
+                    const blurProgress = (distanceFromCenter - coreRadius) / (maxRadius - coreRadius);
+                    const minAlpha = 0.1;
+                    alpha = selectedColor.a * (1 - blurProgress * (1 - minAlpha));
+                  } else {
+                    continue; // Fuera del radio máximo, no pintar
+                  }
+                  
+                  const index = (py * canvas.width + px) * 4;
+                  data[index] = selectedColor.r;
+                  data[index + 1] = selectedColor.g;
+                  data[index + 2] = selectedColor.b;
+                  data[index + 3] = alpha * 255;
+                }
+              }
+            }
+            
+            // Aplicar cambios
+            ctx.putImageData(imageData, 0, 0);
+            
+            // Actualizar imageData para próximas operaciones
+            const updatedImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            data.set(updatedImageData.data);
           };
           
           const drawWithMirrors = (x, y) => {
@@ -1947,51 +2391,62 @@ if (tool === TOOLS.polygon) {
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
           const data = imageData.data;
           
-          // Función para calcular la opacidad basada en la distancia al centro
-          const calculateAlpha = (dx, dy) => {
-            if (blur === 0) {
-              return toolParameters.fillColor.a;
-            }
-            
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            const maxDistance = offset;
-            const blurStartDistance = blur * maxDistance;
-            
-            if (distance <= blurStartDistance) {
-              return toolParameters.fillColor.a;
-            } else {
-              const blurDistance = distance - blurStartDistance;
-              const remainingDistance = maxDistance - blurStartDistance;
-              
-              if (remainingDistance <= 0) {
-                return toolParameters.fillColor.a;
-              }
-              
-              const blurRatio = blurDistance / remainingDistance;
-              const minAlpha = 0.1;
-              const alphaReduction = (1 - minAlpha) * blurRatio;
-              
-              return Math.max(minAlpha, toolParameters.fillColor.a * (1 - alphaReduction));
-            }
-          };
-          
           const drawDot = (x, y) => {
-            for (let dy = 0; dy < width; dy++) {
-              for (let dx = 0; dx < width; dx++) {
-                const px = x + dx - offset;
-                const py = y + dy - offset;
-                
-                if (px < 0 || px >= canvas.width || py < 0 || py >= canvas.height) continue;
-                
-                const relativeX = dx - offset;
-                const relativeY = dy - offset;
-                const alpha = calculateAlpha(relativeX, relativeY);
-                
-                const index = (py * canvas.width + px) * 4;
-                data[index] = toolParameters.fillColor.r;
-                data[index + 1] = toolParameters.fillColor.g;
-                data[index + 2] = toolParameters.fillColor.b;
-                data[index + 3] = alpha * 255;
+            const halfWidth = Math.floor(width / 2);
+            const startX = x - halfWidth;
+            const startY = y - halfWidth;
+            
+            if (blur === 0) {
+              // Sin blur: área cuadrada exacta de width×width
+              for (let dy = 0; dy < width; dy++) {
+                for (let dx = 0; dx < width; dx++) {
+                  const px = startX + dx;
+                  const py = startY + dy;
+                  
+                  if (px < 0 || px >= canvas.width || py < 0 || py >= canvas.height) continue;
+                  
+                  const index = (py * canvas.width + px) * 4;
+                  data[index] = selectedColor.r;
+                  data[index + 1] = selectedColor.g;
+                  data[index + 2] = selectedColor.b;
+                  data[index + 3] = selectedColor.a * 255;
+                }
+              }
+            } else {
+              // Con blur: usar la misma lógica que hybrid
+              const blurRadius = blur * maxRadius;
+              const coreRadius = Math.max(0.5, (1 - blur) * maxRadius);
+              
+              // Solo trabajar dentro del área width×width
+              for (let dy = 0; dy < width; dy++) {
+                for (let dx = 0; dx < width; dx++) {
+                  const px = startX + dx;
+                  const py = startY + dy;
+                  
+                  if (px < 0 || px >= canvas.width || py < 0 || py >= canvas.height) continue;
+                  
+                  // Calcular distancia desde el centro del pincel
+                  const distanceFromCenter = Math.sqrt(Math.pow(px - x, 2) + Math.pow(py - y, 2));
+                  
+                  // Calcular alpha basado en la distancia y el blur (igual que hybrid)
+                  let alpha;
+                  if (distanceFromCenter <= coreRadius) {
+                    alpha = selectedColor.a;
+                  } else if (distanceFromCenter <= maxRadius) {
+                    // Transición suave desde core hasta el borde
+                    const blurProgress = (distanceFromCenter - coreRadius) / (maxRadius - coreRadius);
+                    const minAlpha = 0.1;
+                    alpha = selectedColor.a * (1 - blurProgress * (1 - minAlpha));
+                  } else {
+                    continue; // Fuera del radio máximo, no pintar
+                  }
+                  
+                  const index = (py * canvas.width + px) * 4;
+                  data[index] = selectedColor.r;
+                  data[index + 1] = selectedColor.g;
+                  data[index + 2] = selectedColor.b;
+                  data[index + 3] = alpha * 255;
+                }
               }
             }
           };
@@ -2035,7 +2490,6 @@ if (tool === TOOLS.polygon) {
         }
       });
     }
-    
   
     if (tool === TOOLS.erase) {
       drawOnLayer(activeLayerId, (ctx) => {
@@ -2653,6 +3107,218 @@ else if (tool === TOOLS.polygon && isPressed && polygonStartRef.current) {
     rotation
   );
 }
+      else if (tool === TOOLS.polygonPencil) {
+        ctx.save();
+        
+        // Calcular centro para mirroring
+        const hasBounds = mirrorState.bounds &&
+          (mirrorState.bounds.x2 > mirrorState.bounds.x1 ||
+           mirrorState.bounds.y2 > mirrorState.bounds.y1);
+      
+        const centerX = hasBounds
+          ? Math.floor((mirrorState.bounds.x1 + mirrorState.bounds.x2) / 2)
+          : Math.floor(drawableWidth / 2);
+      
+        const centerY = hasBounds
+          ? Math.floor((mirrorState.bounds.y1 + mirrorState.bounds.y2) / 2)
+          : Math.floor(drawableHeight / 2);
+      
+        const adjustment = -1;
+        const imparAdjustmentHeight = drawableHeight % 2 !== 0 ? 1 : 0;
+        const imparAdjustmentWidth = drawableWidth % 2 !== 0 ? 1 : 0;
+      
+        const reflectHorizontal = (x) => centerX * 2 - x + adjustment + imparAdjustmentWidth;
+        const reflectVertical = (y) => centerY * 2 - y + adjustment + imparAdjustmentHeight;
+        
+        const drawPolygonPreview = (points, curvePoints) => {
+          if (points.length === 0) return;
+          
+          // Dibujar puntos existentes
+          points.forEach((point, index) => {
+            const screenX = (point.x - viewportOffset.x) * zoom;
+            const screenY = (point.y - viewportOffset.y) * zoom;
+            ctx.fillStyle = `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, 0.8)`;
+            ctx.fillRect(Math.floor(screenX - 2), Math.floor(screenY - 2), 4, 4);
+          });
+          
+          // Dibujar líneas entre puntos
+          for (let i = 0; i < points.length - 1; i++) {
+            const start = points[i];
+            const end = points[i + 1];
+            const curveKey = `${i}-${i + 1}`;
+            
+            ctx.strokeStyle = `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, 0.6)`;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
+            
+            if (curvePoints.has(curveKey)) {
+              // Dibujar curva
+              const control = curvePoints.get(curveKey);
+              const startScreen = {
+                x: (start.x - viewportOffset.x) * zoom,
+                y: (start.y - viewportOffset.y) * zoom
+              };
+              const endScreen = {
+                x: (end.x - viewportOffset.x) * zoom,
+                y: (end.y - viewportOffset.y) * zoom
+              };
+              const controlScreen = {
+                x: (control.x - viewportOffset.x) * zoom,
+                y: (control.y - viewportOffset.y) * zoom
+              };
+              
+              ctx.beginPath();
+              ctx.moveTo(startScreen.x, startScreen.y);
+              ctx.quadraticCurveTo(controlScreen.x, controlScreen.y, endScreen.x, endScreen.y);
+              ctx.stroke();
+              
+              // Punto de control
+              ctx.fillStyle = 'rgba(0, 150, 255, 0.8)';
+              ctx.fillRect(Math.floor(controlScreen.x - 2), Math.floor(controlScreen.y - 2), 4, 4);
+            } else {
+              // Línea recta
+              const startScreen = {
+                x: (start.x - viewportOffset.x) * zoom,
+                y: (start.y - viewportOffset.y) * zoom
+              };
+              const endScreen = {
+                x: (end.x - viewportOffset.x) * zoom,
+                y: (end.y - viewportOffset.y) * zoom
+              };
+              
+              ctx.beginPath();
+              ctx.moveTo(startScreen.x, startScreen.y);
+              ctx.lineTo(endScreen.x, endScreen.y);
+              ctx.stroke();
+            }
+          }
+          
+          // Línea al cursor si hay puntos
+          if (points.length > 0 && !isSettingCurve) {
+            const lastPoint = points[points.length - 1];
+            const lastScreen = {
+              x: (lastPoint.x - viewportOffset.x) * zoom,
+              y: (lastPoint.y - viewportOffset.y) * zoom
+            };
+            const cursorScreen = {
+              x: (canvasCoords.x - viewportOffset.x) * zoom,
+              y: (canvasCoords.y - viewportOffset.y) * zoom
+            };
+            
+            ctx.strokeStyle = `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, 0.4)`;
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.moveTo(lastScreen.x, lastScreen.y);
+            ctx.lineTo(cursorScreen.x, cursorScreen.y);
+            ctx.stroke();
+          }
+          
+          // Preview de curva en configuración
+          if (isSettingCurve && currentCurveIndex >= 0 && points.length >= 2) {
+            const currentPoint = points[currentCurveIndex];
+            const nextIndex = currentCurveIndex < points.length - 1 ? currentCurveIndex + 1 : 0;
+            const nextPoint = points[nextIndex];
+            
+            const currentScreen = {
+              x: (currentPoint.x - viewportOffset.x) * zoom,
+              y: (currentPoint.y - viewportOffset.y) * zoom
+            };
+            const nextScreen = {
+              x: (nextPoint.x - viewportOffset.x) * zoom,
+              y: (nextPoint.y - viewportOffset.y) * zoom
+            };
+            const controlScreen = {
+              x: (canvasCoords.x - viewportOffset.x) * zoom,
+              y: (canvasCoords.y - viewportOffset.y) * zoom
+            };
+            
+            // Líneas de guía al punto de control
+            ctx.strokeStyle = 'rgba(0, 150, 255, 0.5)';
+            ctx.setLineDash([2, 2]);
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(currentScreen.x, currentScreen.y);
+            ctx.lineTo(controlScreen.x, controlScreen.y);
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.moveTo(nextScreen.x, nextScreen.y);
+            ctx.lineTo(controlScreen.x, controlScreen.y);
+            ctx.stroke();
+            
+            // Preview de la curva
+            ctx.strokeStyle = `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, 0.8)`;
+            ctx.setLineDash([]);
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(currentScreen.x, currentScreen.y);
+            ctx.quadraticCurveTo(controlScreen.x, controlScreen.y, nextScreen.x, nextScreen.y);
+            ctx.stroke();
+            
+            // Punto de control
+            ctx.fillStyle = 'rgba(0, 150, 255, 0.8)';
+            ctx.fillRect(Math.floor(controlScreen.x - 3), Math.floor(controlScreen.y - 3), 6, 6);
+          }
+          
+          // Preview del polígono completo si hay suficientes puntos
+          if (points.length >= 3) {
+            drawPolygonWithCurves(
+              ctx,
+              points,
+              curvePoints,
+              toolParameters.width,
+              toolParameters.borderColor,
+              toolParameters.fillColor,
+              true
+            );
+          }
+        };
+        
+        // Dibujar polígono original
+        drawPolygonPreview(polygonPoints, polygonCurvePoints);
+        
+        // Dibujar polígonos reflejados si el mirroring está activo
+        if (mirrorState.vertical || mirrorState.horizontal) {
+          const mirrorPolygonPoints = (points, horizontal, vertical) => {
+            return points.map(point => ({
+              x: horizontal ? reflectHorizontal(point.x) : point.x,
+              y: vertical ? reflectVertical(point.y) : point.y
+            }));
+          };
+          
+          const mirrorCurvePoints = (curvePoints, horizontal, vertical) => {
+            const mirrored = new Map();
+            curvePoints.forEach((point, key) => {
+              mirrored.set(key, {
+                x: horizontal ? reflectHorizontal(point.x) : point.x,
+                y: vertical ? reflectVertical(point.y) : point.y
+              });
+            });
+            return mirrored;
+          };
+          
+          if (mirrorState.vertical) {
+            const vPoints = mirrorPolygonPoints(polygonPoints, false, true);
+            const vCurves = mirrorCurvePoints(polygonCurvePoints, false, true);
+            drawPolygonPreview(vPoints, vCurves);
+          }
+          
+          if (mirrorState.horizontal) {
+            const hPoints = mirrorPolygonPoints(polygonPoints, true, false);
+            const hCurves = mirrorCurvePoints(polygonCurvePoints, true, false);
+            drawPolygonPreview(hPoints, hCurves);
+          }
+          
+          if (mirrorState.vertical && mirrorState.horizontal) {
+            const dhPoints = mirrorPolygonPoints(polygonPoints, true, true);
+            const dhCurves = mirrorCurvePoints(polygonCurvePoints, true, true);
+            drawPolygonPreview(dhPoints, dhCurves);
+          }
+        }
+        
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
       
       else if (tool === TOOLS.move || tool === TOOLS.select || tool === TOOLS.lassoSelect) {
         return;
@@ -2715,6 +3381,34 @@ else if (tool === TOOLS.polygon && isPressed && polygonStartRef.current) {
       
     }
   }, [tool, relativeToTarget, toolParameters, zoom, viewportToCanvasCoords, viewportOffset, curveState, color,mirrorState]);
+
+  //Useeffect para el esc de herramientas
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && tool === TOOLS.polygonPencil && polygonPoints.length >= 3) {
+        // Finalizar polígono con ESC
+        drawOnLayer(activeLayerId, (ctx) => {
+          drawPolygonWithCurves(
+            ctx,
+            polygonPoints,
+            polygonCurvePoints,
+            toolParameters.width,
+            toolParameters.borderColor,
+            toolParameters.fillColor,
+            false
+          );
+        });
+        
+        setPolygonPoints([]);
+        setPolygonCurvePoints(new Map());
+        setIsSettingCurve(false);
+        setCurrentCurveIndex(-1);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [tool, polygonPoints, polygonCurvePoints, activeLayerId, toolParameters]);
 
   // Efecto para manejar zoom con rueda del ratón
   useEffect(() => {
@@ -3605,7 +4299,7 @@ useEffect(() => {
   }
 }, [isPressed, path, tool, selectionActive, selectedPixels, dragOffset,activeLayerId, clearCurrentSelection, getPixelCoordinates, viewportToCanvasCoords, croppedSelectionBounds]);
 
-// Pintar pixeles seleccionados en el canvas de selección
+// Pintar pixeles seleccionados en el canvas de selección // aqui gestiona la rotacion:
 useEffect(() => {
   const canvas = selectionCanvasRef.current;
   if (!canvas) return;
@@ -3775,6 +4469,12 @@ useEffect(() => {
 
 //  ============================ Logica de canvas de seleccion =================================================//
 
+//// funcion especial para rotar: 
+/* 
+1. Se debe partir desde que se tiene una rotacion activa:  
+
+*/
+
 
 //-----------------------------Funciones de accion para la selección---------------------------------------//
 
@@ -3786,13 +4486,94 @@ const deleteSelection=()=>{
   
 }
 
+function rotatePixels90(pixels, direction = 'right') {
+  if (!pixels.length) return [];
+
+  const minX = Math.min(...pixels.map(p => p.x));
+  const maxX = Math.max(...pixels.map(p => p.x));
+  const minY = Math.min(...pixels.map(p => p.y));
+  const maxY = Math.max(...pixels.map(p => p.y));
+
+  const newPixels = pixels.map(p => {
+    const relativeX = p.x - minX;
+    const relativeY = p.y - minY;
+
+    let newX, newY;
+
+    if (direction === 'right') {
+      // 90° clockwise
+      newX = minX + (maxY - minY - relativeY);
+      newY = minY + relativeX;
+    } else if (direction === 'left') {
+      // 90° counter-clockwise
+      newX = minX + relativeY;
+      newY = minY + (maxX - minX - relativeX);
+    } else {
+      throw new Error("Invalid rotation direction: use 'right' or 'left'");
+    }
+
+    return {
+      x: newX,
+      y: newY,
+      color: p.color
+    };
+  });
+
+  return newPixels;
+}
+
+const handleRotation = (direction) => {
+  console.log("los selected pixels son: ", JSON.stringify(selectedPixels));
+
+  setSelectedPixels(rotatePixels90(selectedPixels, direction));
+
+  // Intercambia width y height después de la rotación
+  setCroppedSelectionBounds(prev => ({
+    ...prev,
+    width: prev.height,
+    height: prev.width
+  }));
+};
+
+
+function duplicateSelection (){
+  if (selectedPixels.length > 0 && originalPixelColors.length > 0) {
+    selectedPixels.forEach((pixel, index) => {
+      if (originalPixelColors[index]) {
+        pintarPixelConTamaño(
+          pixel.x + dragOffset.x, 
+          pixel.y + dragOffset.y, 
+          originalPixelColors[index], 
+          1
+        );
+      }
+    });
+  }
+
+  setDragOffset(prev => ({
+    ...prev,
+    x: prev.x +5
+  }))
+}
 
 
 
+function fillSelection(){
+  let newSelectedPixels =[];
+ console.log(JSON.stringify(selectedPixels));
+  selectedPixels.forEach(pixel=>{
+  newSelectedPixels.push({
+    x: pixel.x,
+    y: pixel.y,
+    color: {"r":255,"g":0,"b":0,"a":1}
+  })
+ })
+ //Para hacer que el cambio sea permanente hay que modificar los originalColors
+ setSelectedPixels(newSelectedPixels);
+}
 
-const rellenar = useCallback((coords) => {
-  floodFill(activeLayerId, coords.x, coords.y, toolParameters.color);
-}, [layers,activeLayerId,toolParameters]);
+
+
 
 // En tu componente padre
 
@@ -3883,8 +4664,7 @@ const handleSelectGroup = useCallback((pixels) => {
 }, []);
 
 /////////////FUncion de prueba para seleccion de canvas//////////////////////////////////////////////////
-// Función para seleccionar todo el contenido de una capa
-// Función para seleccionar todo el contenido de una capa
+//
 const selectAllCanvas = useCallback(async (canvasWidth = totalWidth, canvasHeight = totalHeight) => {
 
    setTool(TOOLS.select);
@@ -3940,29 +4720,71 @@ totalWidth,
 ]);
 
 
+//Funciones esenciales para el drag and dropp: 
+// Mover una capa a una nueva posición en el array
+const moveLayerToPosition = (fromIndex, toIndex) => {
+  const newLayers = [...layers];
+  const [movedLayer] = newLayers.splice(fromIndex, 1);
+  newLayers.splice(toIndex, 0, movedLayer);
+  
+  // Actualizar zIndex basado en la nueva posición
+  newLayers.forEach((layer, index) => {
+    layer.zIndex = newLayers.length - index;
+  });
+  
+  setLayers(newLayers);
+};
+
+
+
+// Mover un grupo a otra capa
+const moveGroupToLayer = (fromLayerId, groupId, toLayerId) => {
+  // Obtener el grupo de la capa origen
+  const group = pixelGroups[fromLayerId]?.[groupId];
+  if (!group) return;
+  
+  // Remover de la capa origen
+  const newPixelGroups = { ...pixelGroups };
+  delete newPixelGroups[fromLayerId][groupId];
+  
+  // Añadir a la capa destino
+  if (!newPixelGroups[toLayerId]) {
+    newPixelGroups[toLayerId] = {};
+  }
+  newPixelGroups[toLayerId][groupId] = group;
+  
+  setPixelGroups(newPixelGroups);
+};
+
+// Mover un grupo a una nueva posición dentro de la misma capa o entre capas
+const moveGroupToPosition = (fromLayerId, groupId, toLayerId, targetGroupId, position) => {
+  // Implementar lógica para reordenar grupos
+  // Esta función dependerá de cómo manejes el orden de los grupos internamente
+  console.log('Moviendo grupo', { fromLayerId, groupId, toLayerId, targetGroupId, position });
+};
+
+const updateLayerZIndex = (layerId, newZIndex) => {
+  setLayers(prevLayers => 
+    prevLayers.map(layer => 
+      layer.id === layerId 
+        ? { ...layer, zIndex: newZIndex }
+        : layer
+    )
+  );
+};
+
   return (
     <div className="workspace2-container" style={{ position: 'relative', display: 'flex' }}>
       {/* Canvas Area */}
-      <div className="workspace-container" style={{ flex: '1', overflow: 'hidden', position: 'relative' }}>
+      <div className="workspace-container" style={{ flex: '1', position: 'relative' }}>
         <div className="toolbar" style={{ 
           display: 'flex', 
           padding: '8px', 
           alignItems: 'center',
           justifyContent: 'space-between'
         }}>
-           
-          <div className="zoom-control" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <label htmlFor="zoom">Zoom: {zoom}x</label>
-            <input 
-              type="range" 
-              id="zoom" 
-              min="1" 
-              max="40" 
-              value={zoom} 
-              onChange={handleZoomChange} 
-              style={{ width: '120px' }}
-            />
-          </div>
+           <CustomTool tool={tool} setToolParameters={setToolParameters}/>
+         
 
         
             {/* Coordinates info */}
@@ -3970,20 +4792,7 @@ totalWidth,
        
           <div className="tools" style={{ display: 'flex', gap: '8px' }}>
             
-          {
-            <button 
-              className={drawMode === "move" ? "tool-btn active" : "tool-btn"}
-              onClick={() => selectAllCanvas()}
-              style={{ 
-                padding: '6px', 
-                borderRadius: '4px', 
-                background: drawMode === "move" ? '#cce6ff' : '#f0f0f0',
-                border: '1px solid #ccc'
-              }}
-            >
-              <LuPointerOff size={16} /> Move (M)
-            </button>
-            }
+        
             <div 
                       className={activeGrid ? "grid-control active" : "grid-control"}
                       onClick={()=>{setActiveGrid(!activeGrid)}}
@@ -4055,7 +4864,7 @@ totalWidth,
           <p className='action-text'>Borrar</p>
          
       </button>
-      <button className='action-button' >
+      <button className='action-button' onClick={fillSelection} >
           <span className='icon'>
             <LuPaintBucket/>
           </span>
@@ -4078,6 +4887,25 @@ totalWidth,
             <LuGroup/>
           </span>
           <p className='action-text'>Desagrupar</p>
+      </button>
+      <button className='action-button' onClick={duplicateSelection}>
+          <span className='icon'>
+          D
+          </span>
+          <p className='action-text'>Duplicar    </p>
+         
+      </button>
+      <button className='action-button' onClick={()=>{handleRotation('left')}}>
+          <span className='icon'>
+          <MdOutlineRotate90DegreesCcw />
+          </span>
+          <p className='action-text'></p>
+      </button>
+      <button className='action-button' onClick={()=>{handleRotation('right')}}>
+          <span className='icon'>
+          <MdOutlineRotate90DegreesCw /> 
+          </span>
+          <p className='action-text'></p>
       </button>
     </div>
 
@@ -4207,6 +5035,77 @@ totalWidth,
             </div>
           </div>
         </div>
+        <div
+       
+        style={
+          
+          {height:"300px", width:'100%'}}>
+
+<LayerAnimation
+  // Todas las props de LayerManager
+  updateLayerZIndex={updateLayerZIndex}
+  moveLayerToPosition={moveLayerToPosition}
+  moveGroupToLayer={moveGroupToLayer}
+  moveGroupToPosition={moveGroupToPosition}
+  layers={layers}
+  addLayer={addLayer}
+  deleteLayer={deleteLayer}
+  moveLayerUp={moveLayerUp}
+  moveLayerDown={moveLayerDown}
+  toggleLayerVisibility={toggleLayerVisibility}
+  renameLayer={renameLayer}
+  clearLayer={clearLayer}
+  activeLayerId={activeLayerId}
+  setActiveLayerId={setActiveLayerId}
+  pixelGroups={pixelGroups}
+  selectedGroup={selectedGroup}
+  selectedPixels={selectedPixels}
+  createPixelGroup={createPixelGroup}
+  deletePixelGroup={deletePixelGroup}
+  getLayerGroups={getLayerGroups}
+  selectPixelGroup={selectPixelGroup}
+  clearSelectedGroup={clearSelectedGroup}
+  renamePixelGroup={renamePixelGroup}
+  toggleGroupVisibility={toggleGroupVisibility}
+  setSelectedPixels={setSelectedPixels}
+  handleSelectGroup={handleSelectGroup}
+  dragOffset={dragOffset}
+  setSelectionCoords={setSelectionCoords}
+  setSelectionActive={setSelectionActive}
+  setCroppedSelectionBounds={setCroppedSelectionBounds}
+  autoCropSelection={autoCropSelection}
+  setOriginalPixelColors={setOriginalPixelColors}
+  setDragOffset={setDragOffset}
+  setTool={setTool}
+  clearCurrentSelection={clearCurrentSelection}
+  getHierarchicalLayers={getHierarchicalLayers}
+  getMainLayers={getMainLayers}
+  getGroupLayersForParent={getGroupLayersForParent}
+  selectionActive={selectionActive}
+  selectAllCanvas={selectAllCanvas}
+  
+  // Props específicas de animación
+  /*
+  frames={animationFrames}
+  currentFrame={currentFrame}
+  isPlaying={isPlaying}
+  frameDuration={frameDuration}
+  onionSkinEnabled={onionSkinEnabled}
+  loopMode={loopMode}
+  onPlayPause={handlePlayPause}
+  onNextFrame={handleNextFrame}
+  onPrevFrame={handlePrevFrame}
+  onFrameSelect={handleFrameSelect}
+  onFrameDurationChange={handleFrameDurationChange}
+  onToggleOnionSkin={handleToggleOnionSkin}
+  onToggleLoopMode={handleToggleLoopMode}
+  onAddFrame={handleAddFrame}
+  onDeleteFrame={handleDeleteFrame}
+  onDuplicateFrame={handleDuplicateFrame}
+  onClearFrame={handleClearFrame}*/
+/>
+
+        </div>
       </div>
       
       <div className="right-panel" style={{ 
@@ -4221,12 +5120,21 @@ totalWidth,
         viewportOffset={viewportOffset}
         zoom={zoom}
         onViewportMove={moveViewport}
+        onZoomChange={handleZoomChange} // Nueva prop necesaria
       />
       }
- 
-        <CustomTool tool={tool} setToolParameters={setToolParameters}/>
-        
-        <LayerManager
+        <LayerColor 
+  tool={tool}
+  toolParameters={toolParameters}
+  setToolParameters={setToolParameters}
+/>
+       
+       {/*<LayerManager
+      
+      updateLayerZIndex={updateLayerZIndex}
+        moveLayerToPosition={moveLayerToPosition}
+        moveGroupToLayer = {moveGroupToLayer}
+        moveGroupToPosition={moveGroupToPosition}
           // Props existentes
           layers={layers}
           addLayer={addLayer}
@@ -4273,7 +5181,7 @@ totalWidth,
 //Funcion para seleccionar pixeles de grupos y de capas:
 selectAllCanvas={selectAllCanvas}
 
-        />
+        />*/}
       </div>
       
     </div>
@@ -4282,3 +5190,6 @@ selectAllCanvas={selectAllCanvas}
 
 export default CanvasTracker;
 
+
+//Hay que refactorizar el codigo ya excedio mucho tamaño 
+//Dividir en microcomponentes y establacer una jerarquia de estados desde el componente padre

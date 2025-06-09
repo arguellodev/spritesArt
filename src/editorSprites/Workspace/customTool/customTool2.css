@@ -1,0 +1,507 @@
+/* Estilos Mejorados para Toolbar Horizontal - Dark Theme */
+
+:root {
+    --bg-primary: #1e1e2e;
+    --bg-secondary: #262637;
+    --bg-tertiary: #313142;
+    --text-primary: #e2e2e2;
+    --text-secondary: #9d9db2;
+    --accent-color: #7c4dff;
+    --accent-hover: #9670ff;
+    --border-color: #3f3f54;
+    --error-color: #ff5370;
+    --success-color: #3cde8d;
+    --shadow-light: rgba(255, 255, 255, 0.05);
+    --shadow-dark: rgba(0, 0, 0, 0.3);
+}
+
+/* Contenedor principal de la toolbar */
+.toolbar-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: 
+        0 4px 20px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 var(--shadow-light);
+    backdrop-filter: blur(10px);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Herramienta individual en la toolbar */
+.customTool-section {
+    display: inline-flex;
+    align-items: center;
+    background: transparent;
+    color: var(--text-primary);
+    padding: 8px 16px;
+    margin: 0 4px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    font-size: 13px;
+    white-space: nowrap;
+    width: fit-content;
+    
+}
+
+.customTool-section:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--border-color);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px var(--shadow-dark);
+}
+
+.customTool-section.active {
+    background: linear-gradient(135deg, var(--accent-color) 0%, var(--accent-hover) 100%);
+    border-color: var(--accent-hover);
+    color: white;
+}
+
+/* Header horizontal de la herramienta */
+.tool-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    flex-shrink: 0;
+}
+
+.tool-icon {
+    background: var(--accent-color);
+    color: white;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 10px;
+    flex-shrink: 0;
+}
+
+.tool-name {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.minimize-toggle {
+    font-size: 14px;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.minimize-toggle:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Contenido de la herramienta - Layout horizontal */
+.tool-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: 12px;
+    flex-wrap: nowrap;
+    
+    width: 100%
+}
+
+.tool-content.hidden {
+    display: none;
+}
+
+/* Configuraciones en línea */
+.tool-configs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+}
+
+.config-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    min-width: fit-content;
+}
+
+.config-item:hover {
+    border-color: rgba(124, 77, 255, 0.3);
+    background: var(--bg-tertiary);
+}
+
+.tool-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin: 0;
+    white-space: nowrap;
+}
+
+/* Sección de colores compacta */
+.color-section {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0;
+    border: none;
+}
+
+.color-config {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.color-input-container {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.color-button {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    box-shadow: inset 0 1px 0 var(--shadow-light);
+}
+
+.color-button:hover {
+    border-color: var(--accent-color);
+    transform: scale(1.1);
+    box-shadow: 0 0 0 2px rgba(124, 77, 255, 0.2);
+}
+
+.color-button.active {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(124, 77, 255, 0.3);
+    transform: scale(1.05);
+}
+
+.color-value {
+    font-size: 9px;
+    color: var(--text-secondary);
+    font-family: 'SF Mono', Monaco, monospace;
+    text-transform: uppercase;
+    background: var(--bg-tertiary);
+    padding: 2px 4px;
+    border-radius: 3px;
+    min-width: 40px;
+    text-align: center;
+}
+
+/* Controles numéricos compactos */
+.width-control,
+.number-input-container {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.input-container {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.width-input,
+.number-input {
+    width: 40px;
+    height: 24px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 0 4px;
+    font-size: 11px;
+    text-align: center;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    transition: all 0.2s ease;
+}
+
+.width-input:focus,
+.number-input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    background: var(--bg-primary);
+    box-shadow: 0 0 0 2px rgba(124, 77, 255, 0.2);
+}
+
+.increment-buttons-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.increment-btn {
+    width: 16px;
+    height: 10px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 8px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.increment-btn:first-child {
+    border-radius: 2px 2px 0 0;
+}
+
+.increment-btn:last-child {
+    border-radius: 0 0 2px 2px;
+}
+
+.increment-btn:hover:not(:disabled) {
+    background: var(--accent-color);
+    color: white;
+}
+
+.increment-btn:disabled {
+    background: var(--bg-primary);
+    color: var(--border-color);
+    cursor: not-allowed;
+}
+
+.tool-value {
+    font-size: 11px;
+    color: var(--text-primary);
+    font-weight: 500;
+    min-width: 20px;
+}
+
+/* Selectores compactos */
+.pattern-selector,
+.select-input {
+    height: 24px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 0 8px;
+    font-size: 11px;
+    font-weight: 500;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 80px;
+    max-width: 120px;
+}
+
+.pattern-selector:focus,
+.select-input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(124, 77, 255, 0.2);
+}
+
+/* Slider horizontal compacto */
+.horizontal-slider-container {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 100px;
+}
+
+.slider-track-horizontal {
+    position: relative;
+    width: 60px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+}
+
+.horizontal-slider {
+    width: 100%;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--bg-tertiary);
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+    border: 1px solid var(--border-color);
+}
+
+.horizontal-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    cursor: pointer;
+    border: 1px solid var(--bg-primary);
+    transition: all 0.2s ease;
+}
+
+.horizontal-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+    box-shadow: 0 0 0 2px rgba(124, 77, 255, 0.3);
+}
+
+.current-value-horizontal {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-primary);
+    min-width: 20px;
+    text-align: center;
+    padding: 2px 4px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    border: 1px solid var(--border-color);
+}
+
+/* Toggle switch compacto */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 32px;
+    height: 16px;
+}
+
+.toggle-input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-label {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--bg-tertiary);
+    transition: all 0.2s ease;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.toggle-label:before {
+    position: absolute;
+    content: "";
+    height: 12px;
+    width: 12px;
+    left: 1px;
+    bottom: 1px;
+    background: white;
+    transition: all 0.2s ease;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.toggle-input:checked + .toggle-label {
+    background: var(--accent-color);
+    border-color: var(--accent-hover);
+}
+
+.toggle-input:checked + .toggle-label:before {
+    transform: translateX(16px);
+}
+
+/* Botón de opciones avanzadas */
+.advanced-toggle {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.advanced-toggle:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--accent-color);
+    color: var(--text-primary);
+}
+
+/* Shortcuts display compacto */
+.shortcut-display {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.key {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    padding: 2px 4px;
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: 'SF Mono', Monaco, monospace;
+    min-width: 16px;
+    text-align: center;
+}
+
+/* Responsive para pantallas pequeñas */
+@media (max-width: 768px) {
+    .customTool-section {
+        max-width: 200px;
+        padding: 6px 12px;
+    }
+    
+    .tool-content {
+        max-width: 150px;
+        gap: 8px;
+    }
+    
+    .config-item {
+        padding: 3px 6px;
+        gap: 4px;
+    }
+    
+    .tool-name {
+        font-size: 12px;
+    }
+}
+
+/* Animaciones suaves */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* Accesibilidad */
+*:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 1px;
+}
+
+.polygon-tool-container{
+   
+    display: flex;
+}

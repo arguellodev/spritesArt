@@ -1,5 +1,5 @@
 import { useState } from "react";
-//import './customTool2.css';
+import './customTool2.css';
 import PencilTool from "./tools/pencilTool";
 import EraserTool from "./tools/eraserTool";
 import FillTool from "./tools/fillTool";
@@ -12,7 +12,7 @@ import PolygonTool from "./tools/polygonTool";
 import CurveTool from "./tools/curveTool";
 import { BsChevronCompactDown, BsChevronCompactUp  } from "react-icons/bs";
 
-const CustomTool = ({ setToolParameters, tool, toolParameters }) => {
+const CustomTool2 = ({ setToolParameters, tool, toolParameters }) => {
     const [minimized, setMinimized] = useState(false);
 
     const toggleMinimize = () => setMinimized(prev => !prev);
@@ -55,4 +55,4 @@ const CustomTool = ({ setToolParameters, tool, toolParameters }) => {
     );
 };
 
-export default CustomTool;
+export default CustomTool2;
