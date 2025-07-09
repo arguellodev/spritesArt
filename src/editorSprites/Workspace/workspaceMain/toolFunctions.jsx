@@ -824,3 +824,4 @@ export const drawPreviewEllipse = (ctx, start, end, borderWidth, borderColor, fi
     }
   }
 };
+

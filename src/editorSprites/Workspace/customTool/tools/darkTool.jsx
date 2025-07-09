@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { LuChevronUp, LuChevronDown } from "react-icons/lu";
 import ToolColorPicker from "./toolColorPicker";
 
-const PencilTool = ({ setToolParameters, tool, toolParameters }) => {
+const DarkTool = ({ setToolParameters, tool, toolParameters }) => {
   // Estados para las diferentes configuraciones
   const [borderWidth, setBorderWidth] = useState(1);
   const [opacity, setOpacity] = useState(100);
@@ -323,4 +323,4 @@ const PencilTool = ({ setToolParameters, tool, toolParameters }) => {
   );
 };
 
-export default PencilTool;
+export default DarkTool;

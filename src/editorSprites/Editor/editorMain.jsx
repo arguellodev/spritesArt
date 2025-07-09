@@ -21,12 +21,13 @@ import { BiPolygon } from "react-icons/bi";
 import { TfiLayoutLineSolid } from "react-icons/tfi";
 import { FaBezierCurve } from "react-icons/fa6";
 import { LiaFootballBallSolid } from "react-icons/lia";
+import InitializeProject from "./initializeProject";
 
 
 
 const EditorMain =()=>{
 
-
+const [loadedData, setLoadedData] = useState(null);
 
   const [tool,setTool]= useState('pencil');
   // Aqui un estado para manipular la logica de las configuraciones de los objetos
@@ -135,7 +136,7 @@ const EditorMain =()=>{
         {
           label: 'Oscurecer',
           icon:   <LuMoon /> ,
-          onClick: () => setTool('darken')
+          onClick: () => setTool('dark')
         },
    
         {
@@ -189,14 +190,35 @@ const EditorMain =()=>{
 
 
 //Debe haber un estado que marque la funcion activada, pincel, borrar, etc, cubo de pintura
+const [projectInitialized, setProjectInitialized] = useState(false);
+const [projectConfig, setProjectConfig] = useState(null);
 
+const handleProjectComplete = (config) => {
+  setProjectConfig(config);
+  setProjectInitialized(true);
+  
+  // Aquí puedes usar los valores:
+  // config.name - nombre del proyecto
+  // config.width - ancho del canvas
+  // config.height - alto del canvas
+};
+
+if (!projectInitialized) {
+  return <InitializeProject onComplete={handleProjectComplete} setLoadedData={setLoadedData}/>;
+}
 
 
 
     return(
         <>
         <div className="editor-main">
-        <Navbar 
+        {!projectInitialized &&
+        <InitializeProject onComplete={handleProjectComplete} />
+        }
+        
+
+
+      {/*  <Navbar 
           logo={<div style={{ fontWeight: 'bold', fontSize: '1.5rem' }}>Editor de Sprites con IA</div>}
           items={navItemsHorizontal}
           variant={navConfigHorizontal.variant}
@@ -204,7 +226,7 @@ const EditorMain =()=>{
           showOnlyIcons={navConfigHorizontal.showOnlyIcons}
           twoColumns={navConfigHorizontal.twoColumns}
           onItemClick={(item) => console.log('Clicked item:', item)}
-        />
+        />*/}
 
 <div className="content-wrapper">
     {/* Navbar lateral */}
@@ -234,11 +256,17 @@ const EditorMain =()=>{
        setToolParameters={setToolParameters}
        toolParameters={toolParameters}
      /> */}
+     {projectConfig &&
     <div className="render-main">
      <CanvasTracker tool={tool} toolParameters={toolParameters} setToolParameters={setToolParameters} 
      setTool={setTool}
+     initialWidth={projectConfig.width}
+        initialHeight={projectConfig.height}
+        projectName={projectConfig.name}
+        loadedData={loadedData}
      />
-    </div>
+     
+    </div>}
 
   </div>
  

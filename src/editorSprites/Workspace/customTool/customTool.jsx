@@ -10,6 +10,8 @@ import CircleTool from "./tools/circleTool";
 import EllipseTool from "./tools/ellipseTool";
 import PolygonTool from "./tools/polygonTool";
 import CurveTool from "./tools/curveTool";
+import DarkTool from "./tools/darkTool";
+import LightTool from "./tools/lightTool";
 import { BsChevronCompactDown, BsChevronCompactUp  } from "react-icons/bs";
 
 const CustomTool = ({ setToolParameters, tool, toolParameters }) => {
@@ -28,6 +30,8 @@ const CustomTool = ({ setToolParameters, tool, toolParameters }) => {
         ellipse: { name: "Elipse", icon: "L", component: EllipseTool },
         polygon: { name: "Polígono", icon: "L", component: PolygonTool },
         curve: { name: "Linea Curva", icon: "C", component: CurveTool },
+        dark: { name: "Oscurecedor", icon: "C", component: DarkTool },
+        light: { name: "Iluminador", icon: "C", component: LightTool }
     };
 
     const currentTool = toolInfo[tool];
@@ -38,12 +42,12 @@ const CustomTool = ({ setToolParameters, tool, toolParameters }) => {
 
     return (
         <div className="customTool-section">
-            <div className="tool-header" onClick={toggleMinimize} style={{ cursor: "pointer" }}>
+            {/*<div className="tool-header" onClick={toggleMinimize} style={{ cursor: "pointer" }}>
             <span className="tool-icon">{currentTool.icon}</span>
                 <p className="tool-name">{currentTool.name}</p>
                 
                 <span className="minimize-toggle">{minimized ? <BsChevronCompactDown/> : <BsChevronCompactUp/>}</span>
-            </div>
+            </div>*/}
 
             <div className={`tool-content ${minimized ? 'hidden' : ''}`}>
                 <ToolComponent

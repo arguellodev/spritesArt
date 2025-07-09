@@ -38,12 +38,12 @@ const CustomTool2 = ({ setToolParameters, tool, toolParameters }) => {
 
     return (
         <div className="customTool-section">
-            <div className="tool-header" onClick={toggleMinimize} style={{ cursor: "pointer" }}>
+            {/*<div className="tool-header" onClick={toggleMinimize} style={{ cursor: "pointer" }}>
             <span className="tool-icon">{currentTool.icon}</span>
                 <p className="tool-name">{currentTool.name}</p>
                 
                 <span className="minimize-toggle">{minimized ? <BsChevronCompactDown/> : <BsChevronCompactUp/>}</span>
-            </div>
+            </div>*/}
 
             <div className={`tool-content ${minimized ? 'hidden' : ''}`}>
                 <ToolComponent

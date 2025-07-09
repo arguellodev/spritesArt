@@ -1,0 +1,426 @@
+:root {
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #2a2a2a;
+  --bg-tertiary: #333333; 
+  --bg-workspace: #222222;
+  --text-primary: #f0f0f0;
+  --text-secondary: #b8b8b8;
+  --accent-color: #8c52ff;
+  --accent-hover: #9d6dff;
+  --accent-active: #7538e8;
+  --border-color: #444444;
+  --canvas-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+  --panel-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --button-bg: #3a3a3a;
+  --button-hover: #4a4a4a;
+  --button-border: #555555;
+  --layer-hover: #3f3f3f;
+  --layer-selected: #4b3c7a;
+  --danger: #ff5252;
+  --grid-color: rgba(121, 121, 121, 0.164);
+}
+
+.config-onion-skin-overlay {
+  position: absolute;
+  transform: translateY(calc(-100% - 10px));
+ 
+  right: 0;
+  
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.config-onion-skin-modal {
+  background-color: rgba(0, 0, 0, 0.8);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: var(--canvas-shadow);
+  width: 400px;
+ height: 500px;
+  display: flex;
+  flex-direction: column;
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-30px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-tertiary);
+  border-radius: 12px 12px 0 0;
+  flex-shrink: 0;
+}
+
+.config-header h2 {
+  color: var(--text-primary);
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+  background-color: var(--button-hover);
+  color: var(--text-primary);
+}
+
+/* Tabs */
+.config-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  background-color: var(--button-hover);
+  color: var(--text-primary);
+}
+
+.tab-btn.active {
+  background-color: var(--accent-color);
+  color: white;
+}
+
+/* Content */
+.config-content-compact {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.config-content-compact::-webkit-scrollbar {
+  width: 6px;
+}
+
+.config-content-compact::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.config-content-compact::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+.config-content-compact::-webkit-scrollbar-thumb:hover {
+  background: var(--button-border);
+}
+
+.tab-content {
+  height: 100%;
+}
+
+.config-section-compact {
+  margin-bottom: 24px;
+}
+
+.config-section-compact h3 {
+  color: var(--accent-color);
+  margin: 0 0 12px 0;
+  font-size: 1rem;
+  font-weight: 500;
+  padding-bottom: 4px;
+  border-bottom: 2px solid var(--accent-color);
+}
+
+/* Presets */
+.preset-buttons-compact {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.preset-btn-compact {
+  padding: 6px 12px;
+  background-color: var(--button-bg);
+  border: 1px solid var(--button-border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.preset-btn-compact:hover {
+  background-color: var(--button-hover);
+  color: var(--text-primary);
+}
+
+.preset-btn-compact.active {
+  background-color: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+}
+
+/* General Config */
+.config-row-compact {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.config-input-group {
+  flex: 1;
+}
+
+.config-input-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.config-select {
+  width: 100%;
+  padding: 8px;
+  background-color: var(--button-bg);
+  border: 1px solid var(--button-border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.config-select:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+/* Sliders */
+.slider-group {
+  margin-bottom: 16px;
+}
+
+.slider-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.config-slider {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-tertiary);
+  outline: none;
+  border-radius: 2px;
+  cursor: pointer;
+  -webkit-appearance: none;
+}
+
+.config-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  cursor: pointer;
+  border: 2px solid var(--bg-secondary);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+}
+
+.config-slider::-webkit-slider-thumb:hover {
+  background: var(--accent-hover);
+  transform: scale(1.1);
+}
+
+.config-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  cursor: pointer;
+  border: 2px solid var(--bg-secondary);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+}
+
+.slider-with-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.slider-with-preview .config-slider {
+  flex: 1;
+}
+
+.color-preview-small {
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  border: 1px solid var(--button-border);
+  flex-shrink: 0;
+}
+
+/* Frame Selector */
+.frame-selector {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(50px, 1fr));
+  gap: 6px;
+  max-height: 80px;
+  overflow-y: auto;
+}
+
+.frame-selector-btn {
+  padding: 8px 4px;
+  background-color: var(--button-bg);
+  border: 1px solid var(--button-border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.frame-selector-btn:hover {
+  background-color: var(--button-hover);
+  color: var(--text-primary);
+}
+
+.frame-selector-btn.active {
+  background-color: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+}
+
+.frame-number {
+  font-weight: 600;
+}
+
+.frame-type {
+  font-size: 0.7rem;
+  opacity: 0.8;
+}
+
+/* Footer */
+.config-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-color);
+  background-color: var(--bg-tertiary);
+  border-radius: 0 0 12px 12px;
+  flex-shrink: 0;
+}
+
+.cancel-btn,
+.save-btn {
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.cancel-btn {
+  background-color: var(--button-bg);
+  color: var(--text-secondary);
+  border-color: var(--button-border);
+}
+
+.cancel-btn:hover {
+  background-color: var(--button-hover);
+  color: var(--text-primary);
+}
+
+.save-btn {
+  background-color: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+}
+
+.save-btn:hover {
+  background-color: var(--accent-hover);
+}
+
+.save-btn:active {
+  background-color: var(--accent-active);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .config-onion-skin-modal {
+    width: 95%;
+    max-width: 400px;
+    height: 95vh;
+    max-height: 500px;
+  }
+  
+  .config-header,
+  .config-content-compact,
+  .config-footer {
+    padding: 12px 16px;
+  }
+  
+  .config-row-compact {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .preset-buttons-compact {
+    justify-content: center;
+  }
+  
+  .frame-selector {
+    grid-template-columns: repeat(auto-fit, minmax(45px, 1fr));
+  }
+}

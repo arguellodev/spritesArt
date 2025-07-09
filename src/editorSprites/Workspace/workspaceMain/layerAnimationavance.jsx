@@ -38,8 +38,6 @@ import {
 import { BiSolidLayerPlus } from "react-icons/bi";
 import { curveEps } from 'pixi.js';
 
-
-
 const LayerAnimation = ({ 
   layers,
   addLayer,
@@ -87,13 +85,13 @@ const LayerAnimation = ({
 
   frames,
  currentFrame,
-
+  frameCount,
 
   setActiveFrame,
   deleteFrame,
    duplicateFrame,
    saveCurrentFrameState,
-  
+   getFramesInfo,
    renameFrame,
    syncWithCurrentFrame,
    toggleLayerVisibilityInFrame,
@@ -142,30 +140,9 @@ const LayerAnimation = ({
 
 }) => {
 
-  const getFramesInfo = useCallback(() => {
-    if (!framesResume?.frames) {
-      return { frameNumbers: [], frameCount: 0, minFrame: 1, maxFrame: 1 };
-    }
-    
-    const frameNumbers = Object.keys(framesResume.frames)
-      .map(Number)
-      .sort((a, b) => a - b);
-    
-    return {
-      frameNumbers,
-      frameCount: frameNumbers.length,
-      minFrame: frameNumbers[0] || 1,
-      maxFrame: frameNumbers[frameNumbers.length - 1] || 1
-    };
-  }, [framesResume]);
-
 //==============Lógica para enviar ref de animacion =============================//
 const internalCanvasRef = useRef(null);
-const { frameNumbers, frameCount } = getFramesInfo();
   
-//Función helper para obtener informacion de frames resume
-
-
 // Usar canvas externo si se proporciona, sino usar el interno
 const displayCanvasRef = externalCanvasRef || internalCanvasRef;
 const animationRef = useRef(null);
@@ -612,7 +589,6 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
       icon: <LuPlus/>,
       shortcut: 'Ctrl+I',
       onClick: () => {
-        clearCurrentSelection();
         addFrame();
         handleCloseMenu();
       }
@@ -1383,7 +1359,6 @@ const handleLastFrame = () => {
 
   // Función para añadir frame
   const addFrame = () => {
-    clearCurrentSelection();
    createFrame("newContent");
     setSelectedFrames([])
  
@@ -1645,101 +1620,103 @@ const renderLayerWithTimeline = (layer, depth = 0) => {
 
       {/* Parte derecha - Timeline ACTUALIZADA CON ACCESO DIRECTO */}
       <div className="timeline-frames">
-  {frameNumbers.map((frameNumber) => {
-    // ✅ ACCESO DIRECTO A framesResume - sin funciones intermedias
-    const resolvedFrame = framesResume?.computed?.resolvedFrames?.[frameNumber];
-    const directFrame = framesResume?.frames?.[frameNumber];
-    const frameData = resolvedFrame || directFrame;
+        {Array(frameCount).fill(null).map((_, frameIndex) => {
+          const frameNumber = frameIndex + 1;
 
-    // ✅ Acceso directo a propiedades
-    const isEmpty = !(frameData?.layerHasContent?.[layer.id] ?? false);
-    const isVisibleInFrame = frameData?.layerVisibility?.[layer.id] ?? true;
-    const hasGroups = directFrame?.pixelGroups?.[layer.id] && 
-                     Object.keys(directFrame.pixelGroups[layer.id]).length > 0;
-    const layerOpacity = frameData?.layerOpacity?.[layer.id] ?? 1.0;
+          // ✅ ACCESO DIRECTO A framesResume - sin funciones intermedias
+          const resolvedFrame = framesResume?.computed?.resolvedFrames?.[frameNumber];
+          const directFrame = framesResume?.frames?.[frameNumber];
+          const frameData = resolvedFrame || directFrame;
 
-    // Estados del frame
-    const isCurrent = currentFrame === frameNumber;
-    const isActive = activeLayerId === layer.id && isCurrent;
-    const isSelectedGlobal = selectedFrames.includes(frameNumber);
-    const isSelectedInActiveLayer = isSelectedGlobal && activeLayerId === layer.id;
+          // ✅ Acceso directo a propiedades
+          const isEmpty = !(frameData?.layerHasContent?.[layer.id] ?? false);
+          const isVisibleInFrame = frameData?.layerVisibility?.[layer.id] ?? true;
+          const hasGroups = directFrame?.pixelGroups?.[layer.id] && 
+                           Object.keys(directFrame.pixelGroups[layer.id]).length > 0;
+          const layerOpacity = frameData?.layerOpacity?.[layer.id] ?? 1.0;
 
-    // ✅ Verificar si es keyframe usando acceso directo
-    const isKeyframe = framesResume?.computed?.keyframes?.[layer.id]?.includes(frameNumber) ?? false;
-   
-    return (
-      <div
-        onContextMenu={(e) => {
-          handleContextMenu(e, 'frame');
-          if (!isSelectedInActiveLayer) {
-            handleLayerFrameMouseDown(layer.id, frameNumber - 1, e); // Ajustar índice
-          }
-        }}
-        key={`${layer.id}_frame_${frameNumber}`}
-        className={`timeline-frame ${isGroup ? 'group-frame' : ''} ${
-          isEmpty && !hasGroups ? 'empty' : 'filled'
-        } ${isVisibleInFrame ? 'visible' : 'hidden'} ${
-          isSelectedInActiveLayer ? 'current' : ''
-        } ${isActive ? 'active' : ''} ${
-          isSelectedInActiveLayer ? 'selected-frame' : ''
-        } ${isKeyframe ? 'keyframe' : ''}`}
-        style={{
-          opacity: isVisibleInFrame ? layerOpacity : 0.3
-        }}
-        onClick={(e) => e.stopPropagation()}
-        onMouseDown={(e) => {
-          if (e.button === 2 && selectedFrames.length > 1) {
-            e.preventDefault();
-            e.stopPropagation();
-            return;
-          }
-          handleLayerFrameMouseDown(layer.id, frameNumber - 1, e); // Ajustar índice
-        }}
-        onMouseEnter={() => handleLayerFrameMouseEnter(frameNumber)}
-        title={`Frame ${frameNumber} - ${isEmpty && !hasGroups ? 'Vacío' : 'Con contenido'}${isKeyframe ? ' (Keyframe)' : ''}`}
-      >
-        <div className="frame-content">
-          {isEmpty && !hasGroups ? (
-            <div className="empty-indicator" />
-          ) : (
-            <div className="filled-indicator">
-              {hasGroups && <div className="groups-indicator" />}
-              {isKeyframe && <div className="keyframe-indicator" />}
+          // Estados del frame
+          const isCurrent = currentFrame === frameNumber;
+          const isActive = activeLayerId === layer.id && isCurrent;
+          const isSelectedGlobal = selectedFrames.includes(frameNumber);
+          const isSelectedInActiveLayer = isSelectedGlobal && activeLayerId === layer.id;
+
+          // ✅ Verificar si es keyframe usando acceso directo
+          const isKeyframe = framesResume?.computed?.keyframes?.[layer.id]?.includes(frameNumber) ?? false;
+
+          return (
+            <div
+              onContextMenu={(e) => {
+                handleContextMenu(e, 'frame');
+                if (!isSelectedInActiveLayer) {
+                  handleLayerFrameMouseDown(layer.id, frameIndex, e);
+                }
+              }}
+              key={`${layer.id}_frame_${frameNumber}`}
+              className={`timeline-frame ${isGroup ? 'group-frame' : ''} ${
+                isEmpty && !hasGroups ? 'empty' : 'filled'
+              } ${isVisibleInFrame ? 'visible' : 'hidden'} ${
+                isSelectedInActiveLayer ? 'current' : ''
+              } ${isActive ? 'active' : ''} ${
+                isSelectedInActiveLayer ? 'selected-frame' : ''
+              } ${isKeyframe ? 'keyframe' : ''}`}
+              style={{
+                opacity: isVisibleInFrame ? layerOpacity : 0.3
+              }}
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => {
+                if (e.button === 2 && selectedFrames.length > 1) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  return;
+                }
+                handleLayerFrameMouseDown(layer.id, frameIndex, e);
+              }}
+              onMouseEnter={() => handleLayerFrameMouseEnter(frameNumber)}
+              title={`Frame ${frameNumber} - ${isEmpty && !hasGroups ? 'Vacío' : 'Con contenido'}${isKeyframe ? ' (Keyframe)' : ''}`}
+            >
+              <div className="frame-content">
+                {isEmpty && !hasGroups ? (
+                  <div className="empty-indicator" />
+                ) : (
+                  <div className="filled-indicator">
+                    {hasGroups && <div className="groups-indicator" />}
+                    {isKeyframe && <div className="keyframe-indicator" />}
+                  </div>
+                )}
+              </div>
+
+              {isSelectedInActiveLayer && <div className="frame-selection-indicator" />}
+
+              {/* Onion skin */}
+              {onionSkinEnabled &&
+                activeLayerId === layer.id &&
+                currentFrame !== frameNumber &&
+                (
+                  (frameNumber < currentFrame &&
+                    currentFrame - frameNumber <= onionSkinSettings.previousFrames) ||
+                  (frameNumber > currentFrame &&
+                    frameNumber - currentFrame <= onionSkinSettings.nextFrames)
+                ) && (
+                  <div className="onion-skin">
+                    <p>{frameNumber}</p>
+                  </div>
+              )}
+
+              <button
+                className="frame-visibility-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleLayerVisibilityInFrame(layer.id, frameNumber);
+                }}
+                title={isVisibleInFrame ? 'Ocultar frame' : 'Mostrar frame'}
+              >
+                {isVisibleInFrame ? <LuEye size={12} /> : <LuEyeOff size={12} />}
+              </button>
             </div>
-          )}
-        </div>
-
-        {isSelectedInActiveLayer && <div className="frame-selection-indicator" />}
-
-        {/* Onion skin */}
-        {onionSkinEnabled &&
-          activeLayerId === layer.id &&
-          currentFrame !== frameNumber &&
-          (
-            (frameNumber < currentFrame &&
-              currentFrame - frameNumber <= onionSkinSettings.previousFrames) ||
-            (frameNumber > currentFrame &&
-              frameNumber - currentFrame <= onionSkinSettings.nextFrames)
-          ) && (
-            <div className="onion-skin">
-              <p>{frameNumber}</p>
-            </div>
-        )}
-
-        <button
-          className="frame-visibility-btn"
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleLayerVisibilityInFrame(layer.id, frameNumber);
-          }}
-          title={isVisibleInFrame ? 'Ocultar frame' : 'Mostrar frame'}
-        >
-          {isVisibleInFrame ? <LuEye size={12} /> : <LuEyeOff size={12} />}
-        </button>
+          );
+        })}
       </div>
-    );
-  })}
-</div>
     </div>
   );
 
@@ -1756,7 +1733,6 @@ const renderLayerWithTimeline = (layer, depth = 0) => {
         }
       });
   }
-// Dentro de renderLayerWithTimeline, antes del return
 
   return elementsToRender;
 };
@@ -1922,7 +1898,20 @@ const MemoizedFrameNumber = React.memo(({ frameNumber, isCurrent, isSelected, on
         </div>
 
         <div className='header-right'>
-        
+        <button onClick={() => {
+  const jsonData = JSON.stringify(framesResume, null, 2);
+  const blob = new Blob([jsonData], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'framesResume.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}}>
+  Download framesResume JSON
+</button>
 
           <div className="onion-skin-container">
       <div className="onion-skin-toggle" onClick={()=>{toggleOnionSkin();
@@ -1995,7 +1984,8 @@ const MemoizedFrameNumber = React.memo(({ frameNumber, isCurrent, isSelected, on
             {/*AQui puede ir la seccion de tag para ver los nombres de los tags de varios frames */}
             <p>{selectedFrames}</p>
             <div className="frame-numbers">
-  {frameNumbers.map((frameNumber) => {
+  {Array(frameCount).fill(null).map((_, i) => {
+    const frameNumber = i + 1;
     const isSelected = selectedFrames.includes(frameNumber);
     const isCurrent = isPlaying 
       ? currentAnimationFrame === frameNumber 

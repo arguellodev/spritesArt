@@ -107,54 +107,7 @@ const PolygonTool = ({ setToolParameters, tool }) => {
       <div className="polygon-tool-container">
         <div className="tool-configs">
           {/* Configuración de colores */}
-          <div className="color-section">
-           
-            
-            {/* Color de borde */}
-            <div className="config-item color-config">
-              <label className="tool-label">Border Color</label>
-              <div className="color-input-container">
-                <div 
-                  className={`color-button ${showBorderColorPicker ? 'active' : ''}`}
-                  style={{ backgroundColor: `
-                    rgba(${borderColor.r}, 
-                    ${borderColor.g}, 
-                    ${borderColor.b}, 
-                    ${borderColor.a})` }}
 
-                  onClick={() => {
-                    setShowBorderColorPicker(!showBorderColorPicker);
-                    setShowFillColorPicker(false);
-                  }}
-                >
-                  {showBorderColorPicker && <div className="color-arrow"></div>}
-                </div>
-                <span className="color-value">{hexBorderColor}</span>
-              </div>
-            </div>
-
-            {/* Color de relleno */}
-            <div className="config-item color-config">
-              <label className="tool-label">Fill Color</label>
-              <div className="color-input-container">
-                <div 
-                  className={`color-button ${showFillColorPicker ? 'active' : ''}`}
-                  style={{ backgroundColor: `
-                    rgba(${fillColor.r}, 
-                    ${fillColor.g}, 
-                    ${fillColor.b}, 
-                    ${fillColor.a})` }}
-                  onClick={() => {
-                    setShowFillColorPicker(!showFillColorPicker);
-                    setShowBorderColorPicker(false);
-                  }}
-                >
-                  {showFillColorPicker && <div className="color-arrow"></div>}
-                </div>
-                <span className="color-value">{hexFillColor}</span>
-              </div>
-            </div>
-          </div>
 
           {/* Configuración de grosor */}
           <div className="config-item">

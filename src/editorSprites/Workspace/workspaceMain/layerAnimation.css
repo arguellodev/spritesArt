@@ -24,7 +24,7 @@
   justify-content: space-between;
   align-items: center;
   backdrop-filter: blur(10px);
-  min-height: 48px; /* Altura mínima consistente */
+ 
 }
 
 .header-left {
@@ -64,16 +64,16 @@
   background: var(--button-bg);
   border: 1px solid var(--button-border);
   border-radius: 5px;
-  color: var(--text-secondary);
+  color: white;
   cursor: pointer;
-  padding: 6px 8px;
-  font-size: 12px;
+  padding: 2px 3px;
+  font-size: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
 }
 
 .header-btn:hover:not(:disabled) {
@@ -88,7 +88,7 @@
 }
 
 .header-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.6;
   cursor: not-allowed;
   transform: none;
 }
@@ -98,13 +98,13 @@
   border: none;
   border-radius: 6px;
   color: white;
-  padding: 8px 12px;
+  padding: 4px 6px;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 2px 4px rgba(140, 82, 255, 0.3);
-  height: 32px;
+  height: 24px;
   white-space: nowrap;
 }
 
@@ -221,13 +221,15 @@
 
 .layer-name {
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: 1.2;
+  line-height: 1;
+  align-items: center;
+  gap: 10px;
 }
 
 .layer-name:hover {
@@ -294,7 +296,7 @@
 /* Layer Actions */
 .layer-actions {
   display: flex;
-  gap: 2px;
+  gap: 20px;
   align-items: center;
 }
 
@@ -600,19 +602,19 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: 400px;
+ 
 }
 
 /* ===== ANIMATION HEADER ===== */
 .animation-header {
   background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
   border-bottom: 1px solid var(--border-color);
-  padding: 12px 16px;
+  padding: 6px 8px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   backdrop-filter: blur(10px);
-  min-height: 60px;
+  
   gap: 16px;
 }
 
@@ -646,7 +648,7 @@
 
 .header-center {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 8px;
   align-items: center;
   flex: 1;
@@ -682,8 +684,8 @@
   align-items: center;
   justify-content: center;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   position: relative;
 }
 
@@ -703,8 +705,8 @@
   border: none;
   color: white;
   box-shadow: 0 2px 8px rgba(140, 82, 255, 0.3);
-  width: 40px;
-  height: 40px;
+  width: 30px;
+  height: 30px;
 }
 
 .play-btn:hover {
@@ -740,6 +742,14 @@
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.playback-current-framerate{
+  font-size: 1.2rem;
+  padding: 0px 4px;
+  background-color: var(--accent-active);
+  color: white;
+  border-radius: 2px;
 }
 
 .frame-rate-input {
@@ -791,11 +801,12 @@
 
 /* ===== TIMELINE CONTAINER ===== */
 .timeline-container {
-  flex: 1;
+ 
   display: flex;
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-primary);
+  
 }
 
 /* ===== TIMELINE HEADER ===== */
@@ -805,14 +816,19 @@
   border-bottom: 1px solid var(--border-color);
   position: sticky;
   top: 0;
-  z-index: 5;
+
 }
 
 .layers-header {
+  width: 250px;
+  padding: 0 8px;
+
+}
+
+.layer-actions-container{
+  width: 100%;
   
-  max-width: 300px;
-  width: 30%;
-  padding: 12px 16px;
+  padding: 6px 8px;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
   display: flex;
@@ -822,24 +838,32 @@
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  gap: 10px;
+  
+}
+.layer-manager-actions{
+  display: flex;
+  width: fit-content;
+  gap: 4px;
 }
 
 .frames-header {
   flex: 1;
   display: flex;
   flex-direction: column;
+  justify-content: end;
   background: var(--bg-tertiary);
 }
 
 .frame-numbers {
   display: flex;
-  height: 32px;
+  height: 24px;
   border-bottom: 1px solid var(--border-color);
 }
 
 .frame-number {
-  min-width: 60px;
-  width: 60px;
+  
+  width: 50px;
   height: 100%;
   display: flex;
   align-items: center;
@@ -849,7 +873,7 @@
   color: var(--text-secondary);
   border-right: 1px solid var(--border-color);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.1s ease;
   position: relative;
 }
 
@@ -948,7 +972,6 @@
 .animation-layer-row {
   display: flex;
   border-bottom: 1px solid var(--border-color);
-  min-height: 48px;
   transition: all 0.2s ease;
 }
 
@@ -959,9 +982,9 @@
 /* ===== LAYER INFO ===== */
 .layer-info {
   min-width: 200px;
-  max-width: 300px;
+  max-width: 250px;
   width: 30%;
-  padding: 8px 16px;
+  padding: 0px 16px;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
   display: flex;
@@ -996,6 +1019,7 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
+  padding: 8px;
 }
 
 .layer-name {
@@ -1076,12 +1100,12 @@
   flex: 1;
   display: flex;
   background: var(--bg-primary);
-  min-height: 48px;
+  min-height: 35px;
 }
 
 .timeline-frame {
-  min-width: 60px;
-  width: 60px;
+  
+  width: 50px;
   height: 100%;
   border-right: 1px solid var(--border-color);
   cursor: pointer;
@@ -1441,21 +1465,9 @@
 
 
 /* Añadir al archivo layerAnimation.css */
-.selected-frame {
-  border: 2px solid #007acc !important;
-  background-color: rgba(0, 122, 204, 0.2) !important;
-}
 
-.frame-selection-indicator {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  border: 2px solid #007acc;
-  pointer-events: none;
-  background: rgba(0, 122, 204, 0.1);
-}
+
+
 
 .frame-selection-controls {
   display: flex;
@@ -1489,3 +1501,253 @@
 .expand-toggle:hover {
   color: #fff;
 }
+.group-layer{
+ 
+ 
+  
+}
+
+/* Estilos para grupos en la timeline */
+
+
+.group-children {
+  margin-left: 20px;
+  border-left: 1px dashed #555;
+}
+
+.group-count {
+  margin-left: 5px;
+  font-size: 0.8em;
+  color: #888;
+}
+
+/* Estilos para los frames de grupos */
+.timeline-frame.group-frame {
+  background-color: rgba(100, 100, 200, 0.2);
+}
+
+.timeline-frame.group-frame.filled {
+  background-color: rgba(100, 100, 200, 0.4);
+}
+
+/* OnionSkin.css */
+.onion-skin-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px 12px;
+  gap: 12px;
+  box-shadow: var(--panel-shadow);
+}
+
+.onion-skin-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  flex: 1;
+  padding: 4px 0;
+  transition: all 0.2s ease;
+}
+
+.onion-skin-toggle:hover {
+  color: var(--accent-hover);
+}
+
+.onion-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+}
+
+.onion-skin-toggle:hover .onion-icon {
+  color: var(--accent-color);
+}
+
+.onion-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  user-select: none;
+  transition: color 0.2s ease;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: var(--button-bg);
+  border: 1px solid var(--button-border);
+  border-radius: 10px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.toggle-switch.active {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.toggle-slider {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: var(--text-primary);
+  border-radius: 50%;
+  transition: transform 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.toggle-switch.active .toggle-slider {
+  transform: translateX(16px);
+}
+
+.config-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--button-bg);
+  border: 1px solid var(--button-border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.config-button:hover {
+  background: var(--button-hover);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.config-button:active {
+  background: var(--accent-active);
+  color: var(--text-primary);
+  border-color: var(--accent-color);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .onion-skin-container {
+    padding: 6px 10px;
+  }
+  
+  .onion-text {
+    font-size: 13px;
+  }
+  
+  .config-button {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+/* Estilos para frame-numbers con selección múltiple */
+.frame-number {
+  position: relative;
+ 
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+ 
+}
+
+.frame-number:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+
+
+.frame-number.selected {
+  background-color: rgba(0, 122, 204, 0.3);
+  background: var(--accent-color);
+  color: white;
+  font-weight: 600;
+}
+
+
+
+/* Indicador visual para frames seleccionados */
+.selection-indicator {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  background-color: #007acc;
+  border-radius: 50%;
+  border: 1px solid white;
+}
+
+/* Controles para frames seleccionados */
+.selected-frames-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: rgba(0, 122, 204, 0.1);
+  border: 1px solid rgba(0, 122, 204, 0.3);
+  border-radius: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.selected-count {
+  font-size: 12px;
+  color: #007acc;
+  font-weight: 500;
+  margin-right: 8px;
+}
+
+.batch-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background-color: rgba(255, 255, 255, 0.1);
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.batch-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.batch-btn.danger {
+  border-color: rgba(255, 99, 99, 0.5);
+  color: #ff6363;
+}
+
+.batch-btn.danger:hover {
+  background-color: rgba(255, 99, 99, 0.1);
+  border-color: #ff6363;
+}
+
+/* Animación para selección múltiple */
+.frame-number.selected {
+  animation: selectPulse 0.3s ease;
+}
+
+@keyframes selectPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+/* Estilo para indicar que se puede hacer selección múltiple */

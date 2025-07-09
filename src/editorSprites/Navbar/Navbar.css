@@ -10,7 +10,7 @@
   display: flex;
   
   align-items: center;
-  padding: 0 1rem;
+  padding: 0 0.2rem;
 }
 
 .navbar-logo {
@@ -48,7 +48,7 @@
 
 .horizontal-navbar .navbar-menu {
   flex-grow: 1;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 /* Estilos para navegación vertical/aside */

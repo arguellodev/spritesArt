@@ -1,0 +1,668 @@
+/* Variables de colores */
+:root {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2a2a2a;
+    --bg-tertiary: #333333;
+    --bg-workspace: #222222;
+    --text-primary: #f0f0f0;
+    --text-secondary: #b8b8b8;
+    --accent-color: #8c52ff;
+    --accent-hover: #9d6dff;
+    --accent-active: #7538e8;
+    --border-color: #444444;
+    --canvas-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    --panel-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    --button-bg: #3a3a3a;
+    --button-hover: #4a4a4a;
+    --button-border: #555555;
+    --layer-hover: #3f3f3f;
+    --layer-selected: #4b3c7a;
+    --danger: #ff5252;
+    --grid-color: rgba(121, 121, 121, 0.164);
+  }
+  
+  /* Overlay para capturar clics fuera del menú */
+  .context-menu-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9998;
+    background: transparent;
+   
+  }
+  
+  /* Contenedor principal del menú contextual */
+  .context-menu {
+    position: fixed;
+    z-index: 9999;
+    min-width: 220px;
+    max-width: 320px;
+    opacity: 0;
+    transform: scale(0.95) translateY(-8px);
+    animation: contextMenuAppear 0.15s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    pointer-events: auto;
+    
+  }
+  
+  /* Animación de aparición del menú */
+  @keyframes contextMenuAppear {
+    0% {
+      opacity: 0;
+      transform: scale(0.95) translateY(-8px);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+  
+  /* Contenido del menú */
+  .context-menu-content {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 6px;
+    box-shadow: 
+      var(--panel-shadow),
+      0 8px 32px rgba(0, 0, 0, 0.4),
+      0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    overflow: hidden;
+  }
+  
+  /* Elementos del menú */
+  .context-menu-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 10px 12px;
+    margin: 2px 0;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 500;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    cursor: pointer;
+    transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+    text-align: left;
+    position: relative;
+    overflow: hidden;
+  }
+  
+  /* Efecto hover */
+  .context-menu-item:hover:not(.disabled) {
+    background: var(--layer-hover);
+    color: var(--text-primary);
+    transform: translateX(2px);
+  }
+  
+  /* Efecto activo/pressed */
+  .context-menu-item:active:not(.disabled) {
+    background: var(--layer-selected);
+    transform: translateX(1px) scale(0.98);
+    transition: all 0.08s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  /* Estado deshabilitado */
+  .context-menu-item.disabled {
+    color: var(--text-secondary);
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  
+  /* Elementos peligrosos */
+  .context-menu-item.danger {
+    color: var(--danger);
+  }
+  
+  .context-menu-item.danger:hover:not(.disabled) {
+    background: rgba(255, 82, 82, 0.1);
+    color: #ff6b6b;
+  }
+  
+  .context-menu-item.danger:active:not(.disabled) {
+    background: rgba(255, 82, 82, 0.2);
+  }
+  
+  /* Icono del elemento */
+  .context-menu-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-right: 12px;
+    background: var(--button-bg);
+    border: 1px solid var(--button-border);
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+  }
+  
+  /* Icono en hover */
+  .context-menu-item:hover:not(.disabled) .context-menu-icon {
+    background: var(--button-hover);
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+    transform: scale(1.05);
+  }
+  
+  /* Icono en elementos peligrosos */
+  .context-menu-item.danger .context-menu-icon {
+    border-color: rgba(255, 82, 82, 0.3);
+  }
+  
+  .context-menu-item.danger:hover:not(.disabled) .context-menu-icon {
+    background: rgba(255, 82, 82, 0.1);
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+  
+  /* Etiqueta del elemento */
+  .context-menu-label {
+    flex: 1;
+    font-size: 14px;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  /* Atajo de teclado */
+  .context-menu-shortcut {
+    margin-left: 16px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 400;
+    opacity: 0.7;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
+    flex-shrink: 0;
+  }
+  
+  /* Separador visual (si lo necesitas después) */
+  .context-menu-separator {
+    height: 1px;
+    background: var(--border-color);
+    margin: 6px 8px;
+    opacity: 0.5;
+  }
+  
+  /* Efectos especiales para mejor UX */
+  .context-menu-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    background: linear-gradient(90deg, var(--accent-color), transparent);
+    transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0;
+  }
+  
+  .context-menu-item:hover:not(.disabled)::before {
+    width: 3px;
+    opacity: 1;
+  }
+  
+  .context-menu-item.danger::before {
+    background: linear-gradient(90deg, var(--danger), transparent);
+  }
+  
+  /* Responsividad para pantallas pequeñas */
+  @media (max-width: 480px) {
+    .context-menu {
+      min-width: 200px;
+      max-width: calc(100vw - 20px);
+    }
+    
+    .context-menu-item {
+      padding: 12px 14px;
+    }
+    
+    .context-menu-label {
+      font-size: 15px;
+    }
+  }
+  
+  /* Mejoras de accesibilidad */
+  @media (prefers-reduced-motion: reduce) {
+    .context-menu,
+    .context-menu-item,
+    .context-menu-icon {
+      animation: none;
+      transition: none;
+    }
+  }
+  
+  /* Focus visible para navegación con teclado */
+  .context-menu-item:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: -2px;
+    background: var(--layer-hover);
+  }
+  
+  /* Modo de alto contraste */
+  @media (prefers-contrast: high) {
+    .context-menu-content {
+      border: 2px solid var(--text-primary);
+    }
+    
+    .context-menu-item {
+      border: 1px solid transparent;
+    }
+    
+    .context-menu-item:hover:not(.disabled) {
+      border-color: var(--text-primary);
+    }
+  }
+
+  /* Header del menú contextual */
+.context-menu-header {
+  padding: 12px 12px 8px 12px;
+  margin-bottom: 4px;
+}
+
+.context-menu-header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+}
+
+/* Título del header */
+.context-menu-title {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+/* Subtítulo del header */
+.context-menu-subtitle {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.8;
+  flex-shrink: 0;
+  max-width: 40%;
+}
+
+/* Separador visual mejorado */
+.context-menu-separator {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border-color), transparent);
+  margin: 6px 8px;
+  opacity: 0.6;
+}
+
+/* Responsividad para el header en pantallas pequeñas */
+@media (max-width: 480px) {
+  .context-menu-header {
+    padding: 14px 14px 10px 14px;
+  }
+  
+  .context-menu-header-content {
+    gap: 8px;
+  }
+  
+  .context-menu-title {
+    font-size: 15px;
+  }
+  
+  .context-menu-subtitle {
+    font-size: 13px;
+    max-width: 45%;
+  }
+}
+
+/* Modo de alto contraste para el header */
+@media (prefers-contrast: high) {
+  .context-menu-title {
+    color: var(--text-primary);
+  }
+  
+  .context-menu-subtitle {
+    color: var(--text-secondary);
+    opacity: 1;
+  }
+  
+  .context-menu-separator {
+    background: var(--border-color);
+    opacity: 1;
+  }
+}
+
+/* Estilos para inputs en el context menu */
+
+/* Item activo con input */
+.context-menu-item.active-input {
+  background: var(--layer-selected);
+  color: var(--accent-color);
+  border: 1px solid var(--accent-color);
+}
+
+.context-menu-item.active-input .context-menu-icon {
+  background: var(--accent-color);
+  color: var(--bg-secondary);
+  border-color: var(--accent-color);
+}
+
+/* Indicador de valor actual */
+.context-menu-input-indicator {
+  margin-left: 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  opacity: 0.8;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
+  flex-shrink: 0;
+  background: var(--button-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--button-border);
+}
+
+/* Contenedor del input */
+.context-menu-input-container {
+  padding: 8px 12px 12px 12px;
+  margin: 4px 0;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+/* Wrapper del input */
+.context-menu-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Input básico */
+.context-menu-input {
+  flex: 1;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 8px 10px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  outline: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.context-menu-input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(140, 82, 255, 0.2);
+}
+
+.context-menu-input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+/* Contenedor del slider */
+.context-menu-slider-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+/* Slider */
+.context-menu-slider {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-primary);
+  border-radius: 3px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+/* Slider track - WebKit */
+.context-menu-slider::-webkit-slider-track {
+  height: 6px;
+  background: var(--bg-primary);
+  border-radius: 3px;
+  border: 1px solid var(--border-color);
+}
+
+/* Slider thumb - WebKit */
+.context-menu-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 18px;
+  width: 18px;
+  background: var(--accent-color);
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid var(--bg-secondary);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.context-menu-slider::-webkit-slider-thumb:hover {
+  background: var(--accent-hover);
+  transform: scale(1.1);
+}
+
+/* Slider track - Firefox */
+.context-menu-slider::-moz-range-track {
+  height: 6px;
+  background: var(--bg-primary);
+  border-radius: 3px;
+  border: 1px solid var(--border-color);
+}
+
+/* Slider thumb - Firefox */
+.context-menu-slider::-moz-range-thumb {
+  height: 18px;
+  width: 18px;
+  background: var(--accent-color);
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid var(--bg-secondary);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.context-menu-slider::-moz-range-thumb:hover {
+  background: var(--accent-hover);
+  transform: scale(1.1);
+}
+
+/* Valor del slider */
+.context-menu-slider-value {
+  min-width: 50px;
+}
+
+.context-menu-slider-input {
+  width: 50px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 4px 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
+  text-align: center;
+  outline: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.context-menu-slider-input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 1px rgba(140, 82, 255, 0.2);
+}
+
+/* Acciones del input */
+.context-menu-input-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Botones de acción del input */
+.context-menu-input-button {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+}
+
+/* Botón confirmar */
+.context-menu-input-button.confirm {
+  background: var(--accent-color);
+  color: white;
+}
+
+.context-menu-input-button.confirm:hover {
+  background: var(--accent-hover);
+  transform: scale(1.05);
+}
+
+.context-menu-input-button.confirm:active {
+  background: var(--accent-active);
+  transform: scale(0.95);
+}
+
+/* Botón cancelar */
+.context-menu-input-button.cancel {
+  background: var(--button-bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--button-border);
+}
+
+.context-menu-input-button.cancel:hover {
+  background: var(--danger);
+  color: white;
+  border-color: var(--danger);
+  transform: scale(1.05);
+}
+
+.context-menu-input-button.cancel:active {
+  background: #e53e3e;
+  transform: scale(0.95);
+}
+
+/* Focus visible para botones */
+.context-menu-input-button:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 1px;
+}
+
+/* Responsividad para inputs */
+@media (max-width: 480px) {
+  .context-menu-input-container {
+    padding: 10px 14px 14px 14px;
+  }
+  
+  .context-menu-input {
+    font-size: 16px; /* Evita zoom en iOS */
+    padding: 10px 12px;
+  }
+  
+  .context-menu-slider-container {
+    gap: 10px;
+  }
+  
+  .context-menu-slider-input {
+    width: 45px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  
+  .context-menu-input-button {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+  }
+}
+
+/* Modo de alto contraste para inputs */
+@media (prefers-contrast: high) {
+  .context-menu-input {
+    border: 2px solid var(--text-primary);
+  }
+  
+  .context-menu-input:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px var(--accent-color);
+  }
+  
+  .context-menu-slider::-webkit-slider-thumb {
+    border: 3px solid var(--bg-secondary);
+  }
+  
+  .context-menu-slider::-moz-range-thumb {
+    border: 3px solid var(--bg-secondary);
+  }
+}
+
+/* Animaciones para transiciones suaves */
+.context-menu-input-container {
+  animation: inputContainerAppear 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes inputContainerAppear {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Estados de validación (opcional para futuras mejoras) */
+.context-menu-input.error {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px rgba(255, 82, 82, 0.2);
+}
+
+.context-menu-input.success {
+  border-color: #4CAF50;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+}
+
+.context-menu-overlay.has-active-input {
+  pointer-events: none;
+}
+
+.context-menu.position-left {
+  transform-origin: right top;
+}
+
+.context-menu.position-right {
+  transform-origin: left top;
+}

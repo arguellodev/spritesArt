@@ -108,198 +108,20 @@ const FillTool = ({ setToolParameters, tool }) => {
       <div className="polygon-tool-container">
         <div className="tool-configs">
           {/* Configuración de colores */}
-          <div className="color-section">
-           
-            
-            {/* Color de borde */}
-            <div className="config-item color-config">
-              <label className="tool-label">Border Color</label>
-              <div className="color-input-container">
-                <div 
-                  className={`color-button ${showBorderColorPicker ? 'active' : ''}`}
-                  style={{ backgroundColor: `
-                    rgba(${borderColor.r}, 
-                    ${borderColor.g}, 
-                    ${borderColor.b}, 
-                    ${borderColor.a})` }}
-
-                  onClick={() => {
-                    setShowBorderColorPicker(!showBorderColorPicker);
-                    setShowFillColorPicker(false);
-                  }}
-                >
-                  {showBorderColorPicker && <div className="color-arrow"></div>}
-                </div>
-                <span className="color-value">{hexBorderColor}</span>
-              </div>
-            </div>
-
-            {/* Color de relleno */}
-            <div className="config-item color-config">
-              <label className="tool-label">Fill Color</label>
-              <div className="color-input-container">
-                <div 
-                  className={`color-button ${showFillColorPicker ? 'active' : ''}`}
-                  style={{ backgroundColor: `
-                    rgba(${fillColor.r}, 
-                    ${fillColor.g}, 
-                    ${fillColor.b}, 
-                    ${fillColor.a})` }}
-                  onClick={() => {
-                    setShowFillColorPicker(!showFillColorPicker);
-                    setShowBorderColorPicker(false);
-                  }}
-                >
-                  {showFillColorPicker && <div className="color-arrow"></div>}
-                </div>
-                <span className="color-value">{hexFillColor}</span>
-              </div>
-            </div>
-          </div>
+         
 
           {/* Configuración de grosor */}
-          <div className="config-item">
-            <label className="tool-label">Border Width</label>
-            <div className="input-container">
-             
-              <input 
-                type="number"
-                min="1"
-                max="20"
-                value={borderWidth}
-                onChange={handleBorderWidthInput}
-                onBlur={handleBorderWidthBlur}
-                className="number-input" 
-              />
-              <span className="tool-value">px</span>
-               <div className="increment-buttons-container">
-               <button 
-                 className="increment-btn"
-                onClick={() => handleBorderWidthChange(1)}
-                disabled={(typeof borderWidth === 'number' ? borderWidth : 3) >= 20}
-              >
-                <LuChevronUp />
-              </button>
-              <button 
-                className="increment-btn"
-                onClick={() => handleBorderWidthChange(-1)}
-                disabled={(typeof borderWidth === 'number' ? borderWidth : 3) <= 1}
-              >
-               <LuChevronDown />
-              </button>
-               </div>
-              
-              
-            </div>
-          </div>
+          
 
         {/* Configuración de Sharpen */}
-<div className="config-item">
-  <label className="tool-label">Sharpen</label>
-  <div className="input-container">
-    <input 
-      type="number" 
-      min="0" 
-      max="1" 
-      step="0.1"
-      value={sharpen} 
-      onChange={(e) => {
-        const value = e.target.value;
-        if (value === '') {
-          setSharpen('');
-          return;
-        }
-        const numValue = Number(value);
-        if (!isNaN(numValue)) {
-          setSharpen(numValue);
-        }
-      }}
-      onBlur={(e) => {
-        const value = e.target.value;
-        if (value === '' || isNaN(Number(value))) {
-          setSharpen(1); // Valor por defecto
-          return;
-        }
 
-        const numValue = Number(value);
-        if (numValue < 0) setSharpen(0);
-        else if (numValue > 1) setSharpen(1);
-      }}
-      className="number-input" 
-    />
-    <div className="increment-buttons-container">
-      <button 
-        type="button"
-        onClick={() => {
-          const currentSharpen = typeof sharpen === 'number' ? sharpen : 1;
-          setSharpen(Math.min(1, parseFloat((currentSharpen + 0.1).toFixed(2))));
-        }}
-        className="increment-btn"
-        disabled={sharpen >= 1}
-      >
-        <LuChevronUp />
-      </button>
-      <button 
-        type="button"
-        onClick={() => {
-          const currentSharpen = typeof sharpen === 'number' ? sharpen : 1;
-          setSharpen(Math.max(0, parseFloat((currentSharpen - 0.1).toFixed(2))));
-        }}
-        className="increment-btn"
-        disabled={sharpen <= 0}
-      >
-        <LuChevronDown />
-      </button>
-    </div>
-  </div>
-</div>
 
           {/* Configuración de rotación */}
-          <div className="config-item">
-  <label className="tool-label">Paint Mode</label>
-  <div className="input-container">
-    <select
-      value={paintMode}
-      onChange={(e) => setPaintMode(e.target.value)}
-      className="select-input"
-    >
-      <option value="manual">Manual</option>
-      <option value="composite">Composite</option>
-      <option value="hybrid">Hybrid</option>
-    </select>
-  </div>
-</div>
+
 
 {/*COnfiguracion de velcoidad */}
 
-<div className="config-item">
-  <label className="tool-label">Velocity Sensibility</label>
-  <div className="horizontal-slider-container">
-    <div className="slider-track-horizontal">
-      <input
-        type="range"
-        min="0"
-        max="10"
-        step="1"
-        value={velocitySensibility}
-        onChange={(e) => setVelocitySensibility(parseInt(e.target.value))}
-        className="horizontal-slider"
-      />
-      <div className="slider-marks-horizontal">
-        {Array.from({ length: 11 }, (_, i) => (
-          <div
-            key={i}
-            className={`slider-mark-horizontal ${velocitySensibility === i ? 'active' : ''}`}
-            style={{ left: `${(i / 10) * 100}%` }}
-          >
-            <span className="mark-value-horizontal">{i}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-    
-  </div>
-</div>
+
 
 
 
@@ -388,62 +210,9 @@ const FillTool = ({ setToolParameters, tool }) => {
           
         </div>
 
-        {/* Vista previa de la herramienta */}
-        <div className="tool-preview">
-          <div className="preview-label">Preview</div>
-          <div className="preview-container">
-            <svg width="80" height="80" viewBox="0 0 80 80" className="preview-svg">
-              <polygon
-                points={Array.from({ length: typeof vertices === 'number' ? vertices : 5 }, (_, i) => {
-                  const currentVertices = typeof vertices === 'number' ? vertices : 5;
-                  const currentRotation = typeof rotation === 'number' ? rotation : 0;
-                  const angle = (i * 2 * Math.PI / currentVertices) + (currentRotation * Math.PI / 180);
-                  const x = 40 + 25 * Math.cos(angle);
-                  const y = 40 + 25 * Math.sin(angle);
-                  return `${x},${y}`;
-                }).join(' ')}
-                fill={`rgba(
-                    ${fillColor.r},
-                    ${fillColor.g},
-                    ${fillColor.b},
-                    ${fillColor.a}
-                    )`}
-                stroke={`rgba(
-                    ${borderColor.r},
-                    ${borderColor.g},
-                    ${borderColor.b},
-                    ${borderColor.a}
-                    )`}
-                strokeWidth={typeof borderWidth === 'number' ? borderWidth : 3}
-                opacity={opacity / 100}
-              />
-            </svg>
-          </div>
-        </div>
 
-        {/* Color Pickers */}
-        {showBorderColorPicker && (
-         <>
-       
-           <ToolColorPicker
-            color={borderColor}
-            onChange={setBorderColor}
-            hexColor={hexBorderColor}
-            setHexColor={setHexBorderColor}
-            />
-         </>
-        )}
 
-        {showFillColorPicker && (
-        <>
-        <ToolColorPicker
-            color={fillColor}
-            onChange={setFillColor}
-            hexColor={hexFillColor}
-            setHexColor={setFillHexColor}
-            />
-        </>
-        )}
+
       </div>
 
       

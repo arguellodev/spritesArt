@@ -143,7 +143,7 @@ const Navbar = ({
       {variant === "horizontal" ? (
         <nav className={`${navbarClasses} horizontal-navbar `} ref={navbarRef}>
           <div className="navbar-container">
-            {logo && <div className="navbar-logo">{logo}</div>}
+           
 
             {/* Botón de menú móvil */}
             <div
@@ -159,6 +159,7 @@ const Navbar = ({
             >
               {items.map(renderMenuItem)}
             </div>
+            {logo && <div className="navbar-logo">{logo}</div>}
           </div>
         </nav>
       ) : (

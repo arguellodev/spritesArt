@@ -108,50 +108,7 @@ const TriangleTool = ({ setToolParameters, tool }) => {
           <div className="color-section">
            
             
-            {/* Color de borde */}
-            <div className="config-item color-config">
-              <label className="tool-label">Border Color</label>
-              <div className="color-input-container">
-                <div 
-                  className={`color-button ${showBorderColorPicker ? 'active' : ''}`}
-                  style={{ backgroundColor: `
-                    rgba(${borderColor.r}, 
-                    ${borderColor.g}, 
-                    ${borderColor.b}, 
-                    ${borderColor.a})` }}
-
-                  onClick={() => {
-                    setShowBorderColorPicker(!showBorderColorPicker);
-                    setShowFillColorPicker(false);
-                  }}
-                >
-                  {showBorderColorPicker && <div className="color-arrow"></div>}
-                </div>
-                <span className="color-value">{hexBorderColor}</span>
-              </div>
-            </div>
-
-            {/* Color de relleno */}
-            <div className="config-item color-config">
-              <label className="tool-label">Fill Color</label>
-              <div className="color-input-container">
-                <div 
-                  className={`color-button ${showFillColorPicker ? 'active' : ''}`}
-                  style={{ backgroundColor: `
-                    rgba(${fillColor.r}, 
-                    ${fillColor.g}, 
-                    ${fillColor.b}, 
-                    ${fillColor.a})` }}
-                  onClick={() => {
-                    setShowFillColorPicker(!showFillColorPicker);
-                    setShowBorderColorPicker(false);
-                  }}
-                >
-                  {showFillColorPicker && <div className="color-arrow"></div>}
-                </div>
-                <span className="color-value">{hexFillColor}</span>
-              </div>
-            </div>
+        
           </div>
 
           {/* Configuración de grosor */}
@@ -191,69 +148,7 @@ const TriangleTool = ({ setToolParameters, tool }) => {
           </div>
 
          {/* Configuración de vértices */}
-         <div className="config-item">
-            <label className="tool-label">Vertices</label>
-            <div className="input-container">
-             
-              <input 
-                type="number" 
-                min="3" 
-                max="12" 
-                value={vertices} 
-                onChange={(e) => {
-                  const value = e.target.value;
-                  
-                  // Permitir string vacío temporalmente
-                  if (value === '') {
-                    setVertices('');
-                    return;
-                  }
-                  
-                  const numValue = Number(value);
-                  if (!isNaN(numValue)) {
-                    setVertices(numValue);
-                  }
-                }}
-                onBlur={(e) => {
-                  const value = e.target.value;
-                  if (value === '' || isNaN(Number(value))) {
-                    setVertices(5); // Valor por defecto
-                    return;
-                  }
-                  
-                  const numValue = Number(value);
-                  if (numValue < 3) setVertices(3);
-                  if (numValue > 12) setVertices(12);
-                }}
-                className="number-input" 
-              />
-              <div className="increment-buttons-container">
-              <button 
-                type="button"
-                onClick={() => {
-                  const currentVertices = typeof vertices === 'number' ? vertices : 5;
-                  setVertices(Math.min(12, currentVertices + 1));
-                }}
-                className="increment-btn"
-                disabled={(typeof vertices === 'number' ? vertices : 5) >= 12}
-              >
-               <LuChevronUp />
-              </button>
-              <button 
-                type="button"
-                onClick={() => {
-                  const currentVertices = typeof vertices === 'number' ? vertices : 5;
-                  setVertices(Math.max(3, currentVertices - 1));
-                }}
-                className="increment-btn"
-                disabled={(typeof vertices === 'number' ? vertices : 5) <= 3}
-              >
-                <LuChevronDown />
-              </button>
-              </div>
-             
-            </div>
-          </div>
+        
 
           {/* Configuración de rotación */}
           <div className="config-item">
@@ -409,61 +304,8 @@ const TriangleTool = ({ setToolParameters, tool }) => {
         </div>
 
         {/* Vista previa de la herramienta */}
-        <div className="tool-preview">
-          <div className="preview-label">Preview</div>
-          <div className="preview-container">
-            <svg width="80" height="80" viewBox="0 0 80 80" className="preview-svg">
-              <polygon
-                points={Array.from({ length: typeof vertices === 'number' ? vertices : 5 }, (_, i) => {
-                  const currentVertices = typeof vertices === 'number' ? vertices : 5;
-                  const currentRotation = typeof rotation === 'number' ? rotation : 0;
-                  const angle = (i * 2 * Math.PI / currentVertices) + (currentRotation * Math.PI / 180);
-                  const x = 40 + 25 * Math.cos(angle);
-                  const y = 40 + 25 * Math.sin(angle);
-                  return `${x},${y}`;
-                }).join(' ')}
-                fill={`rgba(
-                    ${fillColor.r},
-                    ${fillColor.g},
-                    ${fillColor.b},
-                    ${fillColor.a}
-                    )`}
-                stroke={`rgba(
-                    ${borderColor.r},
-                    ${borderColor.g},
-                    ${borderColor.b},
-                    ${borderColor.a}
-                    )`}
-                strokeWidth={typeof borderWidth === 'number' ? borderWidth : 3}
-                opacity={opacity / 100}
-              />
-            </svg>
-          </div>
-        </div>
+      
 
-        {/* Color Pickers */}
-        {showBorderColorPicker && (
-         <>
-       
-           <ToolColorPicker
-            color={borderColor}
-            onChange={setBorderColor}
-            hexColor={hexBorderColor}
-            setHexColor={setHexBorderColor}
-            />
-         </>
-        )}
-
-        {showFillColorPicker && (
-        <>
-        <ToolColorPicker
-            color={fillColor}
-            onChange={setFillColor}
-            hexColor={hexFillColor}
-            setHexColor={setFillHexColor}
-            />
-        </>
-        )}
       </div>
 
       
