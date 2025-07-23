@@ -2,9 +2,7 @@ import { useEffect, useState } from "react";
 import { LuChevronUp, LuChevronDown } from "react-icons/lu";
 import ToolColorPicker from "./toolColorPicker";
 
-// Simulación del ColorPicker component
-
-const EllipseTool = ({ setToolParameters, tool }) => {
+const EllipseTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setToolConfigs }) => {
   // Estados para las diferentes configuraciones
   const [borderWidth, setBorderWidth] = useState(1);
   const [opacity, setOpacity] = useState(100);
@@ -15,7 +13,48 @@ const EllipseTool = ({ setToolParameters, tool }) => {
   const [pattern, setPattern] = useState("solid");
   const [pressure, setPressure] = useState(50);
   const [hexFillColor, setFillHexColor] = useState('#FF0000');
-  const [hexBorderColor, setHexBorderColor] = useState('#FF0000');
+  const [hexBorderColor, setHexBorderColor] = useState('#000000');
+
+  // Estados para color pickers
+  const [showBorderColorPicker, setShowBorderColorPicker] = useState(false);
+  const [showFillColorPicker, setShowFillColorPicker] = useState(false);
+
+  // Estados para opciones avanzadas
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const patterns = ["solid", "dotted", "dashed", "pixel dust"];
+
+  // useEffect para cargar configuración guardada al montar el componente
+  useEffect(() => {
+    const ellipseConfig = toolConfigs.ellipse;
+    
+    if (ellipseConfig !== null) {
+      // Cargar configuración guardada
+      setBorderWidth(ellipseConfig.borderWidth || 1);
+     
+    }
+  }, []); // Solo se ejecuta al montar
+
+  // useEffect para guardar cambios en la configuración de la herramienta
+  useEffect(() => {
+    const currentConfig = {
+      borderWidth,
+      opacity,
+      borderColor,
+      fillColor,
+      vertices,
+      rotation,
+      pattern,
+      pressure,
+      hexFillColor,
+      hexBorderColor
+    };
+
+    setToolConfigs(prev => ({
+      ...prev,
+      ellipse: currentConfig
+    }));
+  }, [borderWidth, opacity, borderColor, fillColor, vertices, rotation, pattern, pressure, hexFillColor, hexBorderColor, setToolConfigs]);
 
   const rgbToHex = ({ r, g, b }) => {
     return (
@@ -33,15 +72,6 @@ const EllipseTool = ({ setToolParameters, tool }) => {
     setHexBorderColor(rgbToHex(borderColor));
     setFillHexColor(rgbToHex(fillColor));
   }, [borderColor, fillColor]);
-  
-  // Estados para color pickers
-  const [showBorderColorPicker, setShowBorderColorPicker] = useState(false);
-  const [showFillColorPicker, setShowFillColorPicker] = useState(false);
-
-  // Estados para opciones avanzadas
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
-  const patterns = ["solid", "dotted", "dashed", "pixel dust"];
 
   // Función para convertir hex a rgb
   const hexToRgb = (hex) => {
@@ -95,7 +125,10 @@ const EllipseTool = ({ setToolParameters, tool }) => {
             vertices: vertices,
             rotation: rotation,
             pattern: pattern,
-            pressure: pressure
+            pressure: pressure,
+            borderColor: borderColor,
+            fillColor: fillColor,
+            opacity: opacity
           }));
     }
   }, [borderWidth, opacity, borderColor, fillColor, vertices, rotation, pattern, pressure, setToolParameters]);
@@ -105,7 +138,6 @@ const EllipseTool = ({ setToolParameters, tool }) => {
       <div className="polygon-tool-container">
         <div className="tool-configs">
          
-
           {/* Configuración de grosor */}
           <div className="config-item">
             <label className="tool-label">Border Width</label>
@@ -137,171 +169,18 @@ const EllipseTool = ({ setToolParameters, tool }) => {
                <LuChevronDown />
               </button>
                </div>
-              
-              
             </div>
           </div>
 
-        
 
-          {/* Configuración de rotación */}
-          <div className="config-item">
-            <label className="tool-label">Rotation</label>
-            <div className="input-container">
-              
-              <input 
-                type="number" 
-                min="0" 
-                max="360" 
-                value={rotation} 
-                onChange={(e) => {
-                  const value = e.target.value;
-                  
-                  // Permitir string vacío temporalmente
-                  if (value === '') {
-                    setRotation('');
-                    return;
-                  }
-                  
-                  const numValue = Number(value);
-                  if (!isNaN(numValue)) {
-                    setRotation(numValue);
-                  }
-                }}
-                onBlur={(e) => {
-                  const value = e.target.value;
-                  if (value === '' || isNaN(Number(value))) {
-                    setRotation(0); // Valor por defecto
-                    return;
-                  }
-                  
-                  const numValue = Number(value);
-                  if (numValue < 0) setRotation(0);
-                  if (numValue > 360) setRotation(360);
-                }}
-                className="number-input" 
-              />
-              <span className="tool-value">°</span>
-              <div className="increment-buttons-container">
-              <button 
-                type="button"
-                onClick={() => {
-                  const currentRotation = typeof rotation === 'number' ? rotation : 0;
-                  setRotation(Math.min(360, currentRotation + 5));
-                }}
-                className="increment-btn"
-                disabled={(typeof rotation === 'number' ? rotation : 0) >= 360}
-              >
-                <LuChevronUp />
-              </button>
-              <button 
-                type="button"
-                onClick={() => {
-                  const currentRotation = typeof rotation === 'number' ? rotation : 0;
-                  setRotation(Math.max(0, currentRotation - 5));
-                }}
-                className="increment-btn"
-                disabled={(typeof rotation === 'number' ? rotation : 0) <= 0}
-              >
-                <LuChevronDown />
-              </button>
-              
-              </div>
-              
-              
-            </div>
-          </div>
 
-          {/* Configuración de opacidad 
-          <div className="config-item">
-            <label className="tool-label">Opacity</label>
-            <div className="slider-container">
-              <input 
-                type="range" 
-                min="0" 
-                max="100" 
-                value={opacity} 
-                onChange={(e) => setOpacity(Number(e.target.value))} 
-                className="slider" 
-              />
-              <span className="tool-value">{opacity}%</span>
-            </div>
-          </div>
-*/}
-          {/* Selector de patrón 
-          <div className="config-item">
-            <label className="tool-label">Pattern</label>
-            <select 
-              value={pattern} 
-              onChange={(e) => setPattern(e.target.value)}
-              className="pattern-selector"
-            >
-              {patterns.map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-          </div>*/}
-
-          {/* Botón para mostrar/ocultar opciones avanzadas 
-          <button 
-            className="advanced-toggle"
-            onClick={() => setShowAdvanced(!showAdvanced)}
-          >
-            {showAdvanced ? "Hide Advanced" : "Show Advanced"}
-          </button>*/}
-
-          {/* Opciones avanzadas */}
-         {/* showAdvanced && (
-            <div className="advanced-options">
-              <div className="config-item">
-                <label className="tool-label">Pressure Sensitivity</label>
-                <div className="slider-container">
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="100" 
-                    value={pressure} 
-                    onChange={(e) => setPressure(Number(e.target.value))} 
-                    className="slider" 
-                  />
-                  <span className="tool-value">{pressure}%</span>
-                </div>
-              </div>
-
-              <div className="config-item">
-                <label className="tool-label">Keyboard Shortcut</label>
-                <div className="shortcut-display">
-                  <span className="key">P</span>
-                  <button className="edit-shortcut">Edit</button>
-                </div>
-              </div>
-
-              <div className="config-item">
-                <label className="tool-label">Anti-aliasing</label>
-                <div className="toggle-switch">
-                  <input type="checkbox" id="antialiasing" className="toggle-input" />
-                  <label htmlFor="antialiasing" className="toggle-label"></label>
-                </div>
-              </div>
-
-              <div className="config-item">
-                <label className="tool-label">Pixel Perfect</label>
-                <div className="toggle-switch">
-                  <input type="checkbox" id="pixelperfect" className="toggle-input" defaultChecked />
-                  <label htmlFor="pixelperfect" className="toggle-label"></label>
-                </div>
-              </div>
-            </div>
-          )*/}
-
-          
+          {/* Selector de patrón */}
+      
         </div>
-
 
         {/* Color Pickers */}
         {showBorderColorPicker && (
          <>
-       
            <ToolColorPicker
             color={borderColor}
             onChange={setBorderColor}
@@ -322,8 +201,6 @@ const EllipseTool = ({ setToolParameters, tool }) => {
         </>
         )}
       </div>
-
-      
     </>
   );
 };

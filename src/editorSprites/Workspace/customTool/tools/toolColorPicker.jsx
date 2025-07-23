@@ -1,7 +1,10 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import HexInput from './hexInput';
+import './toolColorPicker.css'
 import { usePointer } from '../../hooks/hooks';
-const ToolColorPicker = ({ color = { r: 255, g: 0, b: 0, a: 1 }, onChange, hexColor, setHexColor }) => {
+import { LuX } from "react-icons/lu";
+
+const ToolColorPicker = ({ color = { r: 255, g: 0, b: 0, a: 1 }, onChange, hexColor, setHexColor, closeFn }) => {
   const [currentColor, setCurrentColor] = useState(color);
   
   const colorAreaRef = useRef(null);
@@ -12,6 +15,20 @@ const ToolColorPicker = ({ color = { r: 255, g: 0, b: 0, a: 1 }, onChange, hexCo
   const colorAreaPointer = usePointer(colorAreaRef, colorAreaRef);
   const hueSliderPointer = usePointer(hueSliderRef, hueSliderRef);
   const alphaSliderPointer = usePointer(alphaSliderRef, alphaSliderRef);
+
+  // FIX: Sincronizar estado interno cuando cambia la prop color
+  useEffect(() => {
+    // Solo actualizar si realmente cambió el color para evitar loops infinitos
+    if (
+      color.r !== currentColor.r ||
+      color.g !== currentColor.g ||
+      color.b !== currentColor.b ||
+      color.a !== currentColor.a
+    ) {
+      console.log('ToolColorPicker: Actualizando color interno desde prop:', color);
+      setCurrentColor(color);
+    }
+  }, [color, currentColor]);
 
   // Utilidades de conversión
   const rgbToHsv = (r, g, b) => {
@@ -56,6 +73,7 @@ const ToolColorPicker = ({ color = { r: 255, g: 0, b: 0, a: 1 }, onChange, hexCo
   };
 
   const updateColor = (newColor) => {
+    console.log('ToolColorPicker: Actualizando color:', newColor);
     setCurrentColor(newColor);
     onChange?.(newColor);
   };
@@ -128,23 +146,13 @@ const ToolColorPicker = ({ color = { r: 255, g: 0, b: 0, a: 1 }, onChange, hexCo
 
   return (
     <div className="color-picker">
+      <button 
+      onClick={closeFn}
+      className='close-colorpicker-button'>
+      <LuX />
+      </button>
       <style jsx>{`
-        .color-picker {
-          position: absolute;
-          right: 100%;
-          margin-right: 25px;
-          top: 0;
-          
-          background: #1a1a1a;
-          border: 1px solid #444;
-          border-radius: 12px;
-          padding: 20px;
-          width: 280px;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-          
-          z-index: 1000;
-        }
+       
 
         .color-area {
           width: 100%;
@@ -173,25 +181,10 @@ const ToolColorPicker = ({ color = { r: 255, g: 0, b: 0, a: 1 }, onChange, hexCo
           top: ${100 - hsv.v}%;
         }
 
-        .slider {
-          height: 18px;
-          border-radius: 9px;
-          position: relative;
-          cursor: pointer;
-          margin-bottom: 12px;
-          border: 1px solid #333;
-          user-select: none;
-        }
-
-        .hue-slider {
-          background: linear-gradient(to right, 
-            #ff0000, #ff8000, #ffff00, #80ff00, 
-            #00ff00, #00ff80, #00ffff, #0080ff, 
-            #0000ff, #8000ff, #ff00ff, #ff0080, #ff0000
-          );
-        }
+       
 
         .alpha-slider {
+        height: 18px;
           background: 
             linear-gradient(to right, 
               rgba(${currentColor.r}, ${currentColor.g}, ${currentColor.b}, 0),
@@ -200,118 +193,10 @@ const ToolColorPicker = ({ color = { r: 255, g: 0, b: 0, a: 1 }, onChange, hexCo
             url("data:image/svg+xml,%3csvg width='20' height='20' xmlns='http://www.w3.org/2000/svg'%3e%3cdefs%3e%3cpattern id='checker' x='0' y='0' width='10' height='10' patternUnits='userSpaceOnUse'%3e%3crect fill='%23ccc' x='0' width='5' height='5'/%3e%3crect fill='%23ccc' x='5' y='5' width='5' height='5'/%3e%3c/pattern%3e%3c/defs%3e%3crect width='100%25' height='100%25' fill='url(%23checker)'/%3e%3c/svg%3e");
         }
 
-        .slider-thumb {
-          position: absolute;
-          top: 50%;
-          width: 4px;
-          height: 22px;
-          background: white;
-          border: 1px solid #333;
-          border-radius: 2px;
-          transform: translate(-50%, -50%);
-          pointer-events: none;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-        }
+        
+       
 
-        .controls-row {
-          display: flex;
-          gap: 12px;
-          margin-bottom: 16px;
-        }
-
-        .input-group {
-          flex: 1;
-        }
-
-        .input-label {
-          display: block;
-          font-size: 11px;
-          color: #999;
-          margin-bottom: 4px;
-          text-transform: uppercase;
-          font-weight: 600;
-        }
-
-        .input-field {
-          width: 100%;
-          background: #2a2a2a;
-          border: 1px solid #444;
-          border-radius: 6px;
-          color: #f0f0f0;
-          font-size: 13px;
-          padding: 8px;
-          text-align: center;
-          transition: border-color 0.2s ease;
-        }
-
-        .input-field:focus {
-          outline: none;
-          border-color: #8c52ff;
-          box-shadow: 0 0 0 2px rgba(140, 82, 255, 0.2);
-        }
-
-        .hex-input {
-          background: #2a2a2a;
-          border: 1px solid #444;
-          border-radius: 6px;
-          color: #f0f0f0;
-          font-size: 13px;
-          padding: 8px 12px;
-          width: 100%;
-          font-family: 'Courier New', monospace;
-          margin-bottom: 16px;
-          transition: border-color 0.2s ease;
-        }
-
-        .hex-input:focus {
-          outline: none;
-          border-color: #8c52ff;
-          box-shadow: 0 0 0 2px rgba(140, 82, 255, 0.2);
-        }
-
-        .color-preview {
-          width: 100%;
-          height: 40px;
-          border-radius: 8px;
-          border: 1px solid #444;
-          margin-bottom: 16px;
-          background: 
-            rgba(${currentColor.r}, ${currentColor.g}, ${currentColor.b}, ${currentColor.a}),
-            url("data:image/svg+xml,%3csvg width='20' height='20' xmlns='http://www.w3.org/2000/svg'%3e%3cdefs%3e%3cpattern id='checker' x='0' y='0' width='10' height='10' patternUnits='userSpaceOnUse'%3e%3crect fill='%23666' x='0' width='5' height='5'/%3e%3crect fill='%23999' x='5' y='5' width='5' height='5'/%3e%3c/pattern%3e%3c/defs%3e%3crect width='100%25' height='100%25' fill='url(%23checker)'/%3e%3c/svg%3e");
-        }
-
-        .presets {
-          display: grid;
-          grid-template-columns: repeat(6, 1fr);
-          gap: 6px;
-        }
-
-        .preset {
-          width: 100%;
-          height: 28px;
-          border-radius: 6px;
-          cursor: pointer;
-          border: 1px solid #444;
-          transition: all 0.2s ease;
-        }
-
-        .preset:hover {
-          transform: scale(1.1);
-          border-color: #8c52ff;
-          box-shadow: 0 2px 8px rgba(140, 82, 255, 0.3);
-        }
-
-        .rgba-display {
-          background: #2a2a2a;
-          border: 1px solid #444;
-          border-radius: 6px;
-          padding: 8px 12px;
-          font-family: 'Courier New', monospace;
-          font-size: 11px;
-          color: #999;
-          text-align: center;
-          margin-top: 12px;
-        }
+        
       `}</style>
 
       {/* Área principal de color */}
@@ -319,6 +204,7 @@ const ToolColorPicker = ({ color = { r: 255, g: 0, b: 0, a: 1 }, onChange, hexCo
         ref={colorAreaRef}
         className="color-area"
       >
+        
         <div className="color-cursor" />
       </div>
 
@@ -377,8 +263,8 @@ const ToolColorPicker = ({ color = { r: 255, g: 0, b: 0, a: 1 }, onChange, hexCo
         setHexColor={setHexColor}
       />
 
-      {/* Vista previa */}
-      <div className="color-preview" />
+   
+     
 
       {/* Colores predefinidos */}
       <div className="presets">
@@ -397,10 +283,7 @@ const ToolColorPicker = ({ color = { r: 255, g: 0, b: 0, a: 1 }, onChange, hexCo
         ))}
       </div>
 
-      {/* Display RGBA */}
-      <div className="rgba-display">
-        rgba({currentColor.r}, {currentColor.g}, {currentColor.b}, {currentColor.a.toFixed(2)})
-      </div>
+     
     </div>
   );
 };

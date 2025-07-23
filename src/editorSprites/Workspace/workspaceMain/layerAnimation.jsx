@@ -866,6 +866,7 @@ const [isDraggingLayerFrame, setIsDraggingLayerFrame] = useState(false);
 
 // Modificar la función handleFrameSelection existente para manejar el mousedown
 const handleFrameMouseDown = (frameNumber, event) => {
+  clearCurrentSelection();
   const { ctrlKey, metaKey, shiftKey } = event;
   const isCtrlOrCmd = ctrlKey || metaKey;
 
@@ -934,6 +935,7 @@ useEffect(() => {
 
 
 const handleFrameSelection = (frameNumber, event) => {
+  clearCurrentSelection();
   const { ctrlKey, metaKey, shiftKey } = event;
   const isCtrlOrCmd = ctrlKey || metaKey;
 
@@ -965,6 +967,7 @@ const handleFrameSelection = (frameNumber, event) => {
 };
 
 const handleLayerFrameMouseDown = (layerId, frameIndex, event) => {
+  clearCurrentSelection();
   const frameNumber = frameIndex + 1;
   const { ctrlKey, metaKey, shiftKey } = event;
   const isCtrlOrCmd = ctrlKey || metaKey;
@@ -1001,6 +1004,7 @@ const handleLayerFrameMouseDown = (layerId, frameIndex, event) => {
 };
 
 const handleLayerFrameMouseEnter = (frameNumber) => {
+ 
   // Solo expandir selección si realmente estamos arrastrando FRAMES DE CAPAS
   if (isDraggingLayerFrame) {
     setSelectedFrames(prev => {
@@ -1070,6 +1074,7 @@ useEffect(() => {
       }
     });
   });
+  
 }, [pixelGroups, currentFrame, frames, saveCurrentFrameState]);
 /*Funciones especiales para la gestion de la animacion: */
 
@@ -1472,9 +1477,12 @@ const handleLastFrame = () => {
   };
 
   const handleLayerChange = (layerId) => {
+ 
     showOnionSkinForLayer(layerId)
-    clearCurrentSelection();
-    setActiveLayerId(layerId);
+   
+  
+      setActiveLayerId(layerId);
+    
   };
 
   const startEditing = (layer, e) => {
@@ -1510,12 +1518,13 @@ const renderLayerWithTimeline = (layer, depth = 0) => {
       {/* Parte izquierda - Info de la capa/grupo (sin cambios) */}
       <div
         onContextMenu={(e) => {
+          clearCurrentSelection();
           handleContextMenu(e, 'layer');
           handleLayerChange(layer.id);
         }}
         className={`layer-info ${layer.visible ? 'visible' : 'hidden'} ${activeLayerId === layer.id ? 'selected' : ''}`}
         style={{ paddingLeft: `0px` }}
-        onClick={() => handleLayerChange(layer.id)}
+        onClick={() => {   clearCurrentSelection();handleLayerChange(layer.id)}}
       >
         {/* ... resto del contenido de layer-info sin cambios ... */}
         <div className="layer-content">
@@ -2024,30 +2033,7 @@ const MemoizedFrameNumber = React.memo(({ frameNumber, isCurrent, isSelected, on
       </div>
 
       {/* Información de selección */}
-      {(selectedGroup || selectedPixels) && (
-        <div className="selection-info">
-          {selectedGroup ? (
-            <div className="selected-group">
-              <strong>Grupo seleccionado:</strong> 
-              <span className="group-name">{selectedGroup.name}</span>
-              <span className="pixel-count">({selectedGroup.pixels?.length}px)</span>
-              <button 
-                onClick={clearSelectedGroup}
-                className="clear-btn"
-                title="Deseleccionar grupo"
-              >
-                <LuX />
-              </button>
-            </div>
-          ) : (
-            <div className="selected-pixels">
-              <strong>Selección activa:</strong> 
-              <span className="pixel-count">{selectedPixels?.length}px</span>
-            </div>
-          )}
-        </div>
-      )}
-
+     
 
     </div>
   );

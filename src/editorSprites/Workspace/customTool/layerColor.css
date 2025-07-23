@@ -34,14 +34,7 @@
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
   
-  .layer-color-container:hover {
-    transform: translateY(-2px);
-    box-shadow: 
-      0 12px 40px rgba(0, 0, 0, 0.5),
-      0 4px 12px rgba(0, 0, 0, 0.3),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  }
-  
+
   /* Header */
   .layer-color-header {
     display: flex;
@@ -131,6 +124,20 @@
   }
   
   /* Color Button */
+  .layer-color-overlay{
+    width: 35px;
+    height: 35px;
+    border-radius: 10px;
+    border: 0px solid var(--layer-border-color);
+    background: conic-gradient(
+      #3d3d3d 0% 25%,
+      white 0% 50%,
+      #3d3d3d 0% 75%,
+      white 0% 100%
+    );
+    background-size: 12px 12px;
+  }
+
   .layer-color-button {
     width: 35px;
     height: 35px;
@@ -634,6 +641,8 @@
 
 .color-palette-header {
   display: flex;
+  gap: 10px;
+  flex-direction: column;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 6px;
@@ -998,4 +1007,926 @@ transition: all 0.2s ease;
 .indexed-color-finish-btn:hover {
 background: #2ed573;
 transform: translateY(-1px);
+}
+
+
+/* ===== GRADIENT MODE STYLES ===== */
+
+/* Header Controls */
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.gradient-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gradient-toggle-label {
+  width: 38px !important;
+  height: 20px !important;
+  background: var(--layer-toggle-off);
+  border-radius: 10px;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.gradient-toggle-label:before {
+  width: 16px !important;
+  height: 16px !important;
+  top: 2px !important;
+  left: 2px !important;
+}
+
+.layer-toggle-input:checked + .gradient-toggle-label {
+  background: linear-gradient(45deg, #ff6b35, #f7931e);
+  border-color: #ff6b35;
+}
+
+.layer-toggle-input:checked + .gradient-toggle-label:before {
+  transform: translateX(18px);
+  background: linear-gradient(135deg, #ffffff 0%, #ffe6cc 100%);
+}
+
+.gradient-mode-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--layer-text-primary);
+  letter-spacing: 0.5px;
+}
+
+/* Gradient Editor Section */
+.gradient-editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 12px;
+  background: var(--layer-bg-primary);
+  border-radius: 12px;
+  border: 1px solid var(--layer-border-color);
+}
+.gradient-section{
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  gap: 10px;
+  justify-content: space-between;
+  align-items: center;
+ 
+}
+/* Gradient Preview */
+.gradient-preview-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 30%;
+  height: 100%;
+}
+
+.gradient-preview-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--layer-text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.gradient-preview {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  border: 2px solid var(--layer-border-color);
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+
+
+/* Gradient Type Controls */
+.gradient-type-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gradient-type-buttons {
+  display: flex;
+  gap: 8px;
+  background: var(--layer-bg-secondary);
+  border-radius: 8px;
+  padding: 4px;
+  border: 1px solid var(--layer-border-color);
+}
+
+.gradient-type-btn {
+  flex: 1;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--layer-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.gradient-type-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--layer-text-primary);
+}
+
+.gradient-type-btn.active {
+  background: var(--layer-accent-color);
+  color: white;
+  box-shadow: 0 2px 8px rgba(124, 77, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+/* Gradient Angle Control */
+.gradient-angle-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gradient-angle-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--layer-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.gradient-angle-slider {
+  width: 100%;
+  height: 6px;
+  background: var(--layer-bg-secondary);
+  border-radius: 3px;
+  outline: none;
+  border: 1px solid var(--layer-border-color);
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.gradient-angle-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(135deg, var(--layer-accent-color), var(--layer-accent-hover));
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.gradient-angle-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(135deg, var(--layer-accent-color), var(--layer-accent-hover));
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Gradient Stops Container */
+.gradient-stops-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  
+}
+
+.gradient-stops-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--layer-text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.gradient-stop-controls{
+
+}
+ 
+.gradient-remove-stop-btn {
+  position: absolute;
+  top: 1.5rem;
+  left: -8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 2px 8px;
+  
+  /* Colores base dark theme */
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  border: 1px solid #ff4757;
+  border-radius: 8px;
+  color: #ff4757;
+  
+  /* Tipografía */
+  font-size: 12px;
+  font-weight: 500;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: 0.3px;
+  
+  /* Transiciones suaves */
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  outline: none;
+  
+  
+  /* Sombras sutiles */
+  box-shadow: 
+    0 2px 8px rgba(255, 71, 87, 0.15),
+    0 1px 3px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Efecto hover */
+.gradient-remove-stop-btn:hover {
+  background: linear-gradient(135deg, #ff4757 0%, #ff3742 100%);
+  border-color: #ff3742;
+  color: #ffffff;
+  transform: translateY(-1px);
+  
+  box-shadow: 
+    0 4px 16px rgba(255, 71, 87, 0.3),
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+
+
+.gradient-bar-container {
+  position: relative;
+  width: 100%;
+  height: 40px;
+  cursor: crosshair;
+  padding: 16px 0;
+}
+
+.gradient-bar {
+  width: 100%;
+  height: 20px;
+  border-radius: 10px;
+  border: 2px solid var(--layer-border-color);
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.gradient-bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.gradient-stops-track {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.gradient-stop {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 3px solid white;
+  cursor: grab;
+  pointer-events: auto;
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 10;
+  user-select: none;
+}
+
+.gradient-stop:hover {
+  transform: translate(-50%, -50%) scale(1.1);
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.5),
+    0 0 0 2px white,
+    0 0 0 4px var(--layer-accent-color);
+}
+
+.gradient-stop.selected {
+  border-color: var(--layer-accent-color);
+  box-shadow: 
+    0 4px 12px rgba(124, 77, 255, 0.4),
+    0 0 0 2px white,
+    0 0 0 4px var(--layer-accent-color);
+  transform: translate(-50%, -50%) scale(1.15);
+}
+
+.gradient-stop.dragging {
+  cursor: grabbing;
+  transform: translate(-50%, -50%) scale(1.2);
+  box-shadow: 
+    0 6px 20px rgba(0, 0, 0, 0.6),
+    0 0 0 3px white,
+    0 0 0 6px var(--layer-accent-color);
+  z-index: 20;
+  transition: none;
+}
+
+.gradient-stop.dragging .gradient-stop-handle {
+  opacity: 0.8;
+}
+
+.gradient-stop-handle {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 8px solid white;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+}
+
+.gradient-stop.selected .gradient-stop-handle {
+  border-bottom-color: var(--layer-accent-color);
+}
+
+.gradient-stops-help {
+  font-size: 10px;
+  color: var(--layer-text-secondary);
+  text-align: center;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+/* Simplified Gradient Stop Controls */
+.stop-info-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.stop-position-display {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stop-label {
+  font-size: 10px;
+  color: var(--layer-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.stop-value {
+  font-size: 14px;
+  color: var(--layer-text-primary);
+  font-weight: 700;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+}
+
+.stop-color-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stop-color-swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 2px solid var(--layer-border-color);
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.stop-color-swatch:hover {
+  border-color: var(--layer-accent-color);
+  transform: scale(1.05);
+  box-shadow: 
+    0 4px 12px rgba(124, 77, 255, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Gradient Stop Controls */
+.gradient-stop-controls {
+  background: var(--layer-bg-secondary);
+  border: 1px solid var(--layer-border-color);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.selected-stop-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stop-position-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stop-position-control label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--layer-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stop-position-slider {
+  width: 100%;
+  height: 6px;
+  background: var(--layer-bg-primary);
+  border-radius: 3px;
+  outline: none;
+  border: 1px solid var(--layer-border-color);
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.stop-position-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(135deg, var(--layer-success-color), #2bb675);
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.stop-position-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(135deg, var(--layer-success-color), #2bb675);
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.stop-color-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stop-color-swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 2px solid var(--layer-border-color);
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.stop-color-hex {
+  font-size: 11px;
+  color: var(--layer-text-secondary);
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--layer-bg-tertiary);
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--layer-border-color);
+  font-weight: 500;
+}
+
+/* Gradient Color Picker Container */
+.gradient-color-picker-container {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--layer-bg-primary);
+  border: 2px solid #ff6b35;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 
+    0 12px 40px rgba(0, 0, 0, 0.4),
+    0 4px 12px rgba(255, 107, 53, 0.3);
+  z-index: 1000;
+  min-width: 300px;
+  max-width: 90vw;
+}
+
+.gradient-color-picker-header {
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.gradient-color-picker-header h4 {
+  margin: 0 0 8px 0;
+  color: var(--layer-text-primary);
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.gradient-stop-info {
+  font-size: 12px;
+  color: var(--layer-text-secondary);
+  background: rgba(255, 107, 53, 0.1);
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 107, 53, 0.3);
+  font-weight: 600;
+}
+
+.gradient-color-picker-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+}
+
+.gradient-color-close-btn {
+  background: var(--layer-success-color);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.gradient-color-close-btn:hover {
+  background: #2ed573;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(60, 222, 141, 0.4);
+}
+
+.gradient-color-close-btn:active {
+  transform: translateY(0);
+}
+
+/* Header Layout Updates */
+.layer-color-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--layer-border-color);
+}
+
+/* Responsive Design for Gradient Mode */
+@media (max-width: 480px) {
+  .gradient-editor-section {
+    padding: 8px;
+    gap: 12px;
+  }
+  
+  .gradient-preview {
+    height: 32px;
+  }
+  
+  .gradient-type-buttons {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .gradient-type-btn {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+  
+  .gradient-bar-container {
+    height: 36px;
+    padding: 12px 0;
+  }
+  
+  .gradient-bar {
+    height: 16px;
+  }
+  
+  .gradient-stop {
+    width: 18px;
+    height: 18px;
+  }
+  
+  .gradient-color-picker-container {
+    min-width: 280px;
+    padding: 12px;
+  }
+  
+  .selected-stop-info {
+    gap: 8px;
+  }
+  
+  .stop-color-preview {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .header-controls {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .gradient-mode-toggle {
+    align-self: flex-end;
+  }
+}
+
+/* Animations for Gradient Elements */
+@keyframes gradient-stop-appear {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.gradient-stop {
+  animation: gradient-stop-appear 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes gradient-bar-pulse {
+  0%, 100% {
+    box-shadow: 
+      0 2px 8px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+  50% {
+    box-shadow: 
+      0 4px 16px rgba(124, 77, 255, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 0 0 2px rgba(124, 77, 255, 0.1);
+  }
+}
+
+.gradient-bar-container:hover .gradient-bar {
+  animation: gradient-bar-pulse 2s ease-in-out infinite;
+}
+
+/* Enhanced Drag Visual Feedback */
+.gradient-bar-container.drag-active {
+  cursor: grabbing;
+}
+
+.gradient-bar-container.drag-active .gradient-bar {
+  box-shadow: 
+    0 4px 16px rgba(124, 77, 255, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 2px rgba(124, 77, 255, 0.1);
+}
+
+/* Prevent text selection during drag */
+.gradient-bar-container * {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Touch Support for Mobile */
+.gradient-stop {
+  touch-action: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .gradient-stop {
+    width: 24px;
+    height: 24px;
+  }
+  
+  .gradient-stop-handle {
+    border-left-width: 8px;
+    border-right-width: 8px;
+    border-bottom-width: 10px;
+  }
+}
+
+/* Accessibility: Keyboard Navigation */
+.gradient-stop:focus-visible {
+  outline: 2px solid var(--layer-accent-color);
+  outline-offset: 4px;
+}
+
+/* Smooth Drag Performance */
+.gradient-stop.dragging * {
+  pointer-events: none;
+}
+
+/* Visual Feedback for Drop Zones */
+.gradient-bar-container:hover {
+  cursor: crosshair;
+}
+
+.gradient-bar-container.drag-active:hover {
+  cursor: grabbing;
+}
+
+/* Smooth Transitions */
+.gradient-editor-section * {
+  transition: all 0.2s ease;
+}
+
+/* Gradient Mode Active State for Palette */
+.color-palette-container.gradient-mode-active {
+  border-color: rgba(255, 107, 53, 0.3);
+  background: linear-gradient(135deg, var(--layer-bg-primary) 0%, rgba(255, 107, 53, 0.05) 100%);
+}
+
+.color-palette-container.gradient-mode-active .palette-color-swatch:hover {
+  border-color: #ff6b35;
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3);
+}
+
+/* Enhanced Toggle State Display */
+.gradient-toggle-label .toggle-state-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--layer-text-primary);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  letter-spacing: 0.3px;
+}
+
+.layer-toggle-input:checked + .gradient-toggle-label .toggle-state-text {
+  opacity: 1;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Loading State for Gradient Operations */
+.gradient-editor-section.loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.gradient-editor-section.loading::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(124, 77, 255, 0.2);
+  border-top: 2px solid var(--layer-accent-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* Accessibility Improvements */
+@media (prefers-reduced-motion: reduce) {
+  .gradient-stop,
+  .gradient-bar-container:hover .gradient-bar,
+  .gradient-color-close-btn,
+  .gradient-type-btn {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* High Contrast Mode Support */
+@media (prefers-contrast: high) {
+  .gradient-bar,
+  .gradient-preview {
+    border-width: 3px;
+  }
+  
+  .gradient-stop {
+    border-width: 4px;
+  }
+  
+  .gradient-type-btn.active {
+    border: 2px solid white;
+  }
+}
+
+
+/*asddddddddddddddddddddd*/
+
+/*
+ultima feature, hacer que haya colores muy usados
+*/
+
+.layer-util-colors{
+  height: 100%;
+  display: flex;
+
+flex-direction: column;
+justify-content: space-around;
+
+}
+
+.util-color-overlay{
+  width: 25px;
+  height: 25px;
+  border-radius: 6px;
+  border: 0px solid var(--layer-border-color);
+  background: conic-gradient(
+    #3d3d3d 0% 25%,
+    white 0% 50%,
+    #3d3d3d 0% 75%,
+    white 0% 100%
+  );
+  background-size: 12px 12px;
+}
+
+.util-color-button {
+  width: 25px;
+  height: 25px;
+  border-radius: 6px;
+  border: 2px solid var(--layer-border-color);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.util-color-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.util-color-button:hover {
+  border-color: var(--layer-accent-color);
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 
+    0 6px 20px rgba(0, 0, 0, 0.4),
+    0 0 0 4px rgba(124, 77, 255, 0.2);
+}
+
+.util-color-button:hover::before {
+  opacity: 1;
+}
+
+.util-color-button.layer-active {
+  border-color: var(--layer-accent-color);
+  box-shadow: 
+    0 4px 16px rgba(124, 77, 255, 0.4),
+    0 0 0 3px rgba(124, 77, 255, 0.2);
+  transform: scale(1.05);
 }

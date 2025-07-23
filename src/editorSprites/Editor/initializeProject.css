@@ -44,9 +44,9 @@
   
   .initialize-container {
     font-family:'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
-    width: 95%;
-    max-width: 1200px;
-    height: 90%;
+    width: 70%;
+ 
+    height: 95%;
     max-height: 1000px;
     background: var(--bg-secondary);
     border-radius: 20px;
@@ -73,10 +73,14 @@
   /* Header */
   .initialize-header {
     background: linear-gradient(135deg, var(--accent-color) 0%, var(--accent-active) 100%);
-    padding: 2rem;
+    padding: 1rem;
     text-align: center;
     position: relative;
     overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
   }
   
   .initialize-header::before {
@@ -91,9 +95,13 @@
   }
   
   .header-icon {
-    position: relative;
-    z-index: 1;
-    margin-bottom: 1rem;
+   
+  }
+
+  .header-icon img{
+    width: 120px;
+    height: auto;
+    object-fit: contain;
   }
   
   .pixel-icon {
@@ -127,7 +135,7 @@
   .app-title {
     position: relative;
     z-index: 1;
-    font-size: 2.5rem;
+    font-size: 3rem;
     font-weight: 700;
     color: white;
     margin: 0;
@@ -872,6 +880,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    height: 60px;
   }
   
   .powered-by {
@@ -889,8 +898,7 @@
   }
   
   .logo-icon {
-    width: 24px;
-    height: 24px;
+    
     background: var(--accent-color);
     border-radius: 4px;
     display: grid;
@@ -899,6 +907,10 @@
     padding: 3px;
   }
   
+  .logo-icon img{
+   object-fit: contain;
+   width: 50px;
+  }
   .logo-pixel {
     background: white;
     border-radius: 1px;

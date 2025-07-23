@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { usePointer, useLayerManager } from "../hooks/hooks";
-import { flushSync } from 'react-dom';
+import { flushSync } from "react-dom";
+import PlayingAnimation from "./playingAnimation";
+
+import reactiveCursor from "./cursorIcons";
 import {
   LuEye,
   LuEyeOff,
@@ -15,7 +18,25 @@ import {
   LuUndo,
   LuRedo,
   LuBrainCircuit,
+  LuBrush,
+  LuMousePointer2,
+  LuMousePointerClick,
+  LuHand,
+  LuLassoSelect,
+  LuType,
+  LuSun,
+  LuMoon,
+  LuSquare,
+  LuCircle,
+  LuTriangle,
+  LuSave,
 } from "react-icons/lu";
+import { FaBezierCurve } from "react-icons/fa";
+import { TfiLayoutLineSolid } from "react-icons/tfi";
+import { BiPolygon } from "react-icons/bi";
+import { LiaFootballBallSolid } from "react-icons/lia";
+import { FaDrawPolygon } from "react-icons/fa6";
+import { MdBlurOn, MdGradient, MdOutlineDeblur } from "react-icons/md";
 import { SlLayers } from "react-icons/sl";
 import ViewportNavigator from "./viewportNavigator";
 import CustomTool from "../customTool/customTool";
@@ -36,6 +57,9 @@ import BoundsWorker from "./boundsWorker.js?worker";
 import PlayAnimation from "../hooks/playAnimation";
 import TopToolbar from "./topToolbar";
 import AIgenerator from "../AIgenerator.jsx/AIgenerator";
+import NavbarLateral from "../../navbarLateral/Navbar";
+import { PiIntersectDuotone } from "react-icons/pi";
+import { BsPentagon } from "react-icons/bs";
 
 // Definición de las herramientas disponibles
 const TOOLS = {
@@ -55,6 +79,10 @@ const TOOLS = {
   polygonPencil: "polygonPencil",
   light: "light",
   dark: "dark",
+  selectByColor: "selectByColor",
+  blurFinger: "blurFinger",
+  smudge: "smudge",
+  deblur: "deblur"
 };
 
 function CanvasTracker({
@@ -78,9 +106,206 @@ function CanvasTracker({
     },
   });
 
+  const navItemsLateral = [
+    {
+      dropdown: [
+        {
+          label: "Pincel",
+          icon: <LuBrush />,
+          onClick: () => setTool("pencil"),
+          toolValue: "pencil"
+        },
+        { 
+          label: "Perfil", 
+          icon: "👤", 
+          onClick: () => console.log("Perfil"),
+          toolValue: null
+        },
+        {
+          label: "Preferencias",
+          icon: "🔧",
+          onClick: () => console.log("Preferencias"),
+          toolValue: null
+        },
+        {
+          label: "Cerrar sesión",
+          icon: "🚪",
+          onClick: () => console.log("Cerrar sesión"),
+          toolValue: null
+        },
+      ],
+    },
+    {
+      dropdown: [
+        {
+          label: "Selector",
+          icon: <LuMousePointer2 />,
+          onClick: () => setTool("select"),
+          toolValue: "select"
+        },
+        { 
+          label: "Perfil", 
+          icon: "👤", 
+          onClick: () => console.log("Perfil"),
+          toolValue: null
+        },
+        {
+          label: "Preferencias",
+          icon: "🔧",
+          onClick: () => console.log("Preferencias"),
+          toolValue: null
+        },
+        {
+          label: "Cerrar sesión",
+          icon: "🚪",
+          onClick: () => console.log("Cerrar sesión"),
+          toolValue: null
+        },
+      ],
+    },
+    {
+      label: "Selector por color",
+      icon: <LuMousePointerClick />,
+      onClick: () => setTool("selectByColor"),
+      toolValue: "selectByColor"
+    },
+    {
+      label: "Borrador",
+      icon: <LuEraser />,
+      onClick: () => setTool("eraser"),
+      toolValue: "eraser"
+    },
+    {
+      label: "Difuminador",
+      icon: <MdBlurOn />,
+      onClick: () => setTool("blurFinger"),
+      toolValue: "blurFinger"
+    },
+    {
+      label: "Mezclador",
+      icon: <PiIntersectDuotone />,
+      onClick: () => setTool("smudge"),
+      toolValue: "smudge"
+    },
+    {
+      label: "Clarificar",
+      icon: <MdOutlineDeblur/>,
+      onClick: () => setTool("deblur"),
+      toolValue: "deblur"
+    },
+    {
+      label: "Mover",
+      icon: <LuHand />,
+      onClick: () => setTool("move"),
+      toolValue: "move"
+    },
+    {
+      dropdown: [
+        {
+          label: "Rellenar",
+          icon: <LuPaintBucket />,
+          onClick: () => setTool("fill"),
+          toolValue: "fill"
+        },
+        {
+          label: "Gradiente",
+          icon: <MdGradient />,
+          onClick: () => setTool("gradientFill"),
+          toolValue: "gradientFill"
+        },
+      ],
+    },
+    {
+      label: "Lazo",
+      icon: <LuLassoSelect />,
+      onClick: () => setTool("lassoSelect"),
+      toolValue: "lassoSelect"
+    },
+    {
+      label: "Text",
+      icon: <LuType />,
+      onClick: () => setTool("text"),
+      toolValue: "text"
+    },
+    {
+      label: "Creador de formas",
+      icon: <FaDrawPolygon />,
+      onClick: () => setTool("polygonPencil"),
+      toolValue: "polygonPencil"
+    },
+    {
+      label: "Luminosidad",
+      icon: <LuSun />,
+      onClick: () => setTool("light"),
+      toolValue: "light"
+    },
+    {
+      label: "Oscurecer",
+      icon: <LuMoon />,
+      onClick: () => setTool("dark"),
+      toolValue: "dark"
+    },
+    {
+      label: "Cuadrado",
+      icon: <LuSquare />,
+      onClick: () => setTool("square"),
+      toolValue: "square"
+    },
+    {
+      label: "Circulo",
+      icon: <LuCircle />,
+      onClick: () => setTool("circle"),
+      toolValue: "circle"
+    },
+    {
+      label: "Elipse",
+      icon: <LiaFootballBallSolid />,
+      onClick: () => setTool("ellipse"),
+      toolValue: "ellipse"
+    },
+    {
+      label: "Triangulo",
+      icon: <LuTriangle />,
+      onClick: () => setTool("triangle"),
+      toolValue: "triangle"
+    },
+    {
+      label: "Poligono",
+      icon: <BsPentagon />,
+      onClick: () => setTool("polygon"),
+      toolValue: "polygon"
+    },
+    {
+      label: "Linea",
+      icon: <TfiLayoutLineSolid />,
+      onClick: () => setTool("line"),
+      toolValue: "line"
+    },
+    {
+      label: "Curva",
+      icon: <FaBezierCurve />,
+      onClick: () => setTool("curve"),
+      toolValue: "curve"
+    },
+  ];
+
+  const [navConfigLateral, setNavLateralConfig] = useState({
+    variant: "vertical",
+    theme: "dark",
+    showOnlyIcons: true,
+    twoColumns: false,
+  });
+
+//Brochas creadas:
+
+const [myBrushes, setMyBrushes] = useState(null);
+
+
+
   //Reproduccion:
   const [isPlaying, setIsPlaying] = useState(false);
-
+  // estado especial para manejo de gradiente editable
+  const [gradientPixels, setGradientPixels] = useState(null);
   //Estados de la inteligencia artificial:
   const [activeAI, setActiveAI] = useState(false);
   const [isSpacePressed, setIsSpacePressed] = useState(false);
@@ -103,7 +328,7 @@ function CanvasTracker({
   const circleStartRef = useRef(null);
   const ellipseStartRef = useRef(null);
   const polygonStartRef = useRef(null);
-
+  
   // Estados principales
 
   const [zoom, setZoom] = useState(10);
@@ -158,7 +383,7 @@ function CanvasTracker({
   });
   const [fillColor, setFillColor] = useState({ r: 0, g: 0, b: 0, a: 255 });
   const [borderColor, setBorderColor] = useState({ r: 0, g: 0, b: 0, a: 255 });
-
+  const [isolatedPixels, setIsolatedPixels] = useState(null);
   const [toolParameters, setToolParameters] = useState({
     fillColor: fillColor,
     backgroundColor: backgroundCOlor,
@@ -204,6 +429,8 @@ function CanvasTracker({
     getLayerData,
     erasePixels,
     floodFill,
+    gradientFloodFill,
+    getMatchingPixels,
     duplicateLayer,
     pixelGroups,
     selectedGroup,
@@ -305,7 +532,10 @@ function CanvasTracker({
     //funcion para activar el modo darken o lighter:
     setActiveLighter,
     //gestion del data url:
-    createLayerAndPaintDataUrlCentered
+    createLayerAndPaintDataUrlCentered,
+
+    //gestión del aislamiento de pixeles:
+   
   } = useLayerManager({
     width: totalWidth,
     height: totalHeight,
@@ -313,11 +543,47 @@ function CanvasTracker({
     viewportHeight,
     zoom,
     isPressed,
+    isolatedPixels
   });
 
   // Hook para rastreo del puntero
 
+
+
+
+// Función auxiliar para verificar si un píxel está en la lista de píxeles aislados
+const isPixelIsolated = useCallback((x, y) => {
+  if (!isolatedPixels || isolatedPixels.length === 0) {
+    return true; // Si no hay aislamiento, todos los píxeles son válidos
+  }
+  
+  return isolatedPixels.some(pixel => pixel.x === x && pixel.y === y);
+}, [isolatedPixels]);
+
+// Versión optimizada usando Set para mejor rendimiento con muchos píxeles
+const isolatedPixelsSet = useMemo(() => {
+  if (!isolatedPixels || isolatedPixels.length === 0) return null;
+  
+  return new Set(isolatedPixels.map(pixel => `${pixel.x},${pixel.y}`));
+}, [isolatedPixels]);
+
+const isPixelIsolatedOptimized = useCallback((x, y) => {
+  if (!isolatedPixelsSet) return true; // Sin aislamiento
+  
+  return isolatedPixelsSet.has(`${x},${y}`);
+}, [isolatedPixelsSet]);
+// Función auxiliar para verificar si un píxel está en la lista de píxeles aislados
+const canPaintAtPixel = useCallback((x, y) => {
+  if (!isolatedPixelsSet) return true; // Sin aislamiento, todos los píxeles son válidos
+  
+  return isolatedPixelsSet.has(`${x},${y}`);
+}, [isolatedPixelsSet]);
+
+
+
+
   //Funcion de guardado:
+
 
   const handleExport = async () => {
     const folderInfo = getStoredFolderInfo();
@@ -365,16 +631,51 @@ function CanvasTracker({
     }
   }, [loadedData]);
 
+  const smudgeBufferRef = useRef(new Map());
+
+// 6. Limpiar buffer cuando se cambia de herramienta o se suelta el mouse
+useEffect(() => {
+  if (!isPressed || tool !== TOOLS.smudge) {
+    // Limpiar buffer cuando se suelta el mouse o cambia de herramienta
+    smudgeBufferRef.current.clear();
+  }
+}, [isPressed, tool]);
+
+
+//guardado automatico
+const [contadorCambios, setContadorCambios] = useState(0);
+
+useEffect(() => {
+  setContadorCambios((prev) => {
+    const nuevoContador = prev + 1;
+    if (nuevoContador % 4 === 0) {
+      handleExport();
+    }
+    return nuevoContador;
+  });
+}, [framesResume, isPressed]);
+
+
+
   //===============================Logica de canvas de espejo ====================================================//
   const {
     relativeToTarget: rightRelativeToTargetMirror,
     isPressed: rightIsPressedMirror,
-  } = usePointer(rightMirrorCornerRef, artboardRef, []);
+  } = usePointer(rightMirrorCornerRef, artboardRef, [], {
+    endPressOnLeave: false, // Permitir arrastre fuera del área
+    preventContextMenu: true
+  });
+  
   const {
     relativeToTarget: leftRelativeToTargetMirror,
     isPressed: leftIsPressedMirror,
-  } = usePointer(leftMirrorCornerRef, artboardRef, []);
-
+  } = usePointer(leftMirrorCornerRef, artboardRef, [], {
+    endPressOnLeave: false, // Permitir arrastre fuera del área
+    preventContextMenu: true
+  });
+  
+// 2. ESTADO SEPARADO para las posiciones de los corners
+const [isDraggingCorners, setIsDraggingCorners] = useState(false);
   const [positionCorners, setPositionCorners] = useState({
     x1: 0,
     y1: 0,
@@ -382,93 +683,7 @@ function CanvasTracker({
     y2: 0,
   });
 
-  useEffect(() => {
-    //para esquina izquierda
-    const leftViewportPixelCoords = getPixelCoordinates(
-      leftRelativeToTargetMirror
-    );
-    const leftCanvasCoords = viewportToCanvasCoords(
-      leftViewportPixelCoords.x,
-      leftViewportPixelCoords.y
-    );
-
-    //para esquina derecha
-    const rightViewportPixelCoords = getPixelCoordinates(
-      rightRelativeToTargetMirror
-    );
-    const rightCanvasCoords = viewportToCanvasCoords(
-      rightViewportPixelCoords.x,
-      rightViewportPixelCoords.y
-    );
-
-    if (leftIsPressedMirror) {
-      setPositionCorners((prev) => ({
-        ...prev,
-        x1: leftCanvasCoords.x,
-        y1: leftCanvasCoords.y,
-      }));
-      setMirrorState((prev) => ({
-        ...prev,
-        bounds: {
-          ...prev.bounds,
-          x1: leftCanvasCoords.x + 1,
-          y1: leftCanvasCoords.y + 1,
-        },
-      }));
-    }
-
-    if (rightIsPressedMirror) {
-      setPositionCorners((prev) => ({
-        ...prev,
-        x2: rightCanvasCoords.x,
-        y2: rightCanvasCoords.y,
-      }));
-      setMirrorState((prev) => ({
-        ...prev,
-        bounds: {
-          ...prev.bounds,
-          x2: rightCanvasCoords.x - 1,
-          y2: rightCanvasCoords.y - 1,
-        },
-      }));
-    }
-
-    const canvas = mirrorCanvasRef.current;
-
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    if (mirrorState.customArea) {
-      ctx.fillStyle = "rgba(0, 0, 255, 0.1)";
-      ctx.strokeStyle = "rgba(0, 0, 255, 0.8)";
-      ctx.lineWidth = 4;
-
-      ctx.fillRect(
-        (mirrorState.bounds.x1 - viewportOffset.x) * zoom,
-        (mirrorState.bounds.y1 - viewportOffset.y) * zoom,
-        (mirrorState.bounds.x2 - mirrorState.bounds.x1) * zoom,
-        (mirrorState.bounds.y2 - mirrorState.bounds.y1) * zoom
-      );
-
-      ctx.strokeRect(
-        (mirrorState.bounds.x1 - viewportOffset.x) * zoom,
-        (mirrorState.bounds.y1 - viewportOffset.y) * zoom,
-        (mirrorState.bounds.x2 - mirrorState.bounds.x1) * zoom,
-        (mirrorState.bounds.y2 - mirrorState.bounds.y1) * zoom
-      );
-    }
-  }, [
-    mirrorCanvasRef,
-    zoom,
-    mirrorState,
-    viewportOffset,
-    leftRelativeToTargetMirror,
-    rightRelativeToTargetMirror,
-  ]);
+ 
 
   //===============================Logica de canvas de espejo ====================================================//
 
@@ -2094,6 +2309,143 @@ function CanvasTracker({
     };
   };
 
+  useEffect(() => {
+    // Solo procesar si alguna esquina está siendo presionada
+    if (!leftIsPressedMirror && !rightIsPressedMirror) {
+      setIsDraggingCorners(false);
+      return;
+    }
+  
+    setIsDraggingCorners(true);
+  
+    // Función helper para obtener coordenadas de canvas
+    const getCanvasCoordinates = (relativeCoords) => {
+      const viewportPixelCoords = getPixelCoordinates(relativeCoords);
+      return viewportToCanvasCoords(viewportPixelCoords.x, viewportPixelCoords.y);
+    };
+  
+    // Manejar esquina izquierda (superior izquierda)
+    if (leftIsPressedMirror && leftRelativeToTargetMirror.x && leftRelativeToTargetMirror.y) {
+      const leftCanvasCoords = getCanvasCoordinates(leftRelativeToTargetMirror);
+      
+      // Limitar las coordenadas dentro del canvas
+      const clampedX = Math.max(0, Math.min(totalWidth - 1, leftCanvasCoords.x));
+      const clampedY = Math.max(0, Math.min(totalHeight - 1, leftCanvasCoords.y));
+      
+      setPositionCorners(prev => ({
+        ...prev,
+        x1: clampedX,
+        y1: clampedY,
+      }));
+      
+      setMirrorState(prev => ({
+        ...prev,
+        bounds: {
+          ...prev.bounds,
+          x1: clampedX,
+          y1: clampedY,
+        },
+      }));
+    }
+  
+    // Manejar esquina derecha (inferior derecha)
+    if (rightIsPressedMirror && rightRelativeToTargetMirror.x && rightRelativeToTargetMirror.y) {
+      const rightCanvasCoords = getCanvasCoordinates(rightRelativeToTargetMirror);
+      
+      // Limitar las coordenadas dentro del canvas
+      const clampedX = Math.max(0, Math.min(totalWidth - 1, rightCanvasCoords.x));
+      const clampedY = Math.max(0, Math.min(totalHeight - 1, rightCanvasCoords.y));
+      
+      setPositionCorners(prev => ({
+        ...prev,
+        x2: clampedX,
+        y2: clampedY,
+      }));
+      
+      setMirrorState(prev => ({
+        ...prev,
+        bounds: {
+          ...prev.bounds,
+          x2: clampedX,
+          y2: clampedY,
+        },
+      }));
+    }
+  }, [
+    leftIsPressedMirror,
+    rightIsPressedMirror,
+    leftRelativeToTargetMirror,
+    rightRelativeToTargetMirror,
+    totalWidth,
+    totalHeight,
+    getPixelCoordinates,
+    viewportToCanvasCoords
+  ]);
+  
+  // 4. USEEFFECT SEPARADO para dibujar el canvas de espejo
+  useEffect(() => {
+    const canvas = mirrorCanvasRef.current;
+    if (!canvas) return;
+  
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+  
+    // Limpiar canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+    // Solo dibujar si el modo customArea está activo
+    if (!mirrorState.customArea) return;
+  
+    // Validar que los bounds sean válidos
+    const { x1, y1, x2, y2 } = mirrorState.bounds;
+    
+    if (x2 <= x1 || y2 <= y1) return; // Bounds inválidos
+  
+    const rectWidth = x2 - x1;
+    const rectHeight = y2 - y1;
+  
+    // Convertir a coordenadas de pantalla
+    const screenX = (x1 - viewportOffset.x) * zoom;
+    const screenY = (y1 - viewportOffset.y) * zoom;
+    const screenWidth = rectWidth * zoom;
+    const screenHeight = rectHeight * zoom;
+  
+    // Dibujar el área de espejo
+    ctx.fillStyle = isDraggingCorners ? "rgba(0, 0, 255, 0.2)" : "rgba(0, 0, 255, 0.1)";
+    ctx.strokeStyle = isDraggingCorners ? "rgba(0, 0, 255, 1)" : "rgba(0, 0, 255, 0.8)";
+    ctx.lineWidth = 2;
+  
+    ctx.fillRect(screenX, screenY, screenWidth, screenHeight);
+    ctx.strokeRect(screenX, screenY, screenWidth, screenHeight);
+  
+    // Dibujar líneas de guía si está arrastrando
+    if (isDraggingCorners) {
+      ctx.setLineDash([5, 5]);
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
+      ctx.lineWidth = 1;
+      
+      // Línea vertical en el centro
+      const centerX = screenX + screenWidth / 2;
+      ctx.beginPath();
+      ctx.moveTo(centerX, screenY);
+      ctx.lineTo(centerX, screenY + screenHeight);
+      ctx.stroke();
+      
+      // Línea horizontal en el centro
+      const centerY = screenY + screenHeight / 2;
+      ctx.beginPath();
+      ctx.moveTo(screenX, centerY);
+      ctx.lineTo(screenX + screenWidth, centerY);
+      ctx.stroke();
+      
+      ctx.setLineDash([]);
+    }
+  }, [
+    mirrorState,
+    viewportOffset,
+    zoom,
+    isDraggingCorners
+  ]);
   // Función para rellenar áreas
 
   // Efecto para observar cambios en el tamaño del workspace
@@ -2157,56 +2509,75 @@ function CanvasTracker({
   }, [zoom, workspaceWidth, workspaceHeight, totalWidth, totalHeight]);
 
   // Funciones para manejar el arrastre del canvas
-// Modifica la función handleStartDrag existente
-const handleStartDrag = useCallback(
-  (e) => {
-    if (drawMode === "move" || isSpacePressed) {
-      setIsDragging(true);
-      setDragStart({ x: e.clientX, y: e.clientY });
-      
-      // Cambiar cursor cuando se inicia el arrastre
-      if (workspaceRef.current && isSpacePressed) {
-        workspaceRef.current.style.cursor = 'grabbing';
+  // Modifica la función handleStartDrag existente
+  const handleStartDrag = useCallback(
+    (e) => {
+      if (drawMode === "move" || isSpacePressed) {
+        setIsDragging(true);
+        setDragStart({ x: e.clientX, y: e.clientY });
+
+        // Cambiar cursor cuando se inicia el arrastre
+       
       }
-    }
-  },
-  [drawMode, isSpacePressed]
-);
+    },
+    [drawMode, isSpacePressed]
+  );
 
-// Modifica la función handleDrag existente
-const handleDrag = useCallback(
-  (e) => {
-    if (isDragging && (drawMode === "move" || isSpacePressed)) {
-      const dx = e.clientX - dragStart.x;
-      const dy = e.clientY - dragStart.y;
+  // Modifica la función handleDrag existente
+  const deltaRef = useRef({ x: 0, y: 0 });
 
-      moveViewport(-dx / zoom, -dy / zoom);
+  const handleDrag = useCallback(
+    (e) => {
+      if (isDragging && (drawMode === "move" || isSpacePressed)) {
+        const dx = e.clientX - dragStart.x;
+        const dy = e.clientY - dragStart.y;
 
-      setDragStart({ x: e.clientX, y: e.clientY });
-    }
-  },
-  [isDragging, dragStart, zoom, drawMode, moveViewport, isSpacePressed]
-);
+        deltaRef.current.x += -dx / zoom;
+        deltaRef.current.y += -dy / zoom;
 
-// Modifica la función handleEndDrag existente
-const handleEndDrag = useCallback(() => {
-  setIsDragging(false);
-  
-  // Restaurar cursor apropiado
-  if (workspaceRef.current) {
-    if (isSpacePressed) {
-      workspaceRef.current.style.cursor = 'grab';
-    } else {
-      workspaceRef.current.style.cursor = drawMode === "move" ? "grab" : "crosshair";
-    }
-  }
-}, [isSpacePressed, drawMode]);
+        const moveX = Math.trunc(deltaRef.current.x);
+        const moveY = Math.trunc(deltaRef.current.y);
+
+        if (moveX !== 0 || moveY !== 0) {
+          moveViewport(moveX, moveY);
+          deltaRef.current.x -= moveX;
+          deltaRef.current.y -= moveY;
+          setDragStart({ x: e.clientX, y: e.clientY });
+        }
+      }
+    },
+    [isDragging, dragStart, zoom, drawMode, moveViewport, isSpacePressed]
+  );
+
+  // Modifica la función handleEndDrag existente
+  const handleEndDrag = useCallback(() => {
+    setIsDragging(false);
+
+   
+  }, [isSpacePressed, drawMode]);
 
   const rellenar = useCallback(
     (coords, color) => {
       floodFill(activeLayerId, coords.x, coords.y, color);
+      getMatchingPixels(activeLayerId, coords.x, coords.y);
     },
     [layers, activeLayerId, toolParameters, zoom]
+  );
+
+  const rellenarGradiente = useCallback(
+    (coords) => {
+      const gradientParams = {
+        isGradientMode: toolParameters.isGradientMode,
+        gradientStops: toolParameters.gradientStops,
+        gradientType: toolParameters.gradientType, // o 'radial'
+        gradientAngle: toolParameters.gradientAngle - 90,
+        dithering: toolParameters.dithering,
+        ditheringType: toolParameters.ditheringType,
+        ditheringStrength: toolParameters.ditheringStrength,
+      };
+      gradientFloodFill(activeLayerId, coords.x, coords.y, gradientParams);
+    },
+    [layers, toolParameters, activeLayerId, zoom]
   );
 
   // Efecto para añadir event listeners de arrastre
@@ -2227,13 +2598,23 @@ const handleEndDrag = useCallback(() => {
 
   // Efecto para manejar cambios de herramienta
   useEffect(() => {
+    setGradientPixels(null);
     if (tool === TOOLS.move) {
       setDrawMode("move");
     } else if (tool === TOOLS.paint) {
       setDrawMode("draw");
     } else if (tool === TOOLS.erase) {
       setDrawMode("erase");
-    } else if (tool === TOOLS.curve) {
+    } else if (tool === TOOLS.blurFinger) { 
+      setDrawMode("blur");
+      
+    } else if (tool === TOOLS.smudge) { 
+    setDrawMode("smudge");
+  } else if (tool === TOOLS.deblur) { 
+    setDrawMode("deblur");
+    
+  }
+    else if (tool === TOOLS.curve) {
       setDrawMode("curve");
     } else if (tool === TOOLS.line) {
       setDrawMode("line");
@@ -2261,12 +2642,147 @@ const handleEndDrag = useCallback(() => {
     }
   }, [tool]);
 
-  // Efecto principal para manejar el dibujo
+  //efecto para manipular los gradient pixels:
+
   useEffect(() => {
-    if (isSpacePressed) {
-      return
+    if (tool !== TOOLS.fill) return;
+
+    if (!gradientPixels) return;
+    const gradientParams = {
+      isGradientMode: toolParameters.isGradientMode,
+      gradientStops: toolParameters.gradientStops,
+      gradientType: toolParameters.gradientType, // o 'radial'
+      gradientAngle: toolParameters.gradientAngle - 90,
+      dithering: toolParameters.dithering,
+      ditheringType: toolParameters.ditheringType,
+      ditheringStrength: toolParameters.ditheringStrength,
+    };
+
+    console.log("el dithering strenght:", toolParameters.ditheringStrength);
+    gradientFloodFill(activeLayerId, 1, 1, gradientParams, gradientPixels);
+  }, [toolParameters]);
+
+  // 1. DECLARAR LA REFERENCIA AL NIVEL DEL COMPONENTE (fuera de cualquier useEffect)
+  let initialPatternOffset = useRef(null);
+
+  // 2. USEEFFECT SEPARADO PARA DETECTAR CAMBIOS EN isPressed
+  useEffect(() => {
+
+    // Reset de la referencia cuando se suelta el botón (nuevo trazo)
+    if (!isPressed && tool === TOOLS.paint) {
+      initialPatternOffset.current = null;
+    }
+  }, [isPressed, tool]);
+
+  const withIsolationCheck = (drawFunction) => {
+    if (!isolatedPixels || isolatedPixels.length === 0) {
+      return drawFunction;
     }
   
+    // Pre-compilar máscara una sola vez si isolatedPixels no cambia
+    let cachedMask = null;
+    let lastPixelsHash = null;
+    
+    return (ctx, ...args) => {
+      const { width, height } = ctx.canvas;
+      const currentHash = JSON.stringify(isolatedPixels); // Simple hash
+      
+      if (lastPixelsHash !== currentHash) {
+        // Recrear máscara
+        const maskCanvas = document.createElement('canvas');
+        const maskCtx = maskCanvas.getContext('2d');
+        maskCanvas.width = width;
+        maskCanvas.height = height;
+        
+        maskCtx.fillStyle = 'white';
+        for (const { x, y } of isolatedPixels) {
+          maskCtx.fillRect(x, y, 1, 1);
+        }
+        
+        cachedMask = maskCanvas;
+        lastPixelsHash = currentHash;
+      }
+      
+      ctx.save();
+      
+      try {
+        // Dibujar en canvas temporal
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        
+        const result = drawFunction(tempCtx, ...args);
+        
+        // Aplicar máscara y dibujar resultado
+        tempCtx.globalCompositeOperation = 'destination-in';
+        tempCtx.drawImage(cachedMask, 0, 0);
+        
+        ctx.drawImage(tempCanvas, 0, 0);
+        
+        return result;
+        
+      } finally {
+        ctx.restore();
+      }
+    };
+  };
+  const cachedImageDataRef = useRef(null);
+const cacheValidRef = useRef(false);
+
+// Función para inicializar/actualizar el cache
+const initializeImageDataCache = (ctx) => {
+  const canvas = ctx.canvas;
+  if (!cachedImageDataRef.current || 
+      cachedImageDataRef.current.width !== canvas.width || 
+      cachedImageDataRef.current.height !== canvas.height ||
+      !cacheValidRef.current) {
+    cachedImageDataRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    cacheValidRef.current = true;
+  }
+};
+
+// Función para invalidar el cache (llamar cuando sea necesario)
+const invalidateImageDataCache = () => {
+  cacheValidRef.current = false;
+};
+
+  // Efecto principal para manejar el dibujo
+  useEffect(() => {
+
+ 
+  
+
+
+    if (tool === TOOLS.selectByColor) {
+      if (isPressed && lastPixelRef.current === null) {
+        // Se acaba de presionar - GUARDAR coordenadas exactas inmediatamente
+        console.log("🔍 selectByColor: Iniciando presión");
+        const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
+        const canvasCoords = viewportToCanvasCoords(
+          viewportPixelCoords.x,
+          viewportPixelCoords.y
+        );
+
+        // NUEVA LÓGICA: Ejecutar inmediatamente al presionar
+        console.log(
+          "🎯 selectByColor: Coordenadas exactas al presionar:",
+          canvasCoords
+        );
+        colorSelection(activeLayerId, canvasCoords);
+        lastPixelRef.current = viewportPixelCoords;
+      } else if (!isPressed && lastPixelRef.current !== null) {
+        // Se acaba de soltar - solo limpiar
+        console.log("🚀 selectByColor: Soltado - Limpiando");
+        lastPixelRef.current = null;
+      }
+      return;
+    }
+
+    if (isSpacePressed) {
+      return;
+    }
+
     if (tool === TOOLS.curve) {
       const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
       const canvasCoords = viewportToCanvasCoords(
@@ -2335,7 +2851,7 @@ const handleEndDrag = useCallback(() => {
                 ? toolParameters.backgroundColor
                 : toolParameters.foregroundColor; // fallback
 
-            drawOnLayer(activeLayerId, (ctx) => {
+            drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
               // Configurar el color seleccionado
               ctx.fillStyle = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, ${selectedColor.a})`;
 
@@ -2390,7 +2906,7 @@ const handleEndDrag = useCallback(() => {
                   selectedColor
                 );
               }
-            });
+            }));
           }
 
           setCurveState("idle");
@@ -2472,7 +2988,7 @@ const handleEndDrag = useCallback(() => {
               ? toolParameters.backgroundColor
               : toolParameters.foregroundColor; // fallback a foreground
 
-          drawOnLayer(activeLayerId, (ctx) => {
+          drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
             ctx.globalCompositeOperation = "source-over";
             ctx.fillStyle = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, ${selectedColor.a})`;
 
@@ -2514,7 +3030,7 @@ const handleEndDrag = useCallback(() => {
                 width
               );
             }
-          });
+          }));
 
           lineStartRef.current = null;
           lineButton.current = null; // Limpiar la referencia del botón
@@ -2541,7 +3057,7 @@ const handleEndDrag = useCallback(() => {
             viewportPixelCoords.y
           );
 
-          drawOnLayer(activeLayerId, (ctx) => {
+          drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
             ctx.globalCompositeOperation = "source-over";
 
             const width = endCoords.x - squareStartRef.current.x;
@@ -2564,7 +3080,7 @@ const handleEndDrag = useCallback(() => {
               borderColor,
               fillColor
             );
-          });
+          }));
 
           squareStartRef.current = null;
         }
@@ -2590,7 +3106,7 @@ const handleEndDrag = useCallback(() => {
             viewportPixelCoords.y
           );
 
-          drawOnLayer(activeLayerId, (ctx) => {
+          drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
             ctx.globalCompositeOperation = "source-over";
 
             // Obtener colores y configuración de los parámetros de la herramienta
@@ -2606,7 +3122,7 @@ const handleEndDrag = useCallback(() => {
               borderColor,
               fillColor
             );
-          });
+          }));
 
           triangleStartRef.current = null;
         }
@@ -2633,7 +3149,7 @@ const handleEndDrag = useCallback(() => {
             viewportPixelCoords.y
           );
 
-          drawOnLayer(activeLayerId, (ctx) => {
+          drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
             ctx.globalCompositeOperation = "source-over";
 
             const deltaX = endCoords.x - circleStartRef.current.x;
@@ -2656,7 +3172,7 @@ const handleEndDrag = useCallback(() => {
               borderColor,
               fillColor
             );
-          });
+          }));
 
           circleStartRef.current = null;
         }
@@ -2681,7 +3197,7 @@ const handleEndDrag = useCallback(() => {
             viewportPixelCoords.y
           );
 
-          drawOnLayer(activeLayerId, (ctx) => {
+          drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
             ctx.globalCompositeOperation = "source-over";
 
             // Obtener colores y configuración de los parámetros de la herramienta
@@ -2699,7 +3215,7 @@ const handleEndDrag = useCallback(() => {
               borderColor,
               fillColor
             );
-          });
+          }));
 
           ellipseStartRef.current = null;
         }
@@ -2725,7 +3241,7 @@ const handleEndDrag = useCallback(() => {
             viewportPixelCoords.y
           );
 
-          drawOnLayer(activeLayerId, (ctx) => {
+          drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
             ctx.globalCompositeOperation = "source-over";
 
             // Calcular centro y radio
@@ -2753,7 +3269,7 @@ const handleEndDrag = useCallback(() => {
               fillColor,
               rotation
             );
-          });
+          }));
 
           polygonStartRef.current = null;
         }
@@ -2787,7 +3303,7 @@ const handleEndDrag = useCallback(() => {
               // Umbral de cierre
               // Finalizar polígono
               if (polygonPoints.length >= 3) {
-                drawOnLayer(activeLayerId, (ctx) => {
+                drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
                   drawPolygonWithCurves(
                     ctx,
                     polygonPoints,
@@ -2797,7 +3313,7 @@ const handleEndDrag = useCallback(() => {
                     toolParameters.fillColor,
                     false
                   );
-                });
+                }));
               }
 
               setPolygonPoints([]);
@@ -2868,26 +3384,41 @@ const handleEndDrag = useCallback(() => {
       viewportPixelCoords.x,
       viewportPixelCoords.y
     );
-
     if (tool === TOOLS.fill) {
+      // Solo ejecutar si no hay último pixel registrado (primer click/touch)
       if (lastPixelRef.current === null) {
-        // Determinar el color basado en el botón presionado
-        const selectedColor =
-          isPressed === "left"
-            ? toolParameters.foregroundColor
-            : isPressed === "right"
-            ? toolParameters.backgroundColor
-            : toolParameters.foregroundColor; // fallback a foreground
+        if (!toolParameters.isGradientMode) {
+          // Determinar el color basado en el botón presionado
+          const selectedColor =
+            isPressed === "left"
+              ? toolParameters.foregroundColor
+              : isPressed === "right"
+              ? toolParameters.backgroundColor
+              : toolParameters.foregroundColor; // fallback a foreground
 
-        rellenar(canvasCoords, selectedColor);
+          rellenar(canvasCoords, selectedColor);
+        } else {
+          setGradientPixels(
+            getMatchingPixels(activeLayerId, canvasCoords.x, canvasCoords.y)
+          );
+
+          rellenarGradiente(canvasCoords);
+        }
+
+        // Marcar que ya se ejecutó el fill
         lastPixelRef.current = viewportPixelCoords;
       }
+      // Si lastPixelRef.current no es null, significa que ya se ejecutó y no hacer nada
       return;
     }
 
     if (tool === TOOLS.select || tool === TOOLS.lassoSelect) {
       return;
     }
+
+    // Declarar initialPatternOffset FUERA del useEffect, al nivel del componente
+
+    // Dentro del bloque if (tool === TOOLS.paint) en el useEffect:
 
     if (tool === TOOLS.paint) {
       // Determinar el color basado en el botón presionado
@@ -2897,18 +3428,21 @@ const handleEndDrag = useCallback(() => {
           : isPressed === "right"
           ? toolParameters.backgroundColor
           : toolParameters.foregroundColor; // fallback a foreground
-
-      drawOnLayer(activeLayerId, (ctx) => {
+    
+      drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
         const canvas = ctx.canvas;
         const width = toolParameters?.width || 1;
         const blur = toolParameters.blur || 0;
         const paintMode = toolParameters?.paintMode || "manual";
         const velocitySensibility = toolParameters?.velocitySensibility || 0;
-
+    
+        // Parámetros para pattern alignment
+        const patternAlignment = toolParameters?.patternAlignment || "normal";
+    
         // Nuevos parámetros para brocha personalizada
         const useCustomBrush = toolParameters?.customBrush || false;
         const customBrushType = toolParameters?.customBrushType;
-
+    
         // MODIFICACIÓN PRINCIPAL: Procesar datos de brocha con el color seleccionado
         let customBrushData = [];
         if (
@@ -2916,155 +3450,231 @@ const handleEndDrag = useCallback(() => {
           customBrushType &&
           toolParameters.processCustomBrushData
         ) {
-          customBrushData =
-            toolParameters.processCustomBrushData(selectedColor);
+          customBrushData = toolParameters.processCustomBrushData(selectedColor);
         }
-
+    
         // Precalcular valores constantes
         const maxRadius = width / 2;
         const halfWidth = Math.floor(width / 2);
-
-        // Límites del viewport para optimización
-        const xMin = viewportOffset.x;
-        const xMax = viewportOffset.x + viewportWidth;
-        const yMin = viewportOffset.y;
-        const yMax = viewportOffset.y + viewportHeight;
-
+    
         // Configuración de espejo
         const hasBounds =
           mirrorState.bounds &&
           (mirrorState.bounds.x2 > mirrorState.bounds.x1 ||
             mirrorState.bounds.y2 > mirrorState.bounds.y1);
-
+    
         const centerX = hasBounds
           ? Math.floor((mirrorState.bounds.x1 + mirrorState.bounds.x2) / 2)
           : Math.floor(drawableWidth / 2);
-
+    
         const centerY = hasBounds
           ? Math.floor((mirrorState.bounds.y1 + mirrorState.bounds.y2) / 2)
           : Math.floor(drawableHeight / 2);
-
+    
         const adjustment = -1;
         const imparAdjustmentHeight = drawableWidth % 2 !== 0 ? 1 : 0;
         const imparAdjustmentWidth = drawableWidth % 2 !== 0 ? 1 : 0;
-
+    
         const reflectHorizontal = (x) =>
           centerX * 2 - x + adjustment + imparAdjustmentWidth;
         const reflectVertical = (y) =>
           centerY * 2 - y + adjustment + imparAdjustmentHeight;
-
+    
+        // Función para calcular las dimensiones del patrón de la brocha personalizada
+        const getBrushDimensions = () => {
+          if (!useCustomBrush || !customBrushData.length) {
+            return { width: width, height: width }; // Para brochas estándar usar el width configurado
+          }
+    
+          let minX = 0,
+            maxX = 0,
+            minY = 0,
+            maxY = 0;
+          customBrushData.forEach((pixel) => {
+            minX = Math.min(minX, pixel.x);
+            maxX = Math.max(maxX, pixel.x);
+            minY = Math.min(minY, pixel.y);
+            maxY = Math.max(maxY, pixel.y);
+          });
+    
+          return {
+            width: maxX - minX + 1,
+            height: maxY - minY + 1,
+          };
+        };
+    
+        // Set para rastrear posiciones ya pintadas en este trazo
+        const paintedPositions = new Set();
+    
+        // Función para obtener la posición de grilla más cercana
+        const getGridPosition = (x, y, isInitialClick = false) => {
+          if (patternAlignment === "normal") {
+            return { x: x, y: y, shouldPaint: true };
+          }
+    
+          const brushDims = getBrushDimensions();
+          let gridOriginX, gridOriginY;
+    
+          if (patternAlignment === "source") {
+            // Alinear al punto donde se hizo el primer clic
+            if (isInitialClick || !initialPatternOffset.current) {
+              // Guardar la coordenada inicial como origen de la grilla
+              initialPatternOffset.current = { x: x, y: y };
+              gridOriginX = x;
+              gridOriginY = y;
+            } else {
+              // Usar la coordenada inicial guardada como origen
+              gridOriginX = initialPatternOffset.current.x;
+              gridOriginY = initialPatternOffset.current.y;
+            }
+          } else if (patternAlignment === "destination") {
+            // Alinear al lienzo (origen en 0,0)
+            gridOriginX = 0;
+            gridOriginY = 0;
+          }
+    
+          // Calcular la posición de grilla más cercana desde el origen
+          const offsetX = x - gridOriginX;
+          const offsetY = y - gridOriginY;
+    
+          // Encontrar el punto de grilla más cercano (múltiplo del tamaño del patrón)
+          const gridStepX = Math.floor(offsetX / brushDims.width);
+          const gridStepY = Math.floor(offsetY / brushDims.height);
+    
+          const gridX = gridOriginX + gridStepX * brushDims.width;
+          const gridY = gridOriginY + gridStepY * brushDims.height;
+    
+          // Crear clave única para esta posición
+          const posKey = `${gridX},${gridY}`;
+    
+          // Verificar si ya pintamos en esta posición en este trazo
+          if (!paintedPositions.has(posKey)) {
+            paintedPositions.add(posKey);
+            return { x: gridX, y: gridY, shouldPaint: true };
+          }
+    
+          return { x: gridX, y: gridY, shouldPaint: false };
+        };
+    
         // Función optimizada para calcular opacidad basada en velocidad
         const calculateOpacity = (currentX, currentY, lastX, lastY) => {
           if (velocitySensibility === 0) {
             const widthFactor = Math.max(1, width / 8);
             return selectedColor.a / widthFactor;
           }
-
+    
           const distance = Math.sqrt(
             (currentX - lastX) ** 2 + (currentY - lastY) ** 2
           );
           const sensitivityCurve = ((11 - velocitySensibility) / 10) ** 1.5;
           const maxDistance = 200 * sensitivityCurve;
           const normalizedVelocity = Math.min(distance / maxDistance, 1);
-
+    
           const widthCompensation = Math.max(1, width / 6);
           const baseOpacity = selectedColor.a / widthCompensation;
           const velocityReduction = normalizedVelocity * 0.8;
           const finalOpacity = baseOpacity * (1 - velocityReduction);
           const minOpacity = baseOpacity * 0.05;
-
+    
           return Math.max(finalOpacity, minOpacity);
         };
-
-        // Función para dibujar brocha personalizada CORREGIDA
-        const drawCustomBrush = (centerX, centerY, opacity = 1) => {
-          if (!useCustomBrush || !customBrushData.length) return false;
-
-          for (const pixel of customBrushData) {
-            const pixelX = centerX + pixel.x;
-            const pixelY = centerY + pixel.y;
-
-            // Validar que esté dentro del canvas completo, no solo del viewport
-            if (
-              pixelX < 0 ||
-              pixelX >= canvas.width ||
-              pixelY < 0 ||
-              pixelY >= canvas.height
-            )
-              continue;
-
-            if (paintMode === "composite") {
-              ctx.globalAlpha = opacity * (pixel.color.a / 255);
-              ctx.fillStyle = `rgba(${pixel.color.r}, ${pixel.color.g}, ${pixel.color.b}, ${pixel.color.a})`;
-              ctx.fillRect(pixelX, pixelY, 1, 1);
-            } else {
-              // Modo manual - modificar ImageData directamente
-              const imageData = ctx.getImageData(pixelX, pixelY, 1, 1);
-              const data = imageData.data;
-              data[0] = pixel.color.r;
-              data[1] = pixel.color.g;
-              data[2] = pixel.color.b;
-              data[3] = pixel.color.a * opacity;
-              ctx.putImageData(imageData, pixelX, pixelY);
-            }
-          }
-          return true;
-        };
-
-        // Función para dibujar brocha personalizada con espejos CORREGIDA
-        const drawCustomBrushWithMirrors = (x, y, opacity = 1) => {
-          // Siempre dibujar todos los puntos, la validación se hace en drawCustomBrush
-          drawCustomBrush(x, y, opacity);
-
-          if (mirrorState.vertical) {
-            drawCustomBrush(x, reflectVertical(y), opacity);
-          }
-          if (mirrorState.horizontal) {
-            drawCustomBrush(reflectHorizontal(x), y, opacity);
-          }
-          if (mirrorState.vertical && mirrorState.horizontal) {
-            drawCustomBrush(reflectHorizontal(x), reflectVertical(y), opacity);
-          }
-        };
-
+    
         // Si se usa brocha personalizada, usar la lógica personalizada
         if (useCustomBrush && customBrushData.length > 0) {
           const originalComposite = ctx.globalCompositeOperation;
-
+    
           if (paintMode === "composite") {
             ctx.globalCompositeOperation = "source-over";
+          } else {
+            // MODO MANUAL CON BROCHA PERSONALIZADA Y CACHE
+            initializeImageDataCache(ctx);
           }
-
+    
+          // Función para dibujar brocha personalizada
+          const drawCustomBrush = (centerX, centerY, opacity = 1) => {
+            if (paintMode === "composite") {
+              // Modo composite: usar operaciones de canvas
+              for (const pixel of customBrushData) {
+                const pixelX = centerX + pixel.x;
+                const pixelY = centerY + pixel.y;
+    
+                if (pixelX < 0 || pixelX >= canvas.width || pixelY < 0 || pixelY >= canvas.height)
+                  continue;
+    
+                ctx.globalAlpha = opacity * (pixel.color.a / 255);
+                ctx.fillStyle = `rgba(${pixel.color.r}, ${pixel.color.g}, ${pixel.color.b}, ${pixel.color.a})`;
+                ctx.fillRect(pixelX, pixelY, 1, 1);
+              }
+            } else {
+              // Modo manual: usar ImageData cacheado
+              const data = cachedImageDataRef.current.data;
+              const canvasWidth = canvas.width;
+    
+              for (const pixel of customBrushData) {
+                const pixelX = centerX + pixel.x;
+                const pixelY = centerY + pixel.y;
+    
+                if (pixelX < 0 || pixelX >= canvas.width || pixelY < 0 || pixelY >= canvas.height)
+                  continue;
+    
+                const index = (pixelY * canvasWidth + pixelX) * 4;
+                data[index] = pixel.color.r;
+                data[index + 1] = pixel.color.g;
+                data[index + 2] = pixel.color.b;
+                data[index + 3] = pixel.color.a * opacity;
+              }
+            }
+            return true;
+          };
+    
+          // Función para dibujar brocha personalizada con espejos
+          const drawCustomBrushWithMirrors = (x, y, opacity = 1) => {
+            drawCustomBrush(x, y, opacity);
+    
+            if (mirrorState.vertical) {
+              drawCustomBrush(x, reflectVertical(y), opacity);
+            }
+            if (mirrorState.horizontal) {
+              drawCustomBrush(reflectHorizontal(x), y, opacity);
+            }
+            if (mirrorState.vertical && mirrorState.horizontal) {
+              drawCustomBrush(reflectHorizontal(x), reflectVertical(y), opacity);
+            }
+          };
+    
           if (!lastPixelRef.current) {
-            drawCustomBrushWithMirrors(canvasCoords.x, canvasCoords.y, 1.0);
+            // Primer clic del trazo
+            const gridPos = getGridPosition(canvasCoords.x, canvasCoords.y, true);
+            if (gridPos.shouldPaint) {
+              drawCustomBrushWithMirrors(gridPos.x, gridPos.y, 1.0);
+            }
           } else {
             const last = viewportToCanvasCoords(
               lastPixelRef.current.x,
               lastPixelRef.current.y
             );
-
+    
             // Algoritmo de Bresenham para interpolar entre puntos
-            let x0 = last.x,
-              y0 = last.y;
-            let x1 = canvasCoords.x,
-              y1 = canvasCoords.y;
-            let dx = Math.abs(x1 - x0),
-              dy = -Math.abs(y1 - y0);
-            let sx = x0 < x1 ? 1 : -1,
-              sy = y0 < y1 ? 1 : -1;
+            let x0 = last.x, y0 = last.y;
+            let x1 = canvasCoords.x, y1 = canvasCoords.y;
+            let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+            let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
             let err = dx + dy;
-            let prevX = x0,
-              prevY = y0;
-
+            let prevX = x0, prevY = y0;
+    
             while (true) {
-              const opacity = calculateOpacity(x0, y0, prevX, prevY);
-              drawCustomBrushWithMirrors(x0, y0, opacity);
-
+              // Obtener la posición de grilla para esta coordenada
+              const gridPos = getGridPosition(x0, y0, false);
+              if (gridPos.shouldPaint) {
+                const opacity = calculateOpacity(x0, y0, prevX, prevY);
+                drawCustomBrushWithMirrors(gridPos.x, gridPos.y, opacity);
+              }
+    
               if (x0 === x1 && y0 === y1) break;
-
+    
               prevX = x0;
               prevY = y0;
-
+    
               const e2 = 2 * err;
               if (e2 >= dy) {
                 err += dy;
@@ -3076,29 +3686,33 @@ const handleEndDrag = useCallback(() => {
               }
             }
           }
-
+    
+          // Aplicar cambios al canvas
           if (paintMode === "composite") {
             ctx.globalCompositeOperation = originalComposite;
             ctx.globalAlpha = 1;
+          } else {
+            // Para modo manual, aplicar el ImageData modificado
+            ctx.putImageData(cachedImageDataRef.current, 0, 0);
           }
-
+    
           return; // Salir temprano si se usó brocha personalizada
         }
-
-        // Lógica original para brochas estándar
+    
+        // Lógica para brochas estándar con pattern alignment
         if (paintMode === "composite") {
-          // MODO COMPOSITE OPTIMIZADO Y CORREGIDO
+          // MODO COMPOSITE OPTIMIZADO (LÓGICA ORIGINAL COMPLETA)
           const originalComposite = ctx.globalCompositeOperation;
-          ctx.globalCompositeOperation = "source-over";
-
+          ctx.globalCompositeOperation = "darker";
+    
           const drawDot = (x, y, opacity = 1) => {
             // Validar que esté dentro del canvas completo, no solo del viewport
             if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height)
               return;
-
+    
             ctx.globalAlpha = opacity;
             ctx.fillStyle = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, ${selectedColor.a})`;
-
+    
             if (blur === 0) {
               // Sin blur: rectángulo simple
               ctx.fillRect(x - halfWidth, y - halfWidth, width, width);
@@ -3113,28 +3727,27 @@ const handleEndDrag = useCallback(() => {
                 y,
                 maxRadius
               );
-
+    
               const coreStop = coreRadius / maxRadius;
               const coreColor = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, ${selectedColor.a})`;
               const edgeColor = `rgba(${selectedColor.r}, ${selectedColor.g}, ${
                 selectedColor.b
               }, ${selectedColor.a * 0.1})`;
-
+    
               gradient.addColorStop(0, coreColor);
               gradient.addColorStop(coreStop, coreColor);
               gradient.addColorStop(1, edgeColor);
-
+    
               ctx.fillStyle = gradient;
               ctx.beginPath();
               ctx.arc(x, y, maxRadius, 0, 2 * Math.PI);
               ctx.fill();
             }
           };
-
+    
           const drawWithMirrors = (x, y, opacity = 1) => {
-            // Siempre dibujar todos los puntos, la validación se hace en drawDot
             drawDot(x, y, opacity);
-
+    
             if (mirrorState.vertical) {
               drawDot(x, reflectVertical(y), opacity);
             }
@@ -3145,15 +3758,23 @@ const handleEndDrag = useCallback(() => {
               drawDot(reflectHorizontal(x), reflectVertical(y), opacity);
             }
           };
-
+    
           if (!lastPixelRef.current) {
-            drawWithMirrors(canvasCoords.x, canvasCoords.y, 1.0);
+            // Primer clic del trazo
+            const gridPos = getGridPosition(
+              canvasCoords.x,
+              canvasCoords.y,
+              true
+            );
+            if (gridPos.shouldPaint) {
+              drawWithMirrors(gridPos.x, gridPos.y, 1.0);
+            }
           } else {
             const last = viewportToCanvasCoords(
               lastPixelRef.current.x,
               lastPixelRef.current.y
             );
-
+    
             // Algoritmo de Bresenham optimizado
             let x0 = last.x,
               y0 = last.y;
@@ -3166,16 +3787,20 @@ const handleEndDrag = useCallback(() => {
             let err = dx + dy;
             let prevX = x0,
               prevY = y0;
-
+    
             while (true) {
-              const opacity = calculateOpacity(x0, y0, prevX, prevY);
-              drawWithMirrors(x0, y0, opacity);
-
+              // Obtener la posición de grilla para esta coordenada
+              const gridPos = getGridPosition(x0, y0, false);
+              if (gridPos.shouldPaint) {
+                const opacity = calculateOpacity(x0, y0, prevX, prevY);
+                drawWithMirrors(gridPos.x, gridPos.y, opacity);
+              }
+    
               if (x0 === x1 && y0 === y1) break;
-
+    
               prevX = x0;
               prevY = y0;
-
+    
               const e2 = 2 * err;
               if (e2 >= dy) {
                 err += dy;
@@ -3187,15 +3812,15 @@ const handleEndDrag = useCallback(() => {
               }
             }
           }
-
+    
           ctx.globalCompositeOperation = originalComposite;
           ctx.globalAlpha = 1;
         } else {
-          // MODO MANUAL ULTRA-OPTIMIZADO Y CORREGIDO
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const data = imageData.data;
+          // MODO MANUAL ULTRA-OPTIMIZADO CON CACHE
+          initializeImageDataCache(ctx);
+          const data = cachedImageDataRef.current.data;
           const canvasWidth = canvas.width;
-
+    
           // Precalcular valores para blur
           let coreRadius, blurEnabled;
           if (blur > 0) {
@@ -3204,22 +3829,22 @@ const handleEndDrag = useCallback(() => {
           } else {
             blurEnabled = false;
           }
-
+    
           const drawDot = (x, y) => {
             // Validar que esté dentro del canvas completo, no solo del viewport
             if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height)
               return;
-
+    
             const startX = x - halfWidth;
             const startY = y - halfWidth;
-
+    
             if (!blurEnabled) {
               // Sin blur: optimización máxima con loop desenrollado cuando es posible
               const endX = Math.min(startX + width, canvas.width);
               const endY = Math.min(startY + width, canvas.height);
               const actualStartX = Math.max(startX, 0);
               const actualStartY = Math.max(startY, 0);
-
+    
               for (let py = actualStartY; py < endY; py++) {
                 const rowIndex = py * canvasWidth * 4;
                 for (let px = actualStartX; px < endX; px++) {
@@ -3234,15 +3859,12 @@ const handleEndDrag = useCallback(() => {
               // Con blur: optimizado con precálculos
               const maxRadiusSquared = maxRadius * maxRadius;
               const coreRadiusSquared = coreRadius * coreRadius;
-              const blurRange = maxRadius - coreRadius;
-              const minAlpha = selectedColor.a * 0.1;
-              const alphaRange = selectedColor.a - minAlpha;
-
+    
               for (let dy = 0; dy < width; dy++) {
                 for (let dx = 0; dx < width; dx++) {
                   const px = startX + dx;
                   const py = startY + dy;
-
+    
                   if (
                     px < 0 ||
                     px >= canvas.width ||
@@ -3250,23 +3872,24 @@ const handleEndDrag = useCallback(() => {
                     py >= canvas.height
                   )
                     continue;
-
+    
                   // Calcular distancia al cuadrado (evitar sqrt cuando sea posible)
                   const deltaX = px - x;
                   const deltaY = py - y;
                   const distanceSquared = deltaX * deltaX + deltaY * deltaY;
-
+    
                   if (distanceSquared > maxRadiusSquared) continue;
-
+    
                   let alpha;
                   if (distanceSquared <= coreRadiusSquared) {
                     alpha = selectedColor.a;
                   } else {
                     const distance = Math.sqrt(distanceSquared);
-                    const blurProgress = (distance - coreRadius) / blurRange;
-                    alpha = selectedColor.a * (1 - blurProgress * 0.9); // 0.9 = (1 - 0.1)
+                    const blurProgress =
+                      (distance - coreRadius) / (maxRadius - coreRadius);
+                    alpha = selectedColor.a * (1 - blurProgress * 0.9);
                   }
-
+    
                   const index = (py * canvasWidth + px) * 4;
                   data[index] = selectedColor.r;
                   data[index + 1] = selectedColor.g;
@@ -3276,11 +3899,10 @@ const handleEndDrag = useCallback(() => {
               }
             }
           };
-
+    
           const drawWithMirrors = (x, y) => {
-            // Siempre dibujar todos los puntos, la validación se hace en drawDot
             drawDot(x, y);
-
+    
             if (mirrorState.vertical) {
               drawDot(x, reflectVertical(y));
             }
@@ -3291,15 +3913,23 @@ const handleEndDrag = useCallback(() => {
               drawDot(reflectHorizontal(x), reflectVertical(y));
             }
           };
-
+    
           if (!lastPixelRef.current) {
-            drawWithMirrors(canvasCoords.x, canvasCoords.y);
+            // Primer clic del trazo
+            const gridPos = getGridPosition(
+              canvasCoords.x,
+              canvasCoords.y,
+              true
+            );
+            if (gridPos.shouldPaint) {
+              drawWithMirrors(gridPos.x, gridPos.y);
+            }
           } else {
             const last = viewportToCanvasCoords(
               lastPixelRef.current.x,
               lastPixelRef.current.y
             );
-
+    
             // Bresenham optimizado
             let x0 = last.x,
               y0 = last.y;
@@ -3310,11 +3940,16 @@ const handleEndDrag = useCallback(() => {
             let sx = x0 < x1 ? 1 : -1,
               sy = y0 < y1 ? 1 : -1;
             let err = dx + dy;
-
+    
             while (true) {
-              drawWithMirrors(x0, y0);
+              // Obtener la posición de grilla para esta coordenada
+              const gridPos = getGridPosition(x0, y0, false);
+              if (gridPos.shouldPaint) {
+                drawWithMirrors(gridPos.x, gridPos.y);
+              }
+    
               if (x0 === x1 && y0 === y1) break;
-
+    
               const e2 = 2 * err;
               if (e2 >= dy) {
                 err += dy;
@@ -3326,23 +3961,24 @@ const handleEndDrag = useCallback(() => {
               }
             }
           }
-
+    
           // Una sola llamada a putImageData al final
-          ctx.putImageData(imageData, 0, 0);
+          ctx.putImageData(cachedImageDataRef.current, 0, 0);
         }
-      });
+      }));
     }
 
     if (tool === TOOLS.dark) {
+      const intensity = toolParameters.intensity
       // Determinar el color basado en el botón presionado
       const selectedColor =
         isPressed === "left"
-          ? { r: 0, g: 0, b: 0, a: 0.5 }
+          ? { r: 0, g: 0, b: 0, a: intensity }
           : isPressed === "right"
           ? { r: 0, g: 0, b: 0, a: 0 }
           : toolParameters.foregroundColor; // fallback a foreground
 
-      drawOnLayer(activeLayerId, (ctx) => {
+      drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
         const canvas = ctx.canvas;
         const width = toolParameters?.width || 1;
         const blur = toolParameters.blur || 0;
@@ -3774,18 +4410,19 @@ const handleEndDrag = useCallback(() => {
           // Una sola llamada a putImageData al final
           ctx.putImageData(imageData, 0, 0);
         }
-      });
+      }));
     }
     if (tool === TOOLS.light) {
+      const intensity = toolParameters.intensity
       // Determinar el color basado en el botón presionado
       const selectedColor =
         isPressed === "left"
-          ? { r: 255, g: 255, b: 255, a: 0.5 }
+          ? { r: 255, g: 255, b: 255, a: intensity }
           : isPressed === "right"
           ? { r: 0, g: 0, b: 0, a: 0 }
           : toolParameters.foregroundColor; // fallback a foreground
 
-      drawOnLayer(activeLayerId, (ctx) => {
+      drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
         const canvas = ctx.canvas;
         const width = toolParameters?.width || 1;
         const blur = toolParameters.blur || 0;
@@ -4217,10 +4854,469 @@ const handleEndDrag = useCallback(() => {
           // Una sola llamada a putImageData al final
           ctx.putImageData(imageData, 0, 0);
         }
-      });
+      }));
     }
+    if (tool === TOOLS.blurFinger) {
+      drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
+        const canvas = ctx.canvas;
+        const width = toolParameters?.width || 5;
+        const intensity = toolParameters?.blurIntensity || 0.5; // 0.1 a 1.0
+        const blurRadius = toolParameters?.blurRadius || 1; // Radio del blur
+    
+        // Configuración de espejo
+        const hasBounds = mirrorState.bounds &&
+          (mirrorState.bounds.x2 > mirrorState.bounds.x1 ||
+           mirrorState.bounds.y2 > mirrorState.bounds.y1);
+    
+        const centerX = hasBounds
+          ? Math.floor((mirrorState.bounds.x1 + mirrorState.bounds.x2) / 2)
+          : Math.floor(drawableWidth / 2);
+    
+        const centerY = hasBounds
+          ? Math.floor((mirrorState.bounds.y1 + mirrorState.bounds.y2) / 2)
+          : Math.floor(drawableHeight / 2);
+    
+        const adjustment = -1;
+        const imparAdjustmentHeight = drawableWidth % 2 !== 0 ? 1 : 0;
+        const imparAdjustmentWidth = drawableWidth % 2 !== 0 ? 1 : 0;
+    
+        const reflectHorizontal = (x) =>
+          centerX * 2 - x + adjustment + imparAdjustmentWidth;
+        const reflectVertical = (y) =>
+          centerY * 2 - y + adjustment + imparAdjustmentHeight;
+    
+        // Función para aplicar blur a una región específica
+        const applyBlurAt = (centerX, centerY) => {
+          const halfWidth = Math.floor(width / 2);
+          const regionX = Math.max(0, centerX - halfWidth);
+          const regionY = Math.max(0, centerY - halfWidth);
+          const regionWidth = Math.min(width, canvas.width - regionX);
+          const regionHeight = Math.min(width, canvas.height - regionY);
+    
+          // Validar que la región tenga tamaño válido
+          if (regionWidth <= 0 || regionHeight <= 0) return;
+    
+          // Obtener los datos de imagen de la región
+          const imageData = ctx.getImageData(regionX, regionY, regionWidth, regionHeight);
+          const data = imageData.data;
+          const newData = new Uint8ClampedArray(data);
+    
+          // Aplicar filtro de difuminado solo en el área válida
+          for (let y = blurRadius; y < regionHeight - blurRadius; y++) {
+            for (let x = blurRadius; x < regionWidth - blurRadius; x++) {
+              let totalR = 0, totalG = 0, totalB = 0, totalA = 0;
+              let count = 0;
+    
+              // Promediar los píxeles vecinos
+              for (let dy = -blurRadius; dy <= blurRadius; dy++) {
+                for (let dx = -blurRadius; dx <= blurRadius; dx++) {
+                  const sampleX = x + dx;
+                  const sampleY = y + dy;
+                  
+                  if (sampleX >= 0 && sampleX < regionWidth && 
+                      sampleY >= 0 && sampleY < regionHeight) {
+                    const sampleIndex = (sampleY * regionWidth + sampleX) * 4;
+                    totalR += data[sampleIndex];
+                    totalG += data[sampleIndex + 1];
+                    totalB += data[sampleIndex + 2];
+                    totalA += data[sampleIndex + 3];
+                    count++;
+                  }
+                }
+              }
+    
+              if (count > 0) {
+                const avgR = totalR / count;
+                const avgG = totalG / count;
+                const avgB = totalB / count;
+                const avgA = totalA / count;
+    
+                const pixelIndex = (y * regionWidth + x) * 4;
+                const originalR = data[pixelIndex];
+                const originalG = data[pixelIndex + 1];
+                const originalB = data[pixelIndex + 2];
+                const originalA = data[pixelIndex + 3];
+    
+                // Mezclar el color original con el promedio según la intensidad
+                newData[pixelIndex] = originalR + (avgR - originalR) * intensity;
+                newData[pixelIndex + 1] = originalG + (avgG - originalG) * intensity;
+                newData[pixelIndex + 2] = originalB + (avgB - originalB) * intensity;
+                newData[pixelIndex + 3] = originalA + (avgA - originalA) * intensity;
+              }
+            }
+          }
+    
+          // Aplicar los datos modificados de vuelta al canvas
+          const blurredImageData = new ImageData(newData, regionWidth, regionHeight);
+          ctx.putImageData(blurredImageData, regionX, regionY);
+        };
+    
+        // Función para aplicar blur con espejos
+        const applyBlurWithMirrors = (x, y) => {
+          applyBlurAt(x, y);
+    
+          if (mirrorState.vertical) {
+            applyBlurAt(x, reflectVertical(y));
+          }
+          if (mirrorState.horizontal) {
+            applyBlurAt(reflectHorizontal(x), y);
+          }
+          if (mirrorState.vertical && mirrorState.horizontal) {
+            applyBlurAt(reflectHorizontal(x), reflectVertical(y));
+          }
+        };
+    
+        if (!lastPixelRef.current) {
+          // Primer punto del trazo
+          applyBlurWithMirrors(canvasCoords.x, canvasCoords.y);
+        } else {
+          // Interpolar entre el último punto y el actual usando Bresenham
+          const last = viewportToCanvasCoords(
+            lastPixelRef.current.x,
+            lastPixelRef.current.y
+          );
+    
+          let x0 = last.x, y0 = last.y;
+          let x1 = canvasCoords.x, y1 = canvasCoords.y;
+          let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+          let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+          let err = dx + dy;
+    
+          const step = Math.max(1, Math.floor(width / 3)); // Controlar frecuencia del blur
+          let stepCount = 0;
+    
+          while (true) {
+            if (stepCount % step === 0) {
+              applyBlurWithMirrors(x0, y0);
+            }
+            stepCount++;
+    
+            if (x0 === x1 && y0 === y1) break;
+    
+            const e2 = 2 * err;
+            if (e2 >= dy) { err += dy; x0 += sx; }
+            if (e2 <= dx) { err += dx; y0 += sy; }
+          }
+        }
+      }));
+    }
+    if (tool === TOOLS.deblur) {
+      drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
+        const canvas = ctx.canvas;
+        const width = toolParameters?.width || 5;
+        const intensity = toolParameters?.deblurIntensity || 0.5; // 0.1 a 1.0
+        const sharpening = toolParameters?.sharpeningStrength || 1.5; // Factor de nitidez
+    
+        // Configuración de espejo
+        const hasBounds = mirrorState.bounds &&
+          (mirrorState.bounds.x2 > mirrorState.bounds.x1 ||
+           mirrorState.bounds.y2 > mirrorState.bounds.y1);
+    
+        const centerX = hasBounds
+          ? Math.floor((mirrorState.bounds.x1 + mirrorState.bounds.x2) / 2)
+          : Math.floor(drawableWidth / 2);
+    
+        const centerY = hasBounds
+          ? Math.floor((mirrorState.bounds.y1 + mirrorState.bounds.y2) / 2)
+          : Math.floor(drawableHeight / 2);
+    
+        const adjustment = -1;
+        const imparAdjustmentHeight = drawableWidth % 2 !== 0 ? 1 : 0;
+        const imparAdjustmentWidth = drawableWidth % 2 !== 0 ? 1 : 0;
+    
+        const reflectHorizontal = (x) =>
+          centerX * 2 - x + adjustment + imparAdjustmentWidth;
+        const reflectVertical = (y) =>
+          centerY * 2 - y + adjustment + imparAdjustmentHeight;
+    
+        // Función para aplicar deblur (aumento de nitidez) a una región específica
+        const applyDeblurAt = (centerX, centerY) => {
+          const halfWidth = Math.floor(width / 2);
+          const regionX = Math.max(0, centerX - halfWidth);
+          const regionY = Math.max(0, centerY - halfWidth);
+          const regionWidth = Math.min(width, canvas.width - regionX);
+          const regionHeight = Math.min(width, canvas.height - regionY);
+    
+          // Validar que la región tenga tamaño válido
+          if (regionWidth <= 0 || regionHeight <= 0) return;
+    
+          // Obtener los datos de imagen de la región
+          const imageData = ctx.getImageData(regionX, regionY, regionWidth, regionHeight);
+          const data = imageData.data;
+          const newData = new Uint8ClampedArray(data);
+    
+          // Aplicar filtro de nitidez (unsharp mask simplificado)
+          for (let y = 1; y < regionHeight - 1; y++) {
+            for (let x = 1; x < regionWidth - 1; x++) {
+              for (let channel = 0; channel < 3; channel++) { // RGB, no alpha
+                const centerIndex = (y * regionWidth + x) * 4 + channel;
+                const centerValue = data[centerIndex];
+    
+                // Calcular el promedio de los píxeles adyacentes (filtro de blur)
+                let sum = 0;
+                let count = 0;
+    
+                // Núcleo de convolución 3x3 para blur
+                for (let dy = -1; dy <= 1; dy++) {
+                  for (let dx = -1; dx <= 1; dx++) {
+                    const neighborY = y + dy;
+                    const neighborX = x + dx;
+                    
+                    if (neighborX >= 0 && neighborX < regionWidth && 
+                        neighborY >= 0 && neighborY < regionHeight) {
+                      const neighborIndex = (neighborY * regionWidth + neighborX) * 4 + channel;
+                      sum += data[neighborIndex];
+                      count++;
+                    }
+                  }
+                }
+    
+                const blurredValue = sum / count;
+                
+                // Aplicar unsharp mask: original + intensity * (original - blurred)
+                const sharpenedValue = centerValue + intensity * sharpening * (centerValue - blurredValue);
+                
+                // Clamp a rango válido [0, 255]
+                newData[centerIndex] = Math.max(0, Math.min(255, sharpenedValue));
+              }
+              
+              // Mantener el canal alpha sin cambios
+              const alphaIndex = (y * regionWidth + x) * 4 + 3;
+              newData[alphaIndex] = data[alphaIndex];
+            }
+          }
+    
+          // Aplicar los datos modificados de vuelta al canvas
+          const sharpenedImageData = new ImageData(newData, regionWidth, regionHeight);
+          ctx.putImageData(sharpenedImageData, regionX, regionY);
+        };
+    
+        // Función para aplicar deblur con espejos
+        const applyDeblurWithMirrors = (x, y) => {
+          applyDeblurAt(x, y);
+    
+          if (mirrorState.vertical) {
+            applyDeblurAt(x, reflectVertical(y));
+          }
+          if (mirrorState.horizontal) {
+            applyDeblurAt(reflectHorizontal(x), y);
+          }
+          if (mirrorState.vertical && mirrorState.horizontal) {
+            applyDeblurAt(reflectHorizontal(x), reflectVertical(y));
+          }
+        };
+    
+        if (!lastPixelRef.current) {
+          // Primer punto del trazo
+          applyDeblurWithMirrors(canvasCoords.x, canvasCoords.y);
+        } else {
+          // Interpolar entre el último punto y el actual usando Bresenham
+          const last = viewportToCanvasCoords(
+            lastPixelRef.current.x,
+            lastPixelRef.current.y
+          );
+    
+          let x0 = last.x, y0 = last.y;
+          let x1 = canvasCoords.x, y1 = canvasCoords.y;
+          let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+          let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+          let err = dx + dy;
+    
+          const step = Math.max(1, Math.floor(width / 3)); // Controlar frecuencia del sharpening
+          let stepCount = 0;
+    
+          while (true) {
+            if (stepCount % step === 0) {
+              applyDeblurWithMirrors(x0, y0);
+            }
+            stepCount++;
+    
+            if (x0 === x1 && y0 === y1) break;
+    
+            const e2 = 2 * err;
+            if (e2 >= dy) { err += dy; x0 += sx; }
+            if (e2 <= dx) { err += dx; y0 += sy; }
+          }
+        }
+      }));
+    }
+    
+    if (tool === TOOLS.smudge) {
+      drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
+        const canvas = ctx.canvas;
+        const width = toolParameters?.width || 5;
+        const strength = toolParameters?.smudgeStrength || 0.8;
+        const flow = toolParameters?.smudgeFlow || 0.5;
+    
+        // Configuración de espejo
+        const hasBounds = mirrorState.bounds &&
+          (mirrorState.bounds.x2 > mirrorState.bounds.x1 ||
+           mirrorState.bounds.y2 > mirrorState.bounds.y1);
+    
+        const centerX = hasBounds
+          ? Math.floor((mirrorState.bounds.x1 + mirrorState.bounds.x2) / 2)
+          : Math.floor(drawableWidth / 2);
+    
+        const centerY = hasBounds
+          ? Math.floor((mirrorState.bounds.y1 + mirrorState.bounds.y2) / 2)
+          : Math.floor(drawableHeight / 2);
+    
+        const adjustment = -1;
+        const imparAdjustmentHeight = drawableWidth % 2 !== 0 ? 1 : 0;
+        const imparAdjustmentWidth = drawableWidth % 2 !== 0 ? 1 : 0;
+    
+        const reflectHorizontal = (x) =>
+          centerX * 2 - x + adjustment + imparAdjustmentWidth;
+        const reflectVertical = (y) =>
+          centerY * 2 - y + adjustment + imparAdjustmentHeight;
+    
+        // Función para aplicar smudge en una posición específica
+        const applySmudgeAt = (smudgeX, smudgeY, isFirstStroke = false) => {
+          const halfWidth = Math.floor(width / 2);
+          const regionX = Math.max(0, smudgeX - halfWidth);
+          const regionY = Math.max(0, smudgeY - halfWidth);
+          const regionWidth = Math.min(width, canvas.width - regionX);
+          const regionHeight = Math.min(width, canvas.height - regionY);
+    
+          if (regionWidth <= 0 || regionHeight <= 0) return;
+    
+          // Crear clave única para este punto de smudge
+          const smudgeKey = `${Math.floor(smudgeX / 10)}-${Math.floor(smudgeY / 10)}`;
+          
+          if (isFirstStroke) {
+            // Al comenzar un nuevo trazo, "recoger" los colores del área inicial
+            const pickupArea = ctx.getImageData(regionX, regionY, regionWidth, regionHeight);
+            smudgeBufferRef.current.set(smudgeKey, {
+              colors: Array.from(pickupArea.data),
+              width: regionWidth,
+              height: regionHeight,
+              timestamp: Date.now()
+            });
+            return; // No pintar en el primer punto, solo recoger color
+          }
+    
+          // Obtener colores actuales del área
+          const currentArea = ctx.getImageData(regionX, regionY, regionWidth, regionHeight);
+    
+          // Obtener el buffer de colores (los que "lleva" la herramienta)
+          let smudgeColors = smudgeBufferRef.current.get(smudgeKey);
+          if (!smudgeColors || smudgeColors.width !== regionWidth || smudgeColors.height !== regionHeight) {
+            // Si no hay buffer o el tamaño no coincide, usar los colores actuales
+            smudgeColors = {
+              colors: Array.from(currentArea.data),
+              width: regionWidth,
+              height: regionHeight,
+              timestamp: Date.now()
+            };
+          }
+    
+          const newImageData = ctx.createImageData(regionWidth, regionHeight);
+          const newData = newImageData.data;
+    
+          // Aplicar el efecto smudge
+          for (let i = 0; i < currentArea.data.length; i += 4) {
+            const pixelIndex = i / 4;
+            const x = pixelIndex % regionWidth;
+            const y = Math.floor(pixelIndex / regionWidth);
+            
+            // Calcular distancia desde el centro para crear un pincel suave
+            const distanceFromCenter = Math.sqrt(
+              Math.pow(x - regionWidth/2, 2) + Math.pow(y - regionHeight/2, 2)
+            );
+            const maxDistance = Math.min(regionWidth, regionHeight) / 2;
+            const brushInfluence = Math.max(0, 1 - (distanceFromCenter / maxDistance));
+            
+            if (brushInfluence > 0) {
+              // Color actual en esta posición
+              const currentR = currentArea.data[i];
+              const currentG = currentArea.data[i + 1];
+              const currentB = currentArea.data[i + 2];
+              const currentA = currentArea.data[i + 3];
+    
+              // Color del buffer (lo que "lleva" la herramienta)
+              const smudgeR = smudgeColors.colors[i] || currentR;
+              const smudgeG = smudgeColors.colors[i + 1] || currentG;
+              const smudgeB = smudgeColors.colors[i + 2] || currentB;
+              const smudgeA = smudgeColors.colors[i + 3] || currentA;
+    
+              // Mezclar colores según strength y brushInfluence
+              const finalStrength = strength * brushInfluence;
+              
+              newData[i] = currentR + (smudgeR - currentR) * finalStrength;
+              newData[i + 1] = currentG + (smudgeG - currentG) * finalStrength;
+              newData[i + 2] = currentB + (smudgeB - currentB) * finalStrength;
+              newData[i + 3] = currentA + (smudgeA - currentA) * finalStrength;
+    
+              // Actualizar el buffer con nueva mezcla de colores
+              const flowAmount = flow * brushInfluence;
+              smudgeColors.colors[i] = smudgeR + (currentR - smudgeR) * flowAmount;
+              smudgeColors.colors[i + 1] = smudgeG + (currentG - smudgeG) * flowAmount;
+              smudgeColors.colors[i + 2] = smudgeB + (currentB - smudgeB) * flowAmount;
+              smudgeColors.colors[i + 3] = smudgeA + (currentA - smudgeA) * flowAmount;
+            } else {
+              // Fuera del área de influencia, mantener color original
+              newData[i] = currentArea.data[i];
+              newData[i + 1] = currentArea.data[i + 1];
+              newData[i + 2] = currentArea.data[i + 2];
+              newData[i + 3] = currentArea.data[i + 3];
+            }
+          }
+    
+          // Aplicar los nuevos datos al canvas
+          ctx.putImageData(newImageData, regionX, regionY);
+          
+          // Actualizar el buffer
+          smudgeBufferRef.current.set(smudgeKey, smudgeColors);
+        };
+    
+        // Función para aplicar smudge con espejos
+        const applySmudgeWithMirrors = (x, y, isFirst = false) => {
+          applySmudgeAt(x, y, isFirst);
+    
+          if (mirrorState.vertical) {
+            applySmudgeAt(x, reflectVertical(y), isFirst);
+          }
+          if (mirrorState.horizontal) {
+            applySmudgeAt(reflectHorizontal(x), y, isFirst);
+          }
+          if (mirrorState.vertical && mirrorState.horizontal) {
+            applySmudgeAt(reflectHorizontal(x), reflectVertical(y), isFirst);
+          }
+        };
+    
+        if (!lastPixelRef.current) {
+          // Primer punto: solo recoger color, no pintar
+          applySmudgeWithMirrors(canvasCoords.x, canvasCoords.y, true);
+        } else {
+          // Interpolar entre el último punto y el actual
+          const last = viewportToCanvasCoords(
+            lastPixelRef.current.x,
+            lastPixelRef.current.y
+          );
+    
+          let x0 = last.x, y0 = last.y;
+          let x1 = canvasCoords.x, y1 = canvasCoords.y;
+          let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+          let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+          let err = dx + dy;
+    
+          while (true) {
+            applySmudgeWithMirrors(x0, y0, false);
+    
+            if (x0 === x1 && y0 === y1) break;
+    
+            const e2 = 2 * err;
+            if (e2 >= dy) { err += dy; x0 += sx; }
+            if (e2 <= dx) { err += dx; y0 += sy; }
+          }
+        }
+      }));
+    }
+    
+ 
+
     if (tool === TOOLS.erase) {
-      drawOnLayer(activeLayerId, (ctx) => {
+      drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
         ctx.globalCompositeOperation = "destination-out";
         ctx.fillStyle = "rgba(0,0,0,1)";
 
@@ -4241,7 +5337,7 @@ const handleEndDrag = useCallback(() => {
             toolParameters.width
           );
         }
-      });
+      }));
     }
 
     lastPixelRef.current = viewportPixelCoords;
@@ -4258,68 +5354,67 @@ const handleEndDrag = useCallback(() => {
     color,
     curveState,
     mirrorState,
-    isSpacePressed]);
+    isSpacePressed,
+  ]);
+
 
 
   // Efecto para manejar navegación con teclado
-// Reemplaza el useEffect existente para manejar navegación con teclado
-useEffect(() => {
-  const handleKeyDown = (e) => {
-    if (e.code === 'Space' && !isSpacePressed) {
-      e.preventDefault();
-      setIsSpacePressed(true);
-      // Cambiar cursor temporalmente
-      if (workspaceRef.current) {
-        workspaceRef.current.style.cursor = 'grab';
+  // Reemplaza el useEffect existente para manejar navegación con teclado
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.code === "Space" && !isSpacePressed) {
+        e.preventDefault();
+        setIsSpacePressed(true);
+        // Cambiar cursor temporalmente
+       
+        return;
       }
-      return;
-    }
 
-    // Solo permitir navegación con flechas si no se está presionando espacio
-    if (!isSpacePressed) {
-      const step = 1;
-      switch (e.key) {
-        case "ArrowRight":
-          moveViewport(step, 0);
-          break;
-        case "ArrowLeft":
-          moveViewport(-step, 0);
-          break;
-        case "ArrowDown":
-          moveViewport(0, step);
-          break;
-        case "ArrowUp":
-          moveViewport(0, -step);
-          break;
-        case "d":
-          setDrawMode("draw");
-          break;
-        case "e":
-          setDrawMode("erase");
-          break;
+      // Solo permitir navegación con flechas si no se está presionando espacio
+      if (!isSpacePressed) {
+        const step = 1;
+        switch (e.key) {
+          case "ArrowRight":
+            moveViewport(step, 0);
+            break;
+          case "ArrowLeft":
+            moveViewport(-step, 0);
+            break;
+          case "ArrowDown":
+            moveViewport(0, step);
+            break;
+          case "ArrowUp":
+            moveViewport(0, -step);
+            break;
+          case "d":
+            setDrawMode("draw");
+            break;
+          case "e":
+            setDrawMode("erase");
+            break;
+        }
       }
-    }
-  };
+    };
 
-  const handleKeyUp = (e) => {
-    if (e.code === 'Space' && isSpacePressed) {
-      //e.preventDefault();
-      setIsSpacePressed(false);
-      // Restaurar cursor original
-      if (workspaceRef.current) {
-        workspaceRef.current.style.cursor = drawMode === "move" ? "grab" : "crosshair";
+    const handleKeyUp = (e) => {
+      if (activeAI) return;
+      if (e.code === "Space" && isSpacePressed) {
+        //e.preventDefault();
+        setIsSpacePressed(false);
+        // Restaurar cursor original
+        
       }
-    }
-  };
+    };
 
-  window.addEventListener("keydown", handleKeyDown);
-  window.addEventListener("keyup", handleKeyUp);
-  
-  return () => {
-    window.removeEventListener("keydown", handleKeyDown);
-    window.removeEventListener("keyup", handleKeyUp);
-  };
-}, [moveViewport, isSpacePressed, drawMode]);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [moveViewport, isSpacePressed, drawMode]);
 
   // Efecto para manejar el canvas de preview
   useEffect(() => {
@@ -5082,7 +6177,39 @@ useEffect(() => {
           fillColor,
           rotation
         );
-      } else if (tool === TOOLS.polygonPencil) {
+      } 
+      else if (tool === TOOLS.blurFinger) {
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = "rgba(100, 200, 255, 0.4)"; // Color azul translúcido
+        
+        const width = toolParameters?.width || 3;
+        const offset = Math.floor(width / 2);
+        const x = canvasCoords.x - offset;
+        const y = canvasCoords.y - offset;
+        
+        const screenX = (x - viewportOffset.x) * zoom;
+        const screenY = (y - viewportOffset.y) * zoom;
+        
+        // Dibujar círculo con borde punteado para indicar área de blur
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = "rgba(100, 200, 255, 0.8)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(
+          screenX + (width * zoom) / 2, 
+          screenY + (width * zoom) / 2, 
+          (width * zoom) / 2, 
+          0, 
+          2 * Math.PI
+        );
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        // Círculo interior sólido
+        ctx.fillRect(screenX, screenY, width * zoom, width * zoom);
+      }      
+      
+      else if (tool === TOOLS.polygonPencil) {
         ctx.save();
 
         // Calcular centro para mirroring
@@ -5431,117 +6558,121 @@ useEffect(() => {
   }, [tool, polygonPoints, polygonCurvePoints, activeLayerId, toolParameters]);
 
   // Efecto para manejar zoom con rueda del ratón
- // Función throttle para limitar la frecuencia de ejecución
-const throttle = (func, limit) => {
-  let inThrottle;
-  return function() {
-    const args = arguments;
-    const context = this;
-    if (!inThrottle) {
-      func.apply(context, args);
-      inThrottle = true;
-      setTimeout(() => inThrottle = false, limit);
-    }
-  };
-};
-
-// Importar flushSync al principio del archivo
-
-
-// Usar useCallback para evitar recrear la función en cada render
-const handleWheel = useCallback((e) => {
-  e.preventDefault();
-  
-  const rect = workspaceRef.current.getBoundingClientRect();
-  const mouseX = e.clientX - rect.left;
-  const mouseY = e.clientY - rect.top;
-  
-  const viewportMouseX = mouseX / zoom - panOffset.x / zoom;
-  const viewportMouseY = mouseY / zoom - panOffset.y / zoom;
-  const canvasMouseX = viewportMouseX + viewportOffset.x;
-  const canvasMouseY = viewportMouseY + viewportOffset.y;
-  
-  const zoomDirection = e.deltaY > 0 ? -1 : 1;
-  const zoomFactor = 1.2;
-  const newZoomRaw = zoom * Math.pow(zoomFactor, zoomDirection);
-  
-  const newZoom = Math.max(
-    1,
-    Math.min(
-      50,
-      newZoomRaw < 10
-        ? Math.round(newZoomRaw * 10) / 10 // 1 decimal para zoom < 10
-        : Math.round(newZoomRaw) // enteros para zoom >= 10
-    )
-  );
-  
-  if (newZoom === zoom) return;
-  
-  const newViewportWidth = Math.min(
-    totalWidth,
-    Math.floor(workspaceWidth / newZoom)
-  );
-  const newViewportHeight = Math.min(
-    totalHeight,
-    Math.floor(workspaceHeight / newZoom)
-  );
-  
-  const newViewportMouseX = mouseX / newZoom - panOffset.x / newZoom;
-  const newViewportMouseY = mouseY / newZoom - panOffset.y / newZoom;
-  
-  const newViewportOffsetX = Math.floor(canvasMouseX - newViewportMouseX);
-  const newViewportOffsetY = Math.floor(canvasMouseY - newViewportMouseY);
-  
-  const clampedOffsetX = Math.max(
-    0,
-    Math.min(totalWidth - newViewportWidth, newViewportOffsetX)
-  );
-  const clampedOffsetY = Math.max(
-    0,
-    Math.min(totalHeight - newViewportHeight, newViewportOffsetY)
-  );
-  
-  const deltaX = clampedOffsetX - viewportOffset.x;
-  const deltaY = clampedOffsetY - viewportOffset.y;
-  
-  // SOLUCIÓN: Usar flushSync para garantizar que todas las actualizaciones
-  // se apliquen en el mismo frame, evitando el parpadeo
-  flushSync(() => {
-    setZoom(newZoom);
-    setViewportWidth(newViewportWidth);
-    setViewportHeight(newViewportHeight);
-    
-    if (deltaX !== 0 || deltaY !== 0) {
-      moveViewport(deltaX, deltaY);
-    }
-  });
-}, [
-  zoom,
-  workspaceWidth,
-  workspaceHeight,
-  totalWidth,
-  totalHeight,
-  viewportOffset,
-  panOffset,
-  moveViewport,
-]);
-
-// Throttle la función para evitar demasiadas actualizaciones
-const throttledHandleWheel = useCallback(
-  throttle(handleWheel, 16), // ~60fps
-  [handleWheel]
-);
-
-useEffect(() => {
-  const workspace = workspaceRef.current;
-  if (workspace) {
-    workspace.addEventListener("wheel", throttledHandleWheel, { passive: false });
-    
-    return () => {
-      workspace.removeEventListener("wheel", throttledHandleWheel);
+  // Función throttle para limitar la frecuencia de ejecución
+  const throttle = (func, limit) => {
+    let inThrottle;
+    return function () {
+      const args = arguments;
+      const context = this;
+      if (!inThrottle) {
+        func.apply(context, args);
+        inThrottle = true;
+        setTimeout(() => (inThrottle = false), limit);
+      }
     };
-  }
-}, [throttledHandleWheel]);
+  };
+
+  // Importar flushSync al principio del archivo
+
+  // Usar useCallback para evitar recrear la función en cada render
+  const handleWheel = useCallback(
+    (e) => {
+      e.preventDefault();
+
+      const rect = workspaceRef.current.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const viewportMouseX = mouseX / zoom - panOffset.x / zoom;
+      const viewportMouseY = mouseY / zoom - panOffset.y / zoom;
+      const canvasMouseX = viewportMouseX + viewportOffset.x;
+      const canvasMouseY = viewportMouseY + viewportOffset.y;
+
+      const zoomDirection = e.deltaY > 0 ? -1 : 1;
+      const zoomFactor = 1.2;
+      const newZoomRaw = zoom * Math.pow(zoomFactor, zoomDirection);
+
+      const newZoom = Math.max(
+        1,
+        Math.min(
+          50,
+          newZoomRaw < 10
+            ? Math.round(newZoomRaw * 10) / 10 // 1 decimal para zoom < 10
+            : Math.round(newZoomRaw) // enteros para zoom >= 10
+        )
+      );
+
+      if (newZoom === zoom) return;
+
+      const newViewportWidth = Math.min(
+        totalWidth,
+        Math.floor(workspaceWidth / newZoom)
+      );
+      const newViewportHeight = Math.min(
+        totalHeight,
+        Math.floor(workspaceHeight / newZoom)
+      );
+
+      const newViewportMouseX = mouseX / newZoom - panOffset.x / newZoom;
+      const newViewportMouseY = mouseY / newZoom - panOffset.y / newZoom;
+
+      const newViewportOffsetX = Math.floor(canvasMouseX - newViewportMouseX);
+      const newViewportOffsetY = Math.floor(canvasMouseY - newViewportMouseY);
+
+      const clampedOffsetX = Math.max(
+        0,
+        Math.min(totalWidth - newViewportWidth, newViewportOffsetX)
+      );
+      const clampedOffsetY = Math.max(
+        0,
+        Math.min(totalHeight - newViewportHeight, newViewportOffsetY)
+      );
+
+      const deltaX = clampedOffsetX - viewportOffset.x;
+      const deltaY = clampedOffsetY - viewportOffset.y;
+
+      // SOLUCIÓN: Usar flushSync para garantizar que todas las actualizaciones
+      // se apliquen en el mismo frame, evitando el parpadeo
+      flushSync(() => {
+        setZoom(newZoom);
+        setViewportWidth(newViewportWidth);
+        setViewportHeight(newViewportHeight);
+
+        if (deltaX !== 0 || deltaY !== 0) {
+          moveViewport(deltaX, deltaY);
+        }
+      });
+    },
+    [
+      zoom,
+      workspaceWidth,
+      workspaceHeight,
+      totalWidth,
+      totalHeight,
+      viewportOffset,
+      panOffset,
+      moveViewport,
+    ]
+  );
+
+  // Throttle la función para evitar demasiadas actualizaciones
+  const throttledHandleWheel = useCallback(
+    throttle(handleWheel, 16), // ~60fps
+    [handleWheel]
+  );
+
+  useEffect(() => {
+    const workspace = workspaceRef.current;
+    if (workspace) {
+      workspace.addEventListener("wheel", throttledHandleWheel, {
+        passive: false,
+      });
+
+      return () => {
+        workspace.removeEventListener("wheel", throttledHandleWheel);
+      };
+    }
+  }, [throttledHandleWheel]);
 
   // Efecto para resetear estados de herramientas
   useEffect(() => {
@@ -5617,6 +6748,9 @@ useEffect(() => {
   };
 
   /* ============================Logica de canvas de seleccion=================================================
+
+
+  
  * 
 Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manipularlos, principalmente arrastrarlos
  */
@@ -5761,6 +6895,7 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
 
   // Función para limpiar la selección actual
   const clearCurrentSelection = useCallback(() => {
+    
     // 1. Actualizar el grupo ANTES de limpiar (si hay arrastre y grupo seleccionado)
     if (selectedGroup && (dragOffset.x !== 0 || dragOffset.y !== 0)) {
       console.log("e actualizaron los pixeles del grupo");
@@ -6091,38 +7226,36 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
     }
   }, [activeLayerId, lassoPoints, getLayerData]);
 
+  const clampCoordinates = useCallback(
+    (coords, maxWidth = totalWidth, maxHeight = totalHeight) => {
+      return {
+        x: Math.max(0, Math.min(maxWidth - 1, coords.x)),
+        y: Math.max(0, Math.min(maxHeight - 1, coords.y)),
+      };
+    },
+    [totalWidth, totalHeight]
+  );
+
   // Lógica para nueva selección
   useEffect(() => {
-    if(isSpacePressed){return}
+    if (isSpacePressed) return;
+
     if (tool !== TOOLS.select || !isPressed) return;
 
-    // Si apenas se inicia el presionado (primer punto del path)
-    if (path.length === 1) {
+    // Si acabamos de iniciar el presionado y NO estamos arrastrando una selección existente
+    if (path.length === 1 && !isDraggingSelection) {
       const clickPoint = path[0];
       const pixelCoords = getPixelCoordinates(clickPoint);
       const canvasCoords = viewportToCanvasCoords(pixelCoords.x, pixelCoords.y);
 
-      // Verificar si el click está en la selección existente
-      if (selectionActive && selectedPixels.length > 0) {
-        const isOnSelection = selectedPixels.some(
-          (pixel) =>
-            Math.floor(pixel.x + dragOffset.x) === Math.floor(canvasCoords.x) &&
-            Math.floor(pixel.y + dragOffset.y) === Math.floor(canvasCoords.y)
-        );
-
-        setClickInSelection(isOnSelection);
-
-        if (isOnSelection) {
-          // Si clickeó en selección existente, iniciar proceso de arrastre
-          setIsDraggingSelection(true);
-          setDragStartPoint({
-            x: canvasCoords.x,
-            y: canvasCoords.y,
-          });
-          // Importante: evitar que se siga procesando como una nueva selección
-          return;
-        } else {
-          // Si clickeó fuera de la selección actual, limpiarla
+      // Solo procesar como nueva selección si no hay selección activa
+      // o si clickeamos fuera de la selección existente
+      if (!selectionActive) {
+        // Iniciar nueva selección
+        if (
+          path.length === 0 &&
+          (selectedPixels.length > 0 || croppedSelectionBounds)
+        ) {
           clearCurrentSelection();
         }
       }
@@ -6133,31 +7266,31 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
       return;
     }
 
-    // Lógica existente para nueva selección
-    if (
-      path.length === 0 &&
-      (selectedPixels.length > 0 || croppedSelectionBounds)
-    ) {
-      clearCurrentSelection();
-    }
-
-    if (path.length >= 1) {
+    // Lógica existente para nueva selección (solo cuando NO hay selección activa)
+    if (!selectionActive && path.length >= 1) {
       const canvasCoords = path.map((point) => {
         const viewportPixelCoords = getPixelCoordinates(point);
-        return viewportToCanvasCoords(
+        const rawCoords = viewportToCanvasCoords(
           viewportPixelCoords.x,
           viewportPixelCoords.y
         );
+
+        // AGREGAR AQUÍ: Limitar coordenadas dentro del canvas
+        return clampCoordinates(rawCoords);
       });
 
-      // Solo actualizar las coordenadas de selección si no estamos arrastrando
-      if (!isDraggingSelection) {
-        setSelectionCoords(canvasCoords);
-
-        setCroppedSelectionBounds(null);
-      }
+      setSelectionCoords(canvasCoords);
+      setCroppedSelectionBounds(null);
     }
-  }, [isPressed, path, tool, isDraggingSelection, activeLayerId]);
+  }, [
+    isPressed,
+    path,
+    tool,
+    isDraggingSelection,
+    activeLayerId,
+    selectionActive,
+    clampCoordinates,
+  ]);
 
   // Finalizar arrastre cuando se suelta el mouse
   useEffect(() => {
@@ -6424,6 +7557,7 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
 
   // Manejar clicks fuera de la selección
   useEffect(() => {
+    if (isSpacePressed) return;
     if (
       selectionActive &&
       (tool === TOOLS.select || tool === TOOLS.lassoSelect) &&
@@ -6433,13 +7567,6 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
       const clickPoint = path[0];
       const pixelCoords = getPixelCoordinates(clickPoint);
       const canvasCoords = viewportToCanvasCoords(pixelCoords.x, pixelCoords.y);
-
-      // Verificar si el click coincide exactamente con un píxel seleccionado
-      const isOnSelectedPixel = selectedPixels.some(
-        (pixel) =>
-          Math.floor(pixel.x + dragOffset.x) === Math.floor(canvasCoords.x) &&
-          Math.floor(pixel.y + dragOffset.y) === Math.floor(canvasCoords.y)
-      );
 
       // Verificar si el click está en el área de los botones de acción
       const isOnActionButtons =
@@ -6459,8 +7586,23 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
             dragOffset.y +
             croppedSelectionBounds.height;
 
-      if (isOnSelectedPixel) {
-        // Si clickeó en la selección, iniciar arrastre
+      // CAMBIO PRINCIPAL: Verificar si está dentro del rectángulo completo de selección
+      const isInsideSelectionBounds =
+        croppedSelectionBounds &&
+        canvasCoords.x >= croppedSelectionBounds.x + dragOffset.x &&
+        canvasCoords.x <
+          croppedSelectionBounds.x +
+            croppedSelectionBounds.width +
+            dragOffset.x &&
+        canvasCoords.y >= croppedSelectionBounds.y + dragOffset.y &&
+        canvasCoords.y <
+          croppedSelectionBounds.y +
+            croppedSelectionBounds.height +
+            dragOffset.y;
+
+      // MODIFICADO: Usar isInsideSelectionBounds en lugar de isOnSelectedPixel
+      if (isInsideSelectionBounds && !isOnActionButtons) {
+        // Si clickeó dentro del rectángulo de selección, iniciar arrastre
         setClickInSelection(true);
         setIsDraggingSelection(true);
         setDragStartPoint({
@@ -6601,19 +7743,24 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
     paintPixelInSelectionCanvas,
   ]);
 
-  useEffect(() => {
-    // Solo borrar y redibujar píxeles cuando se completa una operación de arrastre
-    // o cuando realmente cambiamos el offset, no durante el arrastre
-    if (selectedPixels <= 0) {
-      setSelectionCoords([]);
-    }
+  // Añadir un nuevo estado
+  const [pixelsAlreadyErased, setPixelsAlreadyErased] = useState(false);
 
-    if (selectedPixels.length > 0) {
+  // Modificar el useEffect problemático
+  useEffect(() => {
+    // Solo borrar píxeles la PRIMERA vez que se establece una selección
+    if (selectedPixels.length > 0 && !pixelsAlreadyErased && selectionActive) {
       selectedPixels.forEach((pixel) => {
         erasePixels(activeLayerId, pixel.x, pixel.y);
       });
+      setPixelsAlreadyErased(true);
     }
-  }, [selectedPixels]);
+
+    // Resetear el flag cuando se limpia la selección
+    if (selectedPixels.length === 0) {
+      setPixelsAlreadyErased(false);
+    }
+  }, [selectedPixels, pixelsAlreadyErased, selectionActive]);
 
   /////==================================Lógica para LAZO ==================================================================
 
@@ -6621,7 +7768,7 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
   useEffect(() => {
     if (isPressed && isDraggingSelection && croppedSelectionBounds) return;
     if (selectionActive) return; // SI ya hemos seleccionado no necesitamos esto
-    // Solo se activa para la herramiento de lasso
+    // Solo se activa para la herramienta de lasso
     if (tool !== TOOLS.lassoSelect || !selectionCanvasRef.current) return;
 
     const canvas = selectionCanvasRef.current;
@@ -6635,10 +7782,13 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
       // Convert the current path points to canvas coordinates
       const canvasPoints = path.map((point) => {
         const viewportPixelCoords = getPixelCoordinates(point);
-        return viewportToCanvasCoords(
+        const rawCoords = viewportToCanvasCoords(
           viewportPixelCoords.x,
           viewportPixelCoords.y
         );
+
+        // AGREGAR AQUÍ: Limitar coordenadas para lasso también
+        return clampCoordinates(rawCoords);
       });
 
       // Make sure we don't have duplicate points
@@ -6683,8 +7833,15 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
       }
     } else if (lassoPoints.length > 2) {
     }
-  }, [tool, isPressed, path, viewportOffset, lassoPoints, selectionActive]);
-
+  }, [
+    tool,
+    isPressed,
+    path,
+    viewportOffset,
+    lassoPoints,
+    selectionActive,
+    clampCoordinates,
+  ]);
   //  ============================ Logica de canvas de seleccion =================================================//
 
   //// funcion especial para rotar:
@@ -6696,56 +7853,104 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
   //-----------------------------Funciones de accion para la selección---------------------------------------//
 
   const deleteSelection = () => {
-    clearCurrentSelection();
-    selectedPixels.forEach((pixel) => {
-      erasePixels(
-        activeLayerId,
-        pixel.x + dragOffset.x,
-        pixel.y + dragOffset.y
-      );
-    });
+    const canvas = selectionCanvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // 3. Resetear todos los estados
+    setSelectionCoords([]);
+    setSelectedPixels([]);
+    setOriginalPixelColors([]);
+
+    setCroppedSelectionBounds(null);
+    setDragOffset({ x: 0, y: 0 });
+    setSelectionActive(false);
+    setLassoPoints([]);
+    setIsDraggingSelection(false);
+    setDragStartPoint(null);
   };
 
-  function rotatePixels90(pixels, direction = "right") {
-    if (!pixels.length) return [];
+  function duplicateSelection() {
+    if (selectedPixels.length === 0 || originalPixelColors.length === 0) {
+      alert("No hay píxeles seleccionados para duplicar");
+      return;
+    }
 
-    const minX = Math.min(...pixels.map((p) => p.x));
-    const maxX = Math.max(...pixels.map((p) => p.x));
-    const minY = Math.min(...pixels.map((p) => p.y));
-    const maxY = Math.max(...pixels.map((p) => p.y));
-
-    const newPixels = pixels.map((p) => {
-      const relativeX = p.x - minX;
-      const relativeY = p.y - minY;
-
-      let newX, newY;
-
-      if (direction === "right") {
-        // 90° clockwise
-        newX = minX + (maxY - minY - relativeY);
-        newY = minY + relativeX;
-      } else if (direction === "left") {
-        // 90° counter-clockwise
-        newX = minX + relativeY;
-        newY = minY + (maxX - minX - relativeX);
-      } else {
-        throw new Error("Invalid rotation direction: use 'right' or 'left'");
+    // 1. Pintar los píxeles en la posición actual (los "fijas")
+    selectedPixels.forEach((pixel, index) => {
+      if (originalPixelColors[index]) {
+        pintarPixelConTamaño(
+          pixel.x + dragOffset.x,
+          pixel.y + dragOffset.y,
+          originalPixelColors[index],
+          1
+        );
       }
-
-      return {
-        x: newX,
-        y: newY,
-        color: p.color,
-      };
     });
 
-    return newPixels;
+    // 2. Actualizar selectedPixels a las nuevas posiciones
+    const newPixels = selectedPixels.map((pixel) => ({
+      x: pixel.x + dragOffset.x,
+      y: pixel.y + dragOffset.y,
+      color: pixel.color,
+    }));
+
+    // 3. NO necesitas resetear initialEraseDone porque ya están borrados
+    setDragOffset((prev) => ({
+      x: prev.x + 5,
+      y: prev.y + 5,
+    }));
   }
 
-  const handleRotation = (direction) => {
-    setSelectedPixels(rotatePixels90(selectedPixels, direction));
+  const rotatePixels90 = useCallback(
+    (pixels, direction = "right") => {
+      if (!pixels.length) return [];
 
-    // Intercambia width y height después de la rotación
+      const minX = Math.min(...pixels.map((p) => p.x));
+      const maxX = Math.max(...pixels.map((p) => p.x));
+      const minY = Math.min(...pixels.map((p) => p.y));
+      const maxY = Math.max(...pixels.map((p) => p.y));
+
+      const newPixels = pixels.map((p) => {
+        const relativeX = p.x - minX;
+        const relativeY = p.y - minY;
+
+        let newX, newY;
+
+        if (direction === "right") {
+          // 90° clockwise
+          newX = minX + (maxY - minY - relativeY);
+          newY = minY + relativeX;
+        } else if (direction === "left") {
+          // 90° counter-clockwise
+          newX = minX + relativeY;
+          newY = minY + (maxX - minX - relativeX);
+        } else {
+          throw new Error("Invalid rotation direction: use 'right' or 'left'");
+        }
+
+        return {
+          x: newX,
+          y: newY,
+          color: p.color,
+        };
+      });
+
+      return newPixels;
+    },
+    
+    dragOffset
+  );
+
+  const handleRotation = (direction) => {
+    // Ya no necesitas borrar manualmente aquí
+    // porque ya están borrados desde la selección inicial
+
+    const rotatedPixels = rotatePixels90(selectedPixels, direction);
+    setSelectedPixels(rotatedPixels);
+
     setCroppedSelectionBounds((prev) => ({
       ...prev,
       width: prev.height,
@@ -6753,133 +7958,181 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
     }));
   };
 
-  function duplicateSelection() {
-    if (selectedPixels.length === 0 || originalPixelColors.length === 0) {
-        alert("No hay píxeles seleccionados para duplicar");
-        return;
-    }
-
-    // 1. Pintar los píxeles originales en su posición final
-    selectedPixels.forEach((pixel, index) => {
-        if (originalPixelColors[index]) {
-            pintarPixelConTamaño(
-                pixel.x + dragOffset.x,
-                pixel.y + dragOffset.y,
-                originalPixelColors[index],
-                1
-            );
-        }
-    });
-
-    // 2. Crear nuevos píxeles duplicados con desplazamiento
-    const duplicatedPixels = selectedPixels.map(pixel => ({
-        ...pixel,
-        x: pixel.x + 5, // Desplazamiento para la duplicación
-        y: pixel.y + 5
-    }));
-
-    // 3. Actualizar la selección para que ahora contenga los píxeles duplicados
-    setSelectedPixels(duplicatedPixels);
-    
-    // 4. Actualizar los colores originales para los píxeles duplicados
-    setOriginalPixelColors([...originalPixelColors]); // Copia los mismos colores
-    
-    // 5. Actualizar los bounds para la nueva posición
-    if (croppedSelectionBounds) {
-        setCroppedSelectionBounds({
-            ...croppedSelectionBounds,
-            x: croppedSelectionBounds.x + 5,
-            y: croppedSelectionBounds.y + 5
-        });
-    }
-    
-    // 6. Resetear el dragOffset para los píxeles duplicados
-    setDragOffset({ x: 0, y: 0 });
-    
-    console.log("Píxeles duplicados:", duplicatedPixels.length);
-}
-
-  const copySelection = useCallback(() => {
-    if (selectedPixels.length === 0) {
-        alert("No hay píxeles seleccionados para copiar");
-        return;
-    }
-
-    setCopiedPixels({
-        pixels: selectedPixels,
-        offset: dragOffset,
-        originalColors: originalPixelColors,
-        bounds: croppedSelectionBounds
-    });
-    
-  
-}, [selectedPixels, dragOffset, originalPixelColors, croppedSelectionBounds]);
-
-const cutSelection = useCallback(() => {
+// 2. Modificar la función copySelection para asegurar copias limpias
+const copySelection = useCallback(() => {
   if (selectedPixels.length === 0) {
-      alert("No hay píxeles seleccionados para copiar");
-      return;
+    alert("No hay píxeles seleccionados para copiar");
+    return;
   }
+
+  // Crear copias completamente independientes para el portapapeles
+  const pixelCopies = selectedPixels.map((pixel, index) => ({
+    x: pixel.x,
+    y: pixel.y,
+    color: {
+      r: pixel.color.r,
+      g: pixel.color.g,
+      b: pixel.color.b,
+      a: pixel.color.a
+    },
+    // Agregar identificador de origen para debugging
+    originalId: pixel.id || `original_${index}`
+  }));
+
+  const originalColorCopies = originalPixelColors.map(color => ({
+    r: color.r,
+    g: color.g,
+    b: color.b,
+    a: color.a
+  }));
+
+  const boundsCopy = croppedSelectionBounds ? {
+    x: croppedSelectionBounds.x,
+    y: croppedSelectionBounds.y,
+    width: croppedSelectionBounds.width,
+    height: croppedSelectionBounds.height
+  } : null;
 
   setCopiedPixels({
-      pixels: selectedPixels,
-      offset: dragOffset,
-      originalColors: originalPixelColors,
-      bounds: croppedSelectionBounds
+    pixels: pixelCopies,
+    offset: { x: dragOffset.x, y: dragOffset.y }, // Copia del offset también
+    originalColors: originalColorCopies,
+    bounds: boundsCopy,
+    // Agregar timestamp para identificar cuándo se hizo la copia
+    timestamp: Date.now()
   });
-  
-  deleteSelection()
- 
+
+  console.log("Selección copiada al portapapeles:", pixelCopies.length, "píxeles");
 }, [selectedPixels, dragOffset, originalPixelColors, croppedSelectionBounds]);
 
+// 3. Modificar la función cutSelection para usar las mismas copias independientes
+const cutSelection = useCallback(() => {
+  if (selectedPixels.length === 0) {
+    alert("No hay píxeles seleccionados para cortar");
+    return;
+  }
 
+  // Primero copiar (esto crea copias independientes)
+  copySelection();
 
-const pastePixels = useCallback(() => {
-  if (!copiedPixels || !copiedPixels.pixels || copiedPixels.pixels.length === 0) {
+  // Luego eliminar la selección actual
+  deleteSelection();
+
+  console.log("Selección cortada - copiada al portapapeles y eliminada");
+}, [selectedPixels, copySelection, deleteSelection]);
+
+// 4. Función de debugging para rastrear el estado del portapapeles
+const debugClipboard = useCallback(() => {
+  console.log("=== ESTADO DEL PORTAPAPELES ===");
+  if (copiedPixels) {
+    console.log("Píxeles en portapapeles:", copiedPixels.pixels?.length || 0);
+    console.log("Timestamp de copia:", new Date(copiedPixels.timestamp || 0).toLocaleTimeString());
+    console.log("Offset:", copiedPixels.offset);
+    console.log("Bounds:", copiedPixels.bounds);
+    if (copiedPixels.pixels?.length > 0) {
+      console.log("Primer pixel:", copiedPixels.pixels[0]);
+    }
+  } else {
+    console.log("Portapapeles vacío");
+  }
+  console.log("=== FIN ESTADO PORTAPAPELES ===");
+}, [copiedPixels]);
+  const pastePixels = useCallback(() => {
+    // Limpiar selección actual si existe
+    setPixelsAlreadyErased(true);
+      clearCurrentSelection();
+    
+  
+    if (
+      !copiedPixels ||
+      !copiedPixels.pixels ||
+      copiedPixels.pixels.length === 0
+    ) {
       alert("No hay píxeles en el portapapeles");
       return;
-  }
-
-  // Limpiar selección actual si existe
-  if (selectionActive) {
-      clearCurrentSelection();
-  }
-
-  // Cambiar a herramienta de selección
-  setTool(TOOLS.select);
+    }
   
-  // Desplazar ligeramente los píxeles pegados
-  const pasteOffset = {
+    // Cambiar a herramienta de selección
+    setTool(TOOLS.select);
+  
+    // Desplazar ligeramente los píxeles pegados
+    const pasteOffset = {
       x: (copiedPixels.offset?.x || 0) + 10,
-      y: (copiedPixels.offset?.y || 0) + 10
-  };
+      y: (copiedPixels.offset?.y || 0) + 10,
+    };
   
-  // Restaurar todos los estados necesarios
-  setSelectedPixels(copiedPixels.pixels);
-  setOriginalPixelColors(copiedPixels.originalColors || copiedPixels.pixels.map(p => p.color));
-  setDragOffset(pasteOffset);
-  setCroppedSelectionBounds(copiedPixels.bounds);
-  setSelectionActive(true);
+    // MODIFICACIÓN PRINCIPAL: Crear copias completamente independientes de los píxeles
+    const independentPixels = copiedPixels.pixels.map((pixel, index) => ({
+      // Crear un nuevo objeto pixel completamente independiente
+      x: pixel.x, // Coordenadas originales (sin offset aplicado aún)
+      y: pixel.y,
+      color: {
+        // Crear una copia profunda del color para evitar referencias compartidas
+        r: pixel.color.r,
+        g: pixel.color.g,
+        b: pixel.color.b,
+        a: pixel.color.a
+      },
+      // Agregar un identificador único para rastrear este pixel específico
+      id: `pasted_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`
+    }));
   
-  console.log("Píxeles pegados:", copiedPixels.pixels.length);
-}, [copiedPixels, selectionActive, clearCurrentSelection]);
+    // Crear copias independientes de los colores originales también
+    const independentOriginalColors = (copiedPixels.originalColors || copiedPixels.pixels.map(p => p.color))
+      .map(color => ({
+        r: color.r,
+        g: color.g,
+        b: color.b,
+        a: color.a
+      }));
+  
+    // Crear copia independiente de los bounds
+    const independentBounds = copiedPixels.bounds ? {
+      x: copiedPixels.bounds.x,
+      y: copiedPixels.bounds.y,
+      width: copiedPixels.bounds.width,
+      height: copiedPixels.bounds.height
+    } : null;
+  
+    // Restaurar todos los estados necesarios con las copias independientes
+    setSelectedPixels(independentPixels);
+    setOriginalPixelColors(independentOriginalColors);
+    setDragOffset(pasteOffset);
+    setCroppedSelectionBounds(independentBounds);
+    setSelectionActive(true);
+  
+    console.log("Píxeles pegados como copias independientes:", independentPixels.length);
+  }, [copiedPixels, selectionActive, clearCurrentSelection]);
+  
 
-  function fillSelection() {
+  const fillSelection = useCallback(() => {
+    const color = toolParameters.foregroundColor;
     let newSelectedPixels = [];
 
     selectedPixels.forEach((pixel) => {
       newSelectedPixels.push({
         x: pixel.x,
         y: pixel.y,
-        color: { r: 255, g: 0, b: 0, a: 1 },
+        color: color,
       });
     });
     //Para hacer que el cambio sea permanente hay que modificar los originalColors
     setSelectedPixels(newSelectedPixels);
-  }
+    const newColors = originalPixelColors.map(() => color);
 
-  // En tu componente padre
+    setOriginalPixelColors(newColors);
+  }, [toolParameters, selectedPixels]);
 
+  const isolateSelection = useCallback(()=>{
+    
+    clearCurrentSelection();
+
+    const isolatedSelectedPixels = selectedPixels.map(({ x, y }) => ({ x, y }));
+
+    console.log("mispixeles:", isolatedSelectedPixels);
+    setIsolatedPixels(isolatedSelectedPixels);
+
+  },[selectedPixels]);
   const groupSelection = useCallback(() => {
     if (!selectedPixels?.length) {
       alert("Selecciona píxeles primero");
@@ -7018,6 +8271,88 @@ const pastePixels = useCallback(() => {
     ]
   );
 
+  const colorSelection = useCallback(
+    async (layerid, coords) => {
+      setTool(TOOLS.select);
+
+      try {
+        // 1. Limpiar selección anterior si existe
+        if (selectionActive || selectedPixels.length > 0) {
+          clearCurrentSelection();
+        }
+
+        // 2. Obtener píxeles que coinciden con el color
+        const pixelsByColor = getMatchingPixels(layerid, coords.x, coords.y);
+
+        if (!pixelsByColor || pixelsByColor.length === 0) {
+          console.log("No se encontraron píxeles con ese color");
+          return;
+        }
+
+        // 3. NUEVA LÓGICA: En lugar de usar autoCropSelection,
+        // establecer directamente los píxeles seleccionados
+
+        // Calcular bounds reales de los píxeles encontrados
+        const xCoords = pixelsByColor.map((p) => p.x);
+        const yCoords = pixelsByColor.map((p) => p.y);
+        const minX = Math.min(...xCoords);
+        const maxX = Math.max(...xCoords);
+        const minY = Math.min(...yCoords);
+        const maxY = Math.max(...yCoords);
+
+        // 4. Establecer directamente los píxeles y sus propiedades
+        setSelectedPixels(pixelsByColor);
+
+        // 5. Guardar colores originales
+        const originalColors = pixelsByColor.map((pixel) => pixel.color);
+        setOriginalPixelColors(originalColors);
+
+        // 6. Establecer bounds del área seleccionada
+        setCroppedSelectionBounds({
+          x: minX,
+          y: minY,
+          width: maxX - minX + 1,
+          height: maxY - minY + 1,
+        });
+
+        // 7. Activar la selección
+        setSelectionActive(true);
+        setFinalizedSelection(true);
+
+        // 8. Resetear offset de arrastre
+        setDragOffset({ x: 0, y: 0 });
+
+        // 9. Limpiar coordenadas de selección ya que no las necesitamos
+        setSelectionCoords([]);
+
+        console.log(`Seleccionados ${pixelsByColor.length} píxeles por color`);
+      } catch (error) {
+        console.error("Error al seleccionar por color:", error);
+        // Limpiar estados en caso de error
+        setSelectionActive(false);
+        setCroppedSelectionBounds(null);
+        setSelectedPixels([]);
+        setOriginalPixelColors([]);
+        setSelectionCoords([]);
+      }
+    },
+    [
+      layers,
+      activeLayerId,
+      selectionActive,
+      selectedPixels,
+      clearCurrentSelection,
+      getMatchingPixels,
+      setSelectedPixels,
+      setOriginalPixelColors,
+      setCroppedSelectionBounds,
+      setSelectionActive,
+      setFinalizedSelection,
+      setDragOffset,
+      setSelectionCoords,
+    ]
+  );
+
   //Funciones esenciales para el drag and dropp:
   // Mover una capa a una nueva posición en el array
   const moveLayerToPosition = (fromIndex, toIndex) => {
@@ -7082,14 +8417,16 @@ const pastePixels = useCallback(() => {
         frameCount,
         layers,
         frames,
+       
       };
       previousFrozenProps.current = newProps;
       return newProps;
     } else {
       return previousFrozenProps.current;
     }
-  }, [currentFrame, activeLayerId, frameCount, layers, frames]);
+  }, [currentFrame, activeLayerId, frameCount, layers, frames, selectedPixels, dragOffset]);
 
+  
   const MemoizedLayerAnimation = useMemo(() => {
     return (
       <LayerAnimation
@@ -7186,11 +8523,12 @@ const pastePixels = useCallback(() => {
   }, [
     // Solo las dependencias que realmente afectan LayerAnimation
     frozenProps,
-    isPlaying,
+  isPlaying,
     viewportOffset,
     zoom,
     framesResume,
-    selectedPixels
+    selectedPixels,
+    dragOffset
 
     // NO incluir position ni relativeToTarget aquí
   ]);
@@ -7234,6 +8572,7 @@ const pastePixels = useCallback(() => {
     );
   }, [
     // Solo dependencias estables
+    isPressed,
     viewportOffset,
     totalWidth,
     totalHeight,
@@ -7242,13 +8581,14 @@ const pastePixels = useCallback(() => {
     zoom,
     tool,
     toolParameters,
-    framesResume
+    framesResume,
 
     // NO incluir datos de mouse
   ]);
- const [contadorFrames, setContadorFrames] = useState(0);
+  const [contadorFrames, setContadorFrames] = useState(0);
 
-
+  //autoguardado
+  /*
   useEffect(()=>{
    setContadorFrames(contadorFrames+1);
     const esDivisibleEntre3 = contadorFrames % 3 === 0; 
@@ -7258,39 +8598,217 @@ const pastePixels = useCallback(() => {
       handleExport();
     }
 
-  },[framesResume])
+  },[framesResume])*/
+  /*Cursor reactivo */
 
-  const topToolbarActions = [
-    {
-      name: "Deshacer",
-      icon: "↶",
-      action: () => console.log("Deshacer"),
-    },
-    {
-      name: "Rehacer",
-      icon: "↷",
-      action: () => console.log("Rehacer"),
-    },
-    {
-      icon: "🎨", // Solo icono
-      action: () => console.log("Paleta de colores"),
-    },
-    {
-      name: "Guardar", // Solo texto
-      action: () => console.log("Guardar"),
-    },
-  ];
+  useEffect(()=>{
+    if(isSpacePressed){
+      workspaceRef.current.style.cursor = "grab";
+      return
+    }
+    if(isSpacePressed && isDragging){
+      workspaceRef.current.style.cursor = "grabbing";
+      return
+    }
+   
+      workspaceRef.current.style.cursor = reactiveCursor(tool, toolParameters);
+      
 
+    
+  },[tool,drawMode,isDragging, isSpacePressed,toolParameters])
+
+
+  useEffect(() => {
+    // Invalidar cache al cambiar de capa activa
+    invalidateImageDataCache();
+  }, [activeLayerId,toolParameters,currentFrame,drawableWidth, drawableHeight, isolatedPixels, tool, framesResume, selectedPixels]);
+  
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Solo procesar si hay una selección activa o píxeles copiados (para pegar)
+      const hasActiveSelection = selectionActive && selectedPixels.length > 0;
+      const hasCopiedPixels = copiedPixels && copiedPixels.pixels && copiedPixels.pixels.length > 0;
+      
+      // Verificar si se está presionando Ctrl (o Cmd en Mac)
+      const isCtrlPressed = e.ctrlKey || e.metaKey;
+      
+      if (!isCtrlPressed) return;
+      
+      // Prevenir el comportamiento por defecto del navegador
+      e.preventDefault();
+      
+      switch (e.key.toLowerCase()) {
+        case 'c':
+          // Ctrl+C - Copiar selección
+          if (hasActiveSelection) {
+            copySelection();
+            console.log('Selección copiada');
+          } else {
+            console.log('No hay selección activa para copiar');
+          }
+          break;
+          
+        case 'x':
+          // Ctrl+X - Cortar selección
+          if (hasActiveSelection) {
+            cutSelection();
+            console.log('Selección cortada');
+          } else {
+            console.log('No hay selección activa para cortar');
+          }
+          break;
+          
+        case 'v':
+          // Ctrl+V - Pegar selección
+          if (hasCopiedPixels) {
+            pastePixels();
+            console.log('Selección pegada');
+          } else {
+            console.log('No hay píxeles en el portapapeles para pegar');
+          }
+          break;
+          
+        default:
+          break;
+      }
+    };
+  
+    // Agregar el event listener
+    window.addEventListener('keydown', handleKeyDown);
+  
+    // Cleanup - remover el event listener cuando el componente se desmonte
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [
+    selectionActive, 
+    selectedPixels, 
+    copiedPixels, 
+    copySelection, 
+    cutSelection, 
+    pastePixels
+  ]);
+
+  //gESTION DE LAS BROCHAS PERSONALIZADAS
+// estas seran un array de brochas [{}]
+// GESTIÓN DE LAS BROCHAS PERSONALIZADAS
+// estas serán un array de brochas [{}]
+// GESTIÓN DE LAS BROCHAS PERSONALIZADAS
+// estas serán un array de brochas [{}]
+useEffect(() => {
+  const handleKeyDown = (e) => {
+    // Verificar si se está presionando Ctrl (o Cmd en Mac)
+    const isCtrlPressed = e.ctrlKey || e.metaKey;
+    
+    // Solo procesar Ctrl+B
+    if (!isCtrlPressed || e.key.toLowerCase() !== 'b') return;
+    
+    // Verificar si hay una selección activa con píxeles
+    const hasActiveSelection = selectionActive && selectedPixels.length > 0 && originalPixelColors.length > 0;
+    
+    if (!hasActiveSelection) {
+      console.log('No hay selección activa para convertir en brocha');
+      return;
+    }
+    
+    // Prevenir el comportamiento por defecto del navegador
+    e.preventDefault();
+    
+    try {
+      // Calcular el bounding box de la selección
+      const xCoords = selectedPixels.map(p => p.x);
+      const yCoords = selectedPixels.map(p => p.y);
+      const minX = Math.min(...xCoords);
+      const maxX = Math.max(...xCoords);
+      const minY = Math.min(...yCoords);
+      const maxY = Math.max(...yCoords);
+      
+      // Convertir píxeles a coordenadas relativas desde el centro de la brocha
+      const centerX = Math.floor((minX + maxX) / 2);
+      const centerY = Math.floor((minY + maxY) / 2);
+      
+      // Crear los datos de la brocha con coordenadas relativas y colores FIJOS
+      const brushData = selectedPixels.map((pixel, index) => ({
+        x: pixel.x - centerX,
+        y: pixel.y - centerY,
+        // CAMBIO PRINCIPAL: Usar colores fijos como en la brocha arcoíris
+        color: originalPixelColors[index] ? {
+          r: originalPixelColors[index].r,
+          g: originalPixelColors[index].g,
+          b: originalPixelColors[index].b,
+          a: 255 // Usar alpha fijo de 255 como en arcoíris
+        } : {
+          r: 0,
+          g: 0, 
+          b: 0,
+          a: 255
+        }
+        // NO incluir opacity aquí, ya que está en el color.a
+      }));
+      
+      // Generar nombre único para la brocha
+      const brushCount = myBrushes ? myBrushes.length : 0;
+      const brushName = `Mi Brocha ${brushCount + 1}`;
+      
+      // Crear la nueva brocha con colores FIJOS (como arcoíris)
+      const newBrush = {
+        id: `custom_brush_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name: brushName,
+        customBrush: true,
+        useCurrentColor: false, // CAMBIO PRINCIPAL: false para usar colores fijos
+        data: brushData,
+        isMyBrush: true,
+        createdAt: Date.now(),
+        dimensions: {
+          width: maxX - minX + 1,
+          height: maxY - minY + 1
+        }
+      };
+      
+      // Actualizar el array de brochas personalizadas
+      const updatedMyBrushes = myBrushes ? [...myBrushes, newBrush] : [newBrush];
+      setMyBrushes(updatedMyBrushes);
+      
+      console.log(`Brocha "${brushName}" creada exitosamente con ${brushData.length} píxeles y colores fijos`);
+      
+      // Opcional: Limpiar la selección después de crear la brocha
+      clearCurrentSelection();
+      
+      // Opcional: Cambiar automáticamente a la herramienta de pincel y seleccionar la nueva brocha
+      setTool(TOOLS.paint);
+      
+    } catch (error) {
+      console.error('Error al crear la brocha personalizada:', error);
+    }
+  };
+
+  // Agregar el event listener
+  window.addEventListener('keydown', handleKeyDown);
+
+  // Cleanup - remover el event listener cuando el componente se desmonte
+  return () => {
+    window.removeEventListener('keydown', handleKeyDown);
+  };
+}, [
+  selectedPixels, 
+  originalPixelColors, 
+  selectionActive, 
+  myBrushes, 
+  setMyBrushes,
+  clearCurrentSelection,
+  setTool
+]);
+  const [checkerboardFactor, setCheckerboardFactor] = useState(32);
   return (
     <div className="complete-canvas-tracker">
-      <TopToolbar companyName="Argánion">
+       <TopToolbar companyName="Argánion">
         <div className="tools" style={{ display: "flex", gap: "8px" }}>
-         
           <div
             className={true ? "grid-control active" : "grid-control"}
             onClick={true ? () => undo() : undefined}
           >
             <LuUndo />
+            <p>Undo</p>
           </div>
           <div
             className={true ? "grid-control active" : "grid-control"}
@@ -7298,6 +8816,7 @@ const pastePixels = useCallback(() => {
               redo();
             }}
           >
+            <p>Redo</p>
             <LuRedo />
           </div>
           <div
@@ -7311,8 +8830,8 @@ const pastePixels = useCallback(() => {
           </div>
           <div
             className={activeGrid ? "grid-control active" : "grid-control"}
-            onClick={() => {setActiveGrid(!activeGrid);
-              
+            onClick={() => {
+              setActiveGrid(!activeGrid);
             }}
           >
             <p>Grid</p>
@@ -7325,7 +8844,7 @@ const pastePixels = useCallback(() => {
             }}
           >
             <p>Guardar</p>
-            <FaFileExport />
+            <LuSave />
           </div>
           <div
             className={true ? "grid-control active" : "grid-control"}
@@ -7336,7 +8855,17 @@ const pastePixels = useCallback(() => {
             <p>Pegar</p>
             <p>P</p>
           </div>
-          
+          {isolatedPixels&&
+          <div
+            className={true ? "grid-control active" : "grid-control"}
+            onClick={() => {
+              setIsolatedPixels(null);
+            }}
+          >
+            <p>Salir de aislamiento</p>
+            <FaFileExport />
+          </div>
+          }
         </div>
         <ReflexMode
           mirrorState={mirrorState}
@@ -7350,27 +8879,43 @@ const pastePixels = useCallback(() => {
           setPositionCorners={setPositionCorners}
         />
       </TopToolbar>
-      
+
       <div
         className="workspace2-container"
-        style={{ position: "relative", display: "flex" }}
+        style={{ position: "relative", display: "flex", maxWidth:'100vw' }}
       >
+        <NavbarLateral
+      logo={<div style={{ fontWeight: '400', fontSize: '1rem', marginTop:'0px', display:'flex', gap: '10px',
+        alignContent:'center', justifyContent:'center', width: "60px"
+       }}>
+        
+      
+      </div>}
+      tool={tool}
+      activeTool={tool}
+      items={navItemsLateral}
+      variant={navConfigLateral.variant}
+      theme={navConfigLateral.theme}
+      showOnlyIcons={navConfigLateral.showOnlyIcons}
+      twoColumns={navConfigLateral.twoColumns}
+    />
+    
         {
-        <div
-        style={{display: activeAI ? 'block' : 'none'}}
-        >
-            <AIgenerator createLayerAndPaintDataUrlCentered={createLayerAndPaintDataUrlCentered}/>
-        </div>
-       
+          <div style={{ display: activeAI ? "block" : "none" }}>
+            <AIgenerator
+              createLayerAndPaintDataUrlCentered={
+                createLayerAndPaintDataUrlCentered
+              }
+            />
+          </div>
         }
-        
-        
+
         {/* Canvas Area */}
         <div
           className="workspace-container"
           style={{ flex: "1", position: "relative" }}
         >
-          
+         
           <div
             className="toolbar"
             style={{
@@ -7380,25 +8925,25 @@ const pastePixels = useCallback(() => {
               justifyContent: "space-between",
             }}
           >
-            <CustomTool tool={tool} setToolParameters={setToolParameters} />
+            
+            <CustomTool tool={tool} setToolParameters={setToolParameters} myBrushes={myBrushes}/>
 
             {/* Coordinates info */}
           </div>
 
           <div
-  onContextMenu={(e) => e.preventDefault()}
-  className="workspace"
-  ref={workspaceRef}
-  style={{
-    width: "100%",
-    height: "calc(100% - 50px)",
-    position: "relative",
-    overflow: "hidden",
-    cursor: isSpacePressed 
-      ? (isDragging ? "grabbing" : "grab")
-      : (drawMode === "move" ? "grab" : "crosshair"),
-  }}
->
+            onContextMenu={(e) => e.preventDefault()}
+            className="workspace"
+            ref={workspaceRef}
+            style={{
+              width: "100%",
+              height: "calc(100% - 50px)",
+              position: "relative",
+              overflow: "hidden",
+             
+            }}
+          >
+            
             <div
               className="canvas-container"
               ref={canvasContainerRef}
@@ -7414,14 +8959,45 @@ const pastePixels = useCallback(() => {
                 className="artboard"
                 ref={artboardRef}
                 style={{
+                  imageRendering: "pixelated",
                   width: viewportWidth * zoom,
                   height: viewportHeight * zoom,
-                  background: "#fff",
                   position: "relative",
-                  boxShadow: "0 0 10px rgba(0,0,0,0.2)",
+
+                  backgroundColor: "rgb(128, 128, 128)",
+                  backgroundImage: `
+      linear-gradient(45deg,rgb(185, 183, 183) 25%, transparent 25%), 
+      linear-gradient(-45deg, rgb(185, 183, 183) 25%, transparent 25%), 
+      linear-gradient(45deg, transparent 75%,rgb(185, 183, 183) 75%), 
+      linear-gradient(-45deg, transparent 75%,rgb(185, 183, 183) 75%)
+    `,
+                  backgroundSize: `${zoom * 2 * checkerboardFactor}px ${
+                    zoom * 2 * checkerboardFactor
+                  }px`,
+                  // MODIFICACIÓN PRINCIPAL: Ajustar backgroundPosition basándose en viewportOffset
+                  backgroundPosition: `
+      ${(-viewportOffset.x * zoom) % (zoom * 2 * checkerboardFactor)}px ${
+                    (-viewportOffset.y * zoom) % (zoom * 2 * checkerboardFactor)
+                  }px,
+      ${(-viewportOffset.x * zoom) % (zoom * 2 * checkerboardFactor)}px ${
+                    (-viewportOffset.y * zoom + zoom * checkerboardFactor) %
+                    (zoom * 2 * checkerboardFactor)
+                  }px,
+      ${
+        (-viewportOffset.x * zoom + zoom * checkerboardFactor) %
+        (zoom * 2 * checkerboardFactor)
+      }px ${
+                    (-viewportOffset.y * zoom - zoom * checkerboardFactor) %
+                    (zoom * 2 * checkerboardFactor)
+                  }px,
+      ${
+        (-viewportOffset.x * zoom - zoom * checkerboardFactor) %
+        (zoom * 2 * checkerboardFactor)
+      }px ${(-viewportOffset.y * zoom) % (zoom * 2 * checkerboardFactor)}px
+    `,
                 }}
               >
-                {croppedSelectionBounds && !isPressed && (
+                {croppedSelectionBounds && selectionActive && !isPressed && (
                   <div
                     ref={selectionActionsRef}
                     className="workspace-selection-actions"
@@ -7443,7 +9019,7 @@ const pastePixels = useCallback(() => {
                     }}
                   >
                     <div className="selection-actions-buttons">
-                    <button
+                      <button
                         className="action-button"
                         onClick={() => {
                           handleRotation("left");
@@ -7474,12 +9050,17 @@ const pastePixels = useCallback(() => {
                         </span>
                         <p className="action-text">Borrar</p>
                       </button>
-                      {/*<button className="action-button" onClick={fillSelection}>
-                        <span className="icon">
-                          <LuPaintBucket />
-                        </span>
-                        <p className="action-text">Rellenar</p>
-                      </button>*/}
+                      {
+                        <button
+                          className="action-button"
+                          onClick={fillSelection}
+                        >
+                          <span className="icon">
+                            <LuPaintBucket />
+                          </span>
+                          <p className="action-text">Rellenar</p>
+                        </button>
+                      }
                       <button
                         className="action-button"
                         onClick={clearCurrentSelection}
@@ -7498,7 +9079,7 @@ const pastePixels = useCallback(() => {
                         </span>
                         <p className="action-text">Agrupar</p>
                       </button>
-                      
+
                       <button
                         className="action-button"
                         onClick={ungroupSelection}
@@ -7515,74 +9096,86 @@ const pastePixels = useCallback(() => {
                         <span className="icon">D</span>
                         <p className="action-text">Duplicar </p>
                       </button>
-                      <button
-                        className="action-button"
-                        onClick={copySelection}
-                      >
+                      <button className="action-button" onClick={copySelection}>
                         <span className="icon">c</span>
                         <p className="action-text">Copiar </p>
                       </button>
-                      <button
-                        className="action-button"
-                        onClick={cutSelection}
-                      >
+                      <button className="action-button" onClick={cutSelection}>
                         <span className="icon">cu</span>
                         <p className="action-text">Cortar </p>
                       </button>
-                      
+                      <button className="action-button" onClick={isolateSelection}>
+                        <span className="icon">I</span>
+                        <p className="action-text">Aislar pixeles </p>
+                      </button>
                     </div>
                   </div>
                 )}
-                {mirrorState.customArea && !isPressed && (
-                  <>
-                    {/* Punto de arrastre inferior derecho */}
-                    <div
-                      ref={rightMirrorCornerRef}
-                      className="canvas-resize-handle-container"
-                      style={{
-                        position: "absolute",
-                        top: (positionCorners.y2 - viewportOffset.y) * zoom,
-                        left: (positionCorners.x2 - viewportOffset.x) * zoom,
-                        zIndex: 10,
-                        pointerEvents: "auto",
-                      }}
-                    >
-                      <div className="resize-handle-wrapper">
-                        <button className="resize-handle resize-handle-se">
-                          <span className="resize-handle-icon">
-                            <GrBottomCorner />
-                          </span>
-                        </button>
-                      </div>
-                    </div>
-                    {/* Punto de arrastre superior izquierdo */}
-                    <div
-                      ref={leftMirrorCornerRef}
-                      className="canvas-resize-handle-container"
-                      style={{
-                        position: "absolute",
-                        top:
-                          (positionCorners.y1 - viewportOffset.y) * zoom - 30,
-                        left:
-                          (positionCorners.x1 - viewportOffset.x) * zoom - 30,
-                        zIndex: 10,
-                        pointerEvents: "auto",
-                      }}
-                    >
-                      <div className="resize-handle-wrapper">
-                        <button className="resize-handle resize-handle-nw">
-                          <span className="resize-handle-icon">
-                            <GrTopCorner />
-                          </span>
-                        </button>
-                        <p className="area-canvas-size-text">
-                          {mirrorState.bounds.x2 - mirrorState.bounds.x1}x
-                          {mirrorState.bounds.y2 - mirrorState.bounds.y1}
-                        </p>
-                      </div>
-                    </div>
-                  </>
-                )}
+              
+  <div style={{display: mirrorState.customArea ? "block" : "none" }}>
+    {/* Esquina superior izquierda */}
+    <div
+      ref={leftMirrorCornerRef}
+      className="canvas-resize-handle-container"
+      style={{
+        position: "absolute",
+        top: (positionCorners.y1 - viewportOffset.y) * zoom - 15,
+        left: (positionCorners.x1 - viewportOffset.x) * zoom - 15,
+        zIndex: 15, // Z-index más alto
+        pointerEvents: "auto",
+        cursor: leftIsPressedMirror ? 'grabbing' : 'grab',
+      }}
+    >
+      <div className="resize-handle-wrapper">
+        <button 
+          className={`resize-handle resize-handle-nw ${leftIsPressedMirror ? 'dragging' : ''}`}
+          style={{
+            backgroundColor: leftIsPressedMirror ? '#ff4444' : '#4444ff',
+            transform: leftIsPressedMirror ? 'scale(1.2)' : 'scale(1)',
+            transition: 'all 0.1s ease'
+          }}
+        >
+          <span className="resize-handle-icon">
+            <GrTopCorner />
+          </span>
+        </button>
+        <p className="area-canvas-size-text">
+          {Math.abs(mirrorState.bounds.x2 - mirrorState.bounds.x1)}x
+          {Math.abs(mirrorState.bounds.y2 - mirrorState.bounds.y1)}
+        </p>
+      </div>
+    </div>
+
+    {/* Esquina inferior derecha */}
+    <div
+      ref={rightMirrorCornerRef}
+      className="canvas-resize-handle-container"
+      style={{
+        position: "absolute",
+        top: (positionCorners.y2 - viewportOffset.y) * zoom - 15,
+        left: (positionCorners.x2 - viewportOffset.x) * zoom - 15,
+        zIndex: 15, // Z-index más alto
+        pointerEvents: "auto",
+        cursor: rightIsPressedMirror ? 'grabbing' : 'grab',
+      }}
+    >
+      <div className="resize-handle-wrapper">
+        <button 
+          className={`resize-handle resize-handle-se ${rightIsPressedMirror ? 'dragging' : ''}`}
+          style={{
+            backgroundColor: rightIsPressedMirror ? '#ff4444' : '#4444ff',
+            transform: rightIsPressedMirror ? 'scale(1.2)' : 'scale(1)',
+            transition: 'all 0.1s ease'
+          }}
+        >
+          <span className="resize-handle-icon">
+            <GrBottomCorner />
+          </span>
+        </button>
+      </div>
+    </div>
+  </div >
+
 
                 {/* Composite Canvas - only this canvas is actually in the DOM */}
 
@@ -7635,23 +9228,7 @@ const pastePixels = useCallback(() => {
                   }}
                 />
 
-                {/* Pixel Grid */}
-                {activeGrid && (
-                  <div
-                    className="pixel-grid"
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: "100%",
-                      pointerEvents: "none",
-                      backgroundSize: `${zoom}px ${zoom}px`,
-                      backgroundImage:
-                        "linear-gradient(to right, rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.05) 1px, transparent 1px)",
-                    }}
-                  />
-                )}
+       
               </div>
             </div>
           </div>
@@ -7662,11 +9239,15 @@ const pastePixels = useCallback(() => {
               ref={animationLayerRef}
               style={{
                 height: "230px",
-                width: "100%",
+             
+                width:"100%",
                 userSelect: "none",
                 bottom: "0",
               }}
             >
+
+
+
               {MemoizedLayerAnimation}
             </div>
           }

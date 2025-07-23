@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { LuChevronUp, LuChevronDown } from "react-icons/lu";
 import ToolColorPicker from "./toolColorPicker";
+import BrushSelect from "./brushSelect";
 
-const EraserTool = ({ setToolParameters, tool, toolParameters }) => {
+const EraserTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setToolConfigs }) => {
   // Estados para las diferentes configuraciones
   const [borderWidth, setBorderWidth] = useState(1);
   const [opacity, setOpacity] = useState(100);
@@ -15,34 +16,34 @@ const EraserTool = ({ setToolParameters, tool, toolParameters }) => {
   const [velocitySensibility, setVelocitySensibility] = useState(0);
   
   // Estado para el tipo de brocha seleccionada
-  const [selectedBrushType, setSelectedBrushType] = useState('standard');
+  const [selectedBrushType, setSelectedBrushType] = useState('estandar');
 
-  // Definición completa de todas las brochas
+  // Definición completa de todas las brochas (ampliada como en PencilTool)
   const brushTypes = {
-    standard: {
-      name: "Standard Brush",
+    estandar: {
+      name: "Borrador Estándar",
       customBrush: false,
       useCurrentColor: true,
       data: []
     },
-    cross: {
-      name: "Cross (3x3)",
+    cruz: {
+      name: "Cruz (3x3)",
       customBrush: true,
-      useCurrentColor: true, // Usa el color actual seleccionado
+      useCurrentColor: true,
       data: [
-        { x: 0, y: -1, color: null }, // null significa que usa el color actual
+        { x: 0, y: -1, color: null },
         { x: -1, y: 0, color: null },
         { x: 0, y: 0, color: null },
         { x: 1, y: 0, color: null },
         { x: 0, y: 1, color: null }
       ]
     },
-    star: {
-      name: "Star (3x3)",
+    estrella: {
+      name: "Estrella (3x3)",
       customBrush: true,
       useCurrentColor: true,
       data: [
-        { x: -1, y: -1, color: null, opacity: 0.7 }, // Esquinas con menos opacidad
+        { x: -1, y: -1, color: null, opacity: 0.7 },
         { x: 0, y: -1, color: null },
         { x: 1, y: -1, color: null, opacity: 0.7 },
         { x: -1, y: 0, color: null },
@@ -53,19 +54,330 @@ const EraserTool = ({ setToolParameters, tool, toolParameters }) => {
         { x: 1, y: 1, color: null, opacity: 0.7 }
       ]
     },
-    rainbow: {
-      name: "Rainbow Cross",
+    linea_horizontal: {
+      name: "Línea Horizontal",
       customBrush: true,
-      useCurrentColor: false, // Tiene colores fijos
+      useCurrentColor: true,
       data: [
-        { x: 0, y: -1, color: { r: 255, g: 0, b: 0, a: 255 } }, // Rojo
-        { x: -1, y: 0, color: { r: 0, g: 255, b: 0, a: 255 } }, // Verde
-        { x: 0, y: 0, color: { r: 255, g: 255, b: 255, a: 255 } }, // Blanco
-        { x: 1, y: 0, color: { r: 0, g: 0, b: 255, a: 255 } }, // Azul
-        { x: 0, y: 1, color: { r: 255, g: 255, b: 0, a: 255 } } // Amarillo
+        { x: -2, y: 0, color: null },
+        { x: -1, y: 0, color: null },
+        { x: 0, y: 0, color: null },
+        { x: 1, y: 0, color: null },
+        { x: 2, y: 0, color: null }
+      ]
+    },
+    linea_vertical: {
+      name: "Línea Vertical",
+      customBrush: true,
+      useCurrentColor: true,
+      data: [
+        { x: 0, y: -2, color: null },
+        { x: 0, y: -1, color: null },
+        { x: 0, y: 0, color: null },
+        { x: 0, y: 1, color: null },
+        { x: 0, y: 2, color: null }
+      ]
+    },
+    diagonal_derecha: {
+      name: "Diagonal Derecha",
+      customBrush: true,
+      useCurrentColor: true,
+      data: [
+        { x: -1, y: -1, color: null },
+        { x: 0, y: 0, color: null },
+        { x: 1, y: 1, color: null }
+      ]
+    },
+    diagonal_izquierda: {
+      name: "Diagonal Izquierda",
+      customBrush: true,
+      useCurrentColor: true,
+      data: [
+        { x: 1, y: -1, color: null },
+        { x: 0, y: 0, color: null },
+        { x: -1, y: 1, color: null }
+      ]
+    },
+    cuadrado_3x3: {
+      name: "Cuadrado (3x3)",
+      customBrush: true,
+      useCurrentColor: true,
+      data: [
+        { x: -1, y: -1, color: null },
+        { x: 0, y: -1, color: null },
+        { x: 1, y: -1, color: null },
+        { x: -1, y: 0, color: null },
+        { x: 0, y: 0, color: null },
+        { x: 1, y: 0, color: null },
+        { x: -1, y: 1, color: null },
+        { x: 0, y: 1, color: null },
+        { x: 1, y: 1, color: null }
+      ]
+    },
+    cuadrado_5x5: {
+      name: "Cuadrado (5x5)",
+      customBrush: true,
+      useCurrentColor: true,
+      data: [
+        // Fila superior
+        { x: -2, y: -2, color: null },
+        { x: -1, y: -2, color: null },
+        { x: 0, y: -2, color: null },
+        { x: 1, y: -2, color: null },
+        { x: 2, y: -2, color: null },
+        // Fila superior-media
+        { x: -2, y: -1, color: null },
+        { x: -1, y: -1, color: null },
+        { x: 0, y: -1, color: null },
+        { x: 1, y: -1, color: null },
+        { x: 2, y: -1, color: null },
+        // Fila central
+        { x: -2, y: 0, color: null },
+        { x: -1, y: 0, color: null },
+        { x: 0, y: 0, color: null },
+        { x: 1, y: 0, color: null },
+        { x: 2, y: 0, color: null },
+        // Fila inferior-media
+        { x: -2, y: 1, color: null },
+        { x: -1, y: 1, color: null },
+        { x: 0, y: 1, color: null },
+        { x: 1, y: 1, color: null },
+        { x: 2, y: 1, color: null },
+        // Fila inferior
+        { x: -2, y: 2, color: null },
+        { x: -1, y: 2, color: null },
+        { x: 0, y: 2, color: null },
+        { x: 1, y: 2, color: null },
+        { x: 2, y: 2, color: null }
+      ]
+    },
+    borde_cuadrado: {
+      name: "Borde Cuadrado (3x3)",
+      customBrush: true,
+      useCurrentColor: true,
+      data: [
+        { x: -1, y: -1, color: null },
+        { x: 0, y: -1, color: null },
+        { x: 1, y: -1, color: null },
+        { x: -1, y: 0, color: null },
+        { x: 1, y: 0, color: null },
+        { x: -1, y: 1, color: null },
+        { x: 0, y: 1, color: null },
+        { x: 1, y: 1, color: null }
+      ]
+    },
+    circulo_pequeño: {
+      name: "Círculo Pequeño",
+      customBrush: true,
+      useCurrentColor: true,
+      data: [
+        { x: 0, y: -1, color: null },
+        { x: -1, y: 0, color: null },
+        { x: 0, y: 0, color: null },
+        { x: 1, y: 0, color: null },
+        { x: 0, y: 1, color: null }
+      ]
+    },
+    circulo_mediano: {
+      name: "Círculo Mediano",
+      customBrush: true,
+      useCurrentColor: true,
+      data: [
+        { x: -1, y: -2, color: null },
+        { x: 0, y: -2, color: null },
+        { x: 1, y: -2, color: null },
+        { x: -2, y: -1, color: null },
+        { x: -1, y: -1, color: null },
+        { x: 0, y: -1, color: null },
+        { x: 1, y: -1, color: null },
+        { x: 2, y: -1, color: null },
+        { x: -2, y: 0, color: null },
+        { x: -1, y: 0, color: null },
+        { x: 0, y: 0, color: null },
+        { x: 1, y: 0, color: null },
+        { x: 2, y: 0, color: null },
+        { x: -2, y: 1, color: null },
+        { x: -1, y: 1, color: null },
+        { x: 0, y: 1, color: null },
+        { x: 1, y: 1, color: null },
+        { x: 2, y: 1, color: null },
+        { x: -1, y: 2, color: null },
+        { x: 0, y: 2, color: null },
+        { x: 1, y: 2, color: null }
+      ]
+    },
+    diamante: {
+      name: "Diamante",
+      customBrush: true,
+      useCurrentColor: true,
+      data: [
+        { x: 0, y: -2, color: null },
+        { x: -1, y: -1, color: null },
+        { x: 0, y: -1, color: null },
+        { x: 1, y: -1, color: null },
+        { x: -2, y: 0, color: null },
+        { x: -1, y: 0, color: null },
+        { x: 0, y: 0, color: null },
+        { x: 1, y: 0, color: null },
+        { x: 2, y: 0, color: null },
+        { x: -1, y: 1, color: null },
+        { x: 0, y: 1, color: null },
+        { x: 1, y: 1, color: null },
+        { x: 0, y: 2, color: null }
+      ]
+    },
+    textura_puntos: {
+      name: "Textura de Puntos",
+      customBrush: true,
+      useCurrentColor: true,
+      data: [
+        { x: -1, y: -1, color: null },
+        { x: 1, y: -1, color: null },
+        { x: 0, y: 0, color: null },
+        { x: -1, y: 1, color: null },
+        { x: 1, y: 1, color: null }
+      ]
+    },
+    salpicadura: {
+      name: "Salpicadura",
+      customBrush: true,
+      useCurrentColor: true,
+      data: [
+        { x: -2, y: -1, color: null, opacity: 0.6 },
+        { x: -1, y: -1, color: null, opacity: 0.8 },
+        { x: 0, y: -1, color: null },
+        { x: 1, y: -1, color: null, opacity: 0.7 },
+        { x: -1, y: 0, color: null, opacity: 0.9 },
+        { x: 0, y: 0, color: null },
+        { x: 1, y: 0, color: null, opacity: 0.8 },
+        { x: 2, y: 0, color: null, opacity: 0.5 },
+        { x: -1, y: 1, color: null, opacity: 0.7 },
+        { x: 0, y: 1, color: null, opacity: 0.9 },
+        { x: 1, y: 1, color: null, opacity: 0.6 }
+      ]
+    },
+    degradado_horizontal: {
+      name: "Degradado Horizontal",
+      customBrush: true,
+      useCurrentColor: true,
+      data: [
+        { x: -2, y: 0, color: null, opacity: 0.2 },
+        { x: -1, y: 0, color: null, opacity: 0.5 },
+        { x: 0, y: 0, color: null, opacity: 1.0 },
+        { x: 1, y: 0, color: null, opacity: 0.5 },
+        { x: 2, y: 0, color: null, opacity: 0.2 }
+      ]
+    },
+    degradado_vertical: {
+      name: "Degradado Vertical",
+      customBrush: true,
+      useCurrentColor: true,
+      data: [
+        { x: 0, y: -2, color: null, opacity: 0.2 },
+        { x: 0, y: -1, color: null, opacity: 0.5 },
+        { x: 0, y: 0, color: null, opacity: 1.0 },
+        { x: 0, y: 1, color: null, opacity: 0.5 },
+        { x: 0, y: 2, color: null, opacity: 0.2 }
+      ]
+    },
+    esquinas: {
+      name: "Solo Esquinas",
+      customBrush: true,
+      useCurrentColor: true,
+      data: [
+        { x: -1, y: -1, color: null },
+        { x: 1, y: -1, color: null },
+        { x: 0, y: 0, color: null },
+        { x: -1, y: 1, color: null },
+        { x: 1, y: 1, color: null }
+      ]
+    },
+    flecha_arriba: {
+      name: "Flecha Arriba",
+      customBrush: true,
+      useCurrentColor: true,
+      data: [
+        { x: 0, y: -2, color: null },
+        { x: -1, y: -1, color: null },
+        { x: 0, y: -1, color: null },
+        { x: 1, y: -1, color: null },
+        { x: 0, y: 0, color: null },
+        { x: 0, y: 1, color: null }
+      ]
+    },
+    flecha_derecha: {
+      name: "Flecha Derecha",
+      customBrush: true,
+      useCurrentColor: true,
+      data: [
+        { x: -1, y: 0, color: null },
+        { x: 0, y: 0, color: null },
+        { x: 1, y: 0, color: null },
+        { x: 2, y: 0, color: null },
+        { x: 1, y: -1, color: null },
+        { x: 1, y: 1, color: null }
+      ]
+    },
+    corazon: {
+      name: "Corazón",
+      customBrush: true,
+      useCurrentColor: true,
+      data: [
+        { x: -1, y: -1, color: null },
+        { x: 0, y: -1, color: null },
+        { x: 1, y: -1, color: null },
+        { x: -2, y: 0, color: null },
+        { x: -1, y: 0, color: null },
+        { x: 0, y: 0, color: null },
+        { x: 1, y: 0, color: null },
+        { x: 2, y: 0, color: null },
+        { x: -1, y: 1, color: null },
+        { x: 0, y: 1, color: null },
+        { x: 1, y: 1, color: null },
+        { x: 0, y: 2, color: null }
       ]
     }
   };
+
+  // useEffect para cargar configuración guardada al montar el componente
+  useEffect(() => {
+    const eraserConfig = toolConfigs.eraser;
+    
+    if (eraserConfig !== null) {
+      // Cargar configuración guardada
+      setBorderWidth(eraserConfig.borderWidth || 1);
+      setOpacity(eraserConfig.opacity || 100);
+      setVertices(eraserConfig.vertices || 5);
+      setRotation(eraserConfig.rotation || 0);
+      setPattern(eraserConfig.pattern || "solid");
+      setPressure(eraserConfig.pressure || 50);
+      setSharpen(eraserConfig.sharpen || 0);
+      setPaintMode(eraserConfig.paintMode || 'manual');
+      setVelocitySensibility(eraserConfig.velocitySensibility || 0);
+      setSelectedBrushType(eraserConfig.selectedBrushType || 'estandar');
+    }
+  }, []); // Solo se ejecuta al montar
+
+  // useEffect para guardar cambios en la configuración de la herramienta
+  useEffect(() => {
+    const currentConfig = {
+      borderWidth,
+      opacity,
+      vertices,
+      rotation,
+      pattern,
+      pressure,
+      sharpen,
+      paintMode,
+      velocitySensibility,
+      selectedBrushType
+    };
+
+    setToolConfigs(prev => ({
+      ...prev,
+      eraser: currentConfig
+    }));
+  }, [borderWidth, opacity, vertices, rotation, pattern, pressure, sharpen, paintMode, velocitySensibility, selectedBrushType, setToolConfigs]);
 
   // Función para procesar los datos de la brocha según el color actual
   const processCustomBrushData = (brushType, currentColor) => {
@@ -90,22 +402,6 @@ const EraserTool = ({ setToolParameters, tool, toolParameters }) => {
       // Usar el color definido en la brocha
       return pixel;
     });
-  };
-
-  // Función para obtener el color de preview de un píxel
-  const getPreviewPixelColor = (pixel, brushType) => {
-    if (brushType.useCurrentColor && pixel.color === null) {
-      // Usar el color del sistema para el preview
-      const currentColor = toolParameters?.foregroundColor || { r: 0, g: 0, b: 0, a: 1 };
-      const opacity = pixel.opacity || 1;
-      return `rgba(${currentColor.r}, ${currentColor.g}, ${currentColor.b}, ${opacity})`;
-    }
-    
-    if (pixel.color) {
-      return `rgba(${pixel.color.r}, ${pixel.color.g}, ${pixel.color.b}, ${pixel.color.a / 255})`;
-    }
-    
-    return 'transparent';
   };
 
   // Función para manejar cambios en el grosor con botones
@@ -182,24 +478,12 @@ const EraserTool = ({ setToolParameters, tool, toolParameters }) => {
         <div className="tool-configs">
           
           {/* Selector de tipo de brocha */}
-          <div className="config-item">
-            <label className="tool-label">Brush Type</label>
-            <div className="input-container">
-              <select
-                value={selectedBrushType}
-                onChange={handleBrushTypeChange}
-                className="select-input brush-selector"
-              >
-                {Object.entries(brushTypes).map(([key, brush]) => (
-                  <option key={key} value={key}>
-                    {brush.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-         
+          <BrushSelect 
+            brushTypes={brushTypes}
+            selectedBrushType={selectedBrushType}
+            onBrushTypeChange={handleBrushTypeChange}
+            toolParameters={toolParameters}
+          />
 
           {/* Configuración de grosor (solo para brocha estándar) */}
           {!currentBrush.customBrush && (
@@ -316,9 +600,6 @@ const EraserTool = ({ setToolParameters, tool, toolParameters }) => {
 
         </div>
       </div>
-
-
-      
     </>
   );
 };

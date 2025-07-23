@@ -375,7 +375,7 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
  * Uses a composite rendering approach for better performance
  */
 //Ultima version: 
-export function useLayerManager({ width, height, viewportWidth, viewportHeight, zoom, isPressed }) {
+export function useLayerManager({ width, height, viewportWidth, viewportHeight, zoom, isPressed, isolatedPixels }) {
   // Agregar estos estados al inicio del hook useLayerManager (después de los estados existentes)
 //Nuevas optimizaciones-------------------------------
 // 1. CACHE PARA RENDERIZADO
@@ -384,6 +384,7 @@ export function useLayerManager({ width, height, viewportWidth, viewportHeight, 
 //=== optimizacion de datos para el uso de frames mejorado ====//
 const [activeLayerId, setActiveLayerId] = useState(null);
 const [activeLighter, setActiveLighter] = useState(false)
+
 
 
 
@@ -1263,10 +1264,7 @@ const invalidateRenderCache = useCallback((reason = 'manual') => {
 }, [clearOnionSkinCache]);
 
 // Efecto para limpiar cache cuando cambien configuraciones críticas
-useEffect(() => {
-  // Ya no hay cache de color que limpiar, solo invalidar render
-  invalidateRenderCache('onionSkinChange');
-}, [onionSkinSettings, invalidateRenderCache, frames, currentFrame]);
+
 // Función para obtener configuraciones predefinidas de onion skin
 const getOnionSkinPresets = useCallback(() => {
   return {
@@ -1378,25 +1376,142 @@ const clearTempLighterCanvas = useCallback(() => {
   setTempLighterFrameId(null);
 }, []);
 
+
+// =================== MÁSCARA DE AISLAMIENTO CORREGIDA ===================
+
+// Estado para cachear la máscara (mantener igual)
+const [isolationMaskCache, setIsolationMaskCache] = useState({
+  canvas: null,
+  lastPixelsHash: null,
+  lastViewportHash: null
+});
+
+// Función para generar hash (simplificada - solo píxeles)
+const generateIsolationHash = useCallback((pixels) => {
+  if (!pixels || !Array.isArray(pixels) || pixels.length === 0) return null;
+  
+  const pixelsStr = pixels.map(p => `${p.x},${p.y}`).sort().join('|');
+  return pixelsStr;
+}, []);
+
+// ✅ FUNCIÓN CORREGIDA: Crear máscara en coordenadas del canvas original
+const updateIsolationMask = useCallback(() => {
+  if (!isolatedPixels || !Array.isArray(isolatedPixels) || isolatedPixels.length === 0) {
+    setIsolationMaskCache({ canvas: null, lastPixelsHash: null, lastViewportHash: null });
+    return;
+  }
+
+  const currentHash = generateIsolationHash(isolatedPixels);
+
+  // Si ya tenemos esta máscara en cache, no hacer nada
+  if (isolationMaskCache.lastPixelsHash === currentHash) {
+    return;
+  }
+
+  console.log(`🔄 Generando nueva máscara de aislamiento para ${isolatedPixels.length} píxeles`);
+
+  // ✅ CORRECCIÓN: Crear máscara en tamaño del canvas original, no del viewport
+  const maskCanvas = document.createElement('canvas');
+  maskCanvas.width = width; // Tamaño completo del canvas
+  maskCanvas.height = height; // Tamaño completo del canvas
+  const maskCtx = maskCanvas.getContext('2d');
+  
+  if (!maskCtx) return;
+
+  // 1. Llenar todo el canvas con negro semitransparente (la máscara base)
+  maskCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+  maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
+
+  // 2. Usar 'destination-out' para hacer agujeros transparentes en los píxeles aislados
+  maskCtx.globalCompositeOperation = 'destination-out';
+  maskCtx.fillStyle = 'rgba(0, 0, 0, 1)'; // Color no importa con destination-out
+
+  // ✅ CORRECCIÓN: Crear transparencia en coordenadas reales del canvas
+  isolatedPixels.forEach(pixel => {
+    const { x, y } = pixel;
+    
+    // ✅ SIN CONVERSIÓN DE VIEWPORT - usar coordenadas directas del canvas
+    // Solo verificar que esté dentro del canvas completo
+    if (x >= 0 && x < width && y >= 0 && y < height) {
+      // Crear un cuadrado transparente para este píxel (1x1)
+      maskCtx.fillRect(x, y, 1, 1);
+    }
+  });
+
+  // Guardar en cache
+  setIsolationMaskCache({
+    canvas: maskCanvas,
+    lastPixelsHash: currentHash,
+    lastViewportHash: currentHash
+  });
+
+  console.log(`✅ Nueva máscara de aislamiento cacheada (${width}x${height})`);
+}, [isolatedPixels, width, height, generateIsolationHash, isolationMaskCache.lastPixelsHash]);
+
+// ✅ FUNCIÓN CORREGIDA: Renderizar la máscara respetando viewport y zoom
+const renderCachedIsolationMask = useCallback((ctx) => {
+  if (!isolationMaskCache.canvas) return;
+  
+  // ✅ GUARDAR el estado completo del contexto ANTES de aplicar la máscara
+  ctx.save();
+  
+  // ✅ RESETEAR cualquier composite operation previa
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1.0;
+  
+  // Dibujar solo la porción visible de la máscara
+  ctx.drawImage(
+    isolationMaskCache.canvas,
+    viewportOffset.x, viewportOffset.y,     // Origen en la máscara
+    viewportWidth, viewportHeight,          // Tamaño a tomar de la máscara
+    0, 0,                                   // Destino en el canvas composite
+    viewportWidth * zoom, viewportHeight * zoom  // Tamaño escalado
+  );
+  
+  // ✅ RESTAURAR el estado del contexto INMEDIATAMENTE
+  ctx.restore();
+  
+}, [isolationMaskCache.canvas, viewportOffset, viewportWidth, viewportHeight, zoom]);
+
+// ✅ EFECTO ACTUALIZADO: Solo actualizar cuando cambien los píxeles (no viewport/zoom)
+useEffect(() => {
+  updateIsolationMask();
+}, [isolatedPixels]); // ✅ SOLO cuando cambien los píxeles aislados
+
+// ✅ COMPOSITE RENDER OPTIMIZADO (mantener igual)
 const compositeRender = useCallback(() => {
   if (!compositeCanvasRef.current) return;
   
   const ctx = compositeCanvasRef.current.getContext('2d');
   if (!ctx) return;
   
-  // Limpiar canvas de una vez
+  // ✅ GUARDAR estado inicial del contexto
+  ctx.save();
+  
+  // Limpiar canvas
   ctx.clearRect(0, 0, viewportWidth * zoom, viewportHeight * zoom);
   
+  // ✅ ASEGURAR estado limpio para renderizado base
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1.0;
+  
+  // 1. Renderizar el contenido base
   if (onionSkinSettings.enabled) {
-    // MODO ONION SKIN: Renderizar frames con onion skin
     renderCurrentFrameWithAdjacent(ctx);
   } else {
-    // MODO NORMAL: Solo frame actual
     renderCurrentFrameOnly(ctx);
   }
   
-  // *** NUEVA FUNCIONALIDAD: Renderizar capa temporal encima ***
-  if (tempLighterCanvas && activeLighter) {
+  // 2. Verificar elementos a renderizar
+  const hasIsolationMask = isolatedPixels && Array.isArray(isolatedPixels) && isolatedPixels.length > 0;
+  const hasTempLighter = tempLighterCanvas && activeLighter;
+  
+  if (hasTempLighter) {
+    // ✅ RENDERIZAR tempLighter con estado limpio
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1.0;
+    
     ctx.drawImage(
       tempLighterCanvas,
       viewportOffset.x, viewportOffset.y,
@@ -1404,7 +1519,18 @@ const compositeRender = useCallback(() => {
       0, 0,
       viewportWidth * zoom, viewportHeight * zoom
     );
+    
+    ctx.restore();
   }
+  
+  if (hasIsolationMask) {
+    // ✅ RENDERIZAR máscara en un contexto completamente aislado
+    renderCachedIsolationMask(ctx);
+  }
+  
+  // ✅ RESTAURAR estado inicial
+  ctx.restore();
+
 }, [
   viewportWidth, 
   viewportHeight, 
@@ -1414,8 +1540,16 @@ const compositeRender = useCallback(() => {
   renderCurrentFrameOnly,
   tempLighterCanvas,
   activeLighter,
-  viewportOffset
+  viewportOffset,
+  isolatedPixels,
+  renderCachedIsolationMask
 ]);
+
+
+// ✅ FUNCIÓN PARA LIMPIAR CACHE CUANDO SEA NECESARIO
+const clearIsolationMaskCache = useCallback(() => {
+  setIsolationMaskCache({ canvas: null, lastPixelsHash: null, lastViewportHash: null });
+}, []);
 
 // ===== FUNCIÓN PARA FUSIONAR CAPA TEMPORAL =====
 
@@ -1485,6 +1619,9 @@ const getLighterInfo = useCallback(() => {
   // Render directo sin timeouts
   requestAnimationFrame(compositeRender);
 }, [layers, viewportOffset, compositeRender]);
+
+
+
 
 
 
@@ -1602,7 +1739,7 @@ const initializeHistory = useCallback(() => {
 
 // ✅ NUEVO: useEffect para inicializar historial
 useEffect(() => {
-  if (Object.keys(framesResume.frames).length > 0) {
+  if (Object.keys(framesResume.frames).length > 1) {
     initializeHistory();
   }
 }, [framesResume, initializeHistory]);
@@ -2012,7 +2149,9 @@ const redoComplete = useCallback(() => {
 }, [redoPixelChanges, redoFrames]);
 
 const undo = useCallback(() => {
-  if (currentIndex < 0) {
+
+  console.log("current index absoluto", currentIndex);
+  if (currentIndex <= 0) {
     console.warn("No hay cambios para deshacer");
     return false;
   }
@@ -2387,6 +2526,7 @@ const getChangePreview = useCallback(() => {
 
 
 // ===================== SISTEMA UNDO/REDO ====================================//
+
 
 
 // 3. FUNCIÓN PARA RENDERIZAR UN FRAME COMO CAPA
@@ -3791,6 +3931,7 @@ const lastModifiedLayer = useRef(null);
 const geometricToolDrawn = useRef(false);
 const [lastModifiedLayerState, setLastModifiedLayerState] = useState(null);
 // useEffect para actualizar framesResume cuando termine el dibujo
+/*
 useEffect(() => {
   if (lastModifiedLayerState && !isPressed) {
     const layerId = lastModifiedLayerState;
@@ -3801,61 +3942,50 @@ useEffect(() => {
       
       if (canvas) {
         const ctx = canvas.getContext('2d');
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
         
-        // ✅ Convertir imageData actual a objeto de píxeles
-        const currentPixels = imageDataToPixelObject(imageData);
+        // ✅ OPTIMIZACIÓN 1: Solo verificar contenido, NO procesar cambios
+        // Usar una versión optimizada que se detiene en el primer píxel encontrado
+        hasActualContent = hasCanvasContent(ctx, canvas.width, canvas.height);
         
-        // ✅ Obtener estado anterior del canvas
-        const canvasKey = `${layerId}_${currentFrame}`;
-        const previousPixels = previousCanvasStatesRef.current[canvasKey] || {};
-        
-        // ✅ Detectar y mostrar cambios
-        const changes = detectPixelChanges(previousPixels, currentPixels);
-        logPixelChanges(changes, layerId, currentFrame);
-        
-        // ✅ Guardar el estado actual para la próxima comparación
-        previousCanvasStatesRef.current[canvasKey] = { ...currentPixels };
-        
-        // Verificar si hay contenido real (lógica original)
-        for (let i = 3; i < data.length; i += 4) {
-          if (data[i] > 0) {
-            hasActualContent = true;
-            break;
-          }
+        // ✅ OPTIMIZACIÓN 2: Solo procesar cambios si realmente se necesita
+        // (por ejemplo, solo para undo/redo crítico)
+        if (ENABLE_PIXEL_TRACKING) {
+          processPixelChangesOptimized(ctx, layerId, currentFrame);
         }
       }
       
+      // ✅ OPTIMIZACIÓN 3: Solo actualizar si hay cambio real
       setFramesResume(prev => {
-        const updated = { ...prev };
+        const currentHasContent = prev.frames[currentFrame]?.layerHasContent[layerId];
         
-        if (updated.frames[currentFrame]) {
-          updated.frames[currentFrame].layerHasContent[layerId] = hasActualContent;
-          updated.computed.resolvedFrames[currentFrame].layerHasContent[layerId] = hasActualContent;
-          
-          const currentFrames = updated.computed.framesByLayer[layerId] || [];
-          if (hasActualContent && !currentFrames.includes(currentFrame)) {
-            updated.computed.framesByLayer[layerId] = [...currentFrames, currentFrame].sort((a, b) => a - b);
-          } else if (!hasActualContent && currentFrames.includes(currentFrame)) {
-            updated.computed.framesByLayer[layerId] = currentFrames.filter(f => f !== currentFrame);
-          }
+        if (currentHasContent === hasActualContent) {
+          return prev; // No hay cambio, retornar mismo objeto
+        }
+        
+        // Solo crear nuevo objeto si hay cambio real
+        const updated = { ...prev };
+        updated.frames[currentFrame].layerHasContent[layerId] = hasActualContent;
+        updated.computed.resolvedFrames[currentFrame].layerHasContent[layerId] = hasActualContent;
+        
+        const currentFrames = updated.computed.framesByLayer[layerId] || [];
+        if (hasActualContent && !currentFrames.includes(currentFrame)) {
+          updated.computed.framesByLayer[layerId] = [...currentFrames, currentFrame].sort((a, b) => a - b);
+        } else if (!hasActualContent && currentFrames.includes(currentFrame)) {
+          updated.computed.framesByLayer[layerId] = currentFrames.filter(f => f !== currentFrame);
         }
         
         return updated;
       });
     }, 50);
     
-    // Limpiar el estado
     setLastModifiedLayerState(null);
     lastModifiedLayer.current = null;
   }
 }, [lastModifiedLayerState, isPressed, currentFrame]);
-
-
-
-
+*/
 // ===== FUNCIÓN DRAWONLAYER MODIFICADA =====
+
+
 
 const drawOnLayer = useCallback((layerId, drawFn, shouldBatch = false) => {
   let targetCanvas;
@@ -4422,6 +4552,443 @@ const floodFill = useCallback((layerId, startX, startY, fillColor, tolerance = 0
   
   return true;
 }, [compositeRender]);
+
+//Funcion para obtener los pixeles que coinciden con ese color: 
+const getMatchingPixels = useCallback((layerId, startX, startY, tolerance = 0) => {
+  const canvas = layerCanvasesRef.current[layerId];
+  if (!canvas) return [];
+  
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return [];
+  
+  // Verificar que las coordenadas estén dentro del canvas
+  if (startX < 0 || startX >= canvas.width || startY < 0 || startY >= canvas.height) {
+    return [];
+  }
+  
+  // Obtener los datos de imagen del canvas completo
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  
+  // Obtener el color del píxel inicial
+  const startIndex = (startY * canvas.width + startX) * 4;
+  const targetColor = {
+    r: data[startIndex],
+    g: data[startIndex + 1], 
+    b: data[startIndex + 2],
+    a: data[startIndex + 3]
+  };
+  
+  // Array para almacenar los píxeles coincidentes
+  const matchingPixels = [];
+  
+  // Pila para almacenar los píxeles a procesar
+  const pixelStack = [{x: startX, y: startY}];
+  const processedPixels = new Set();
+  
+  while (pixelStack.length > 0) {
+    const {x, y} = pixelStack.pop();
+    
+    // Crear clave única para este píxel
+    const pixelKey = `${x},${y}`;
+    if (processedPixels.has(pixelKey)) continue;
+    
+    // Verificar límites
+    if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) continue;
+    
+    // Obtener el color del píxel actual
+    const currentIndex = (y * canvas.width + x) * 4;
+    const currentColor = {
+      r: data[currentIndex],
+      g: data[currentIndex + 1],
+      b: data[currentIndex + 2], 
+      a: data[currentIndex + 3]
+    };
+    
+    // Verificar si el color actual coincide con el color objetivo (dentro de la tolerancia)
+    if (!colorsEqual(currentColor, targetColor, tolerance)) {
+      continue;
+    }
+    
+    // Marcar este píxel como procesado
+    processedPixels.add(pixelKey);
+    
+    // Agregar el píxel coincidente al array
+    matchingPixels.push({
+      x: x,
+      y: y,
+      color: {
+        r: currentColor.r,
+        g: currentColor.g,
+        b: currentColor.b,
+        a: currentColor.a
+      }
+    });
+    
+    // Añadir píxeles adyacentes a la pila (4-conectividad)
+    pixelStack.push({x: x + 1, y: y});     // Derecha
+    pixelStack.push({x: x - 1, y: y});     // Izquierda  
+    pixelStack.push({x: x, y: y + 1});     // Abajo
+    pixelStack.push({x: x, y: y - 1});     // Arriba
+  }
+  
+  // NUEVA FUNCIONALIDAD: Ordenar píxeles por distancia al origen (0,0)
+  const orderedPixels = matchingPixels.sort((a, b) => {
+    // Calcular distancia euclidiana al origen para cada píxel
+    const distanceA = Math.sqrt(a.x * a.x + a.y * a.y);
+    const distanceB = Math.sqrt(b.x * b.x + b.y * b.y);
+    
+    // Ordenar de menor a mayor distancia
+    return distanceA - distanceB;
+  });
+  
+  // Mostrar información de ordenamiento en consola
+  console.log(`🔍 Píxeles encontrados: ${orderedPixels.length}`);
+  if (orderedPixels.length > 0) {
+    const closest = orderedPixels[0];
+    const farthest = orderedPixels[orderedPixels.length - 1];
+    const closestDistance = Math.sqrt(closest.x * closest.x + closest.y * closest.y);
+    const farthestDistance = Math.sqrt(farthest.x * farthest.x + farthest.y * farthest.y);
+    
+    console.log(`📐 Más cercano a (0,0): (${closest.x}, ${closest.y}) - distancia: ${closestDistance.toFixed(2)}`);
+    console.log(`📐 Más alejado de (0,0): (${farthest.x}, ${farthest.y}) - distancia: ${farthestDistance.toFixed(2)}`);
+  }
+  
+  // Retornar el array ordenado
+  return orderedPixels;
+}, []);
+
+
+const gradientFloodFill = useCallback((layerId, startX, startY, gradientParams, gradientPixels, tolerance = 0) => {
+  const canvas = layerCanvasesRef.current[layerId];
+  if (!canvas) return false;
+  
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return false;
+  
+  // Verificar que las coordenadas estén dentro del canvas
+  if (startX < 0 || startX >= canvas.width || startY < 0 || startY >= canvas.height) {
+    return false;
+  }
+  
+  // Destructurar parámetros del gradiente
+  const {
+    isGradientMode,
+    gradientStops,
+    gradientType = 'linear',
+    gradientAngle = 90,
+    dithering = false,          // Nuevo parámetro para activar dithering
+    ditheringType = 'halftone-radial',    // Tipo de dithering: 'noise', 'ordered', 'checkerboard', 'horizontal', 'vertical', 'diagonal', 'random', 'halftone_radial'
+    ditheringStrength = 1     // Intensidad del dithering (0.0 - 1.0)
+  } = gradientParams;
+  
+  // Si no está en modo gradiente, retornar false
+  if (!isGradientMode || !gradientStops || gradientStops.length < 2) {
+    return false;
+  }
+  
+  // Obtener los píxeles que coinciden con el área a rellenar
+  const matchingPixels = gradientPixels ? gradientPixels : getMatchingPixels(layerId, startX, startY, tolerance);
+  
+  if (matchingPixels.length === 0) {
+    return true; // No hay píxeles que cambiar
+  }
+  
+  // Calcular el bounding box de los píxeles coincidentes
+  const minX = Math.min(...matchingPixels.map(p => p.x));
+  const maxX = Math.max(...matchingPixels.map(p => p.x));
+  const minY = Math.min(...matchingPixels.map(p => p.y));
+  const maxY = Math.max(...matchingPixels.map(p => p.y));
+  
+  const width = maxX - minX + 1;
+  const height = maxY - minY + 1;
+  
+  // Ordenar los gradient stops por posición
+  const sortedStops = [...gradientStops].sort((a, b) => a.position - b.position);
+  
+  // Función para interpolar color entre dos stops
+  const interpolateColor = (stop1, stop2, t) => {
+    return {
+      r: Math.round(stop1.color.r + (stop2.color.r - stop1.color.r) * t),
+      g: Math.round(stop1.color.g + (stop2.color.g - stop1.color.g) * t),
+      b: Math.round(stop1.color.b + (stop2.color.b - stop1.color.b) * t),
+      a: stop1.color.a + (stop2.color.a - stop1.color.a) * t
+    };
+  };
+  
+  // Función para obtener color en una posición específica del gradiente
+  const getGradientColorAt = (position) => {
+    // Clamp position entre 0 y 100
+    position = Math.max(0, Math.min(100, position));
+    
+    // Encontrar los stops entre los que está la posición
+    for (let i = 0; i < sortedStops.length - 1; i++) {
+      const currentStop = sortedStops[i];
+      const nextStop = sortedStops[i + 1];
+      
+      if (position >= currentStop.position && position <= nextStop.position) {
+        // Calcular el factor de interpolación
+        const range = nextStop.position - currentStop.position;
+        const t = range === 0 ? 0 : (position - currentStop.position) / range;
+        
+        return interpolateColor(currentStop, nextStop, t);
+      }
+    }
+    
+    // Si llegamos aquí, usar el primer o último stop
+    if (position <= sortedStops[0].position) {
+      return sortedStops[0].color;
+    } else {
+      return sortedStops[sortedStops.length - 1].color;
+    }
+  };
+  
+  // Función para aplicar diferentes tipos de dithering
+  const applyDithering = (color, x, y) => {
+    if (!dithering) return color;
+    
+    let ditherValue = 0;
+    
+    switch (ditheringType) {
+      case 'noise':
+        // Ruido pseudoaleatorio basado en coordenadas
+        const noise = ((x * 12.9898 + y * 78.233) * 43758.5453) % 1;
+        ditherValue = (noise - 0.5) * ditheringStrength * 32;
+        break;
+        
+      case 'ordered':
+        // Dithering ordenado (Bayer matrix 4x4)
+        const bayerMatrix = [
+          [0, 8, 2, 10],
+          [12, 4, 14, 6],
+          [3, 11, 1, 9],
+          [15, 7, 13, 5]
+        ];
+        const patternX = x % 4;
+        const patternY = y % 4;
+        ditherValue = ((bayerMatrix[patternY][patternX] / 16) - 0.5) * ditheringStrength * 24;
+        break;
+        
+      case 'checkerboard':
+        // Patrón de tablero de ajedrez
+        const isEven = (x + y) % 2 === 0;
+        ditherValue = isEven ? ditheringStrength * 16 : -ditheringStrength * 16;
+        break;
+        
+      case 'horizontal':
+        // Líneas horizontales
+        ditherValue = (y % 2 === 0) ? ditheringStrength * 12 : -ditheringStrength * 12;
+        break;
+        
+      case 'vertical':
+        // Líneas verticales
+        ditherValue = (x % 2 === 0) ? ditheringStrength * 12 : -ditheringStrength * 12;
+        break;
+        
+      case 'diagonal':
+        // Líneas diagonales
+        ditherValue = ((x + y) % 2 === 0) ? ditheringStrength * 12 : -ditheringStrength * 12;
+        break;
+        
+      case 'random':
+        // Completamente aleatorio (usando coordenadas como seed)
+        const seed = x * 1000 + y;
+        const randomValue = (Math.sin(seed) * 10000) % 1;
+        ditherValue = (randomValue - 0.5) * ditheringStrength * 28;
+        break;
+        
+      case 'dots':
+        // Patrón de puntos
+        const dotPattern = (x % 3 === 1 && y % 3 === 1) ? 1 : 0;
+        ditherValue = dotPattern * ditheringStrength * 20 - ditheringStrength * 10;
+        break;
+        
+      case 'cross':
+        // Patrón de cruces
+        const crossPattern = (x % 3 === 1 || y % 3 === 1) ? 1 : 0;
+        ditherValue = crossPattern * ditheringStrength * 15 - ditheringStrength * 7.5;
+        break;
+        
+      case 'halftone':
+        // Simulación de halftone (puntos que varían según la intensidad)
+        const centerX = x % 4;
+        const centerY = y % 4;
+        const distance = Math.sqrt(Math.pow(centerX - 1.5, 2) + Math.pow(centerY - 1.5, 2));
+        ditherValue = (distance < 1.5) ? ditheringStrength * 18 : -ditheringStrength * 6;
+        break;
+        
+      case 'halftone_radial':
+        // Halftone radial como en tu imagen - puntos que varían de tamaño según intensidad
+        const cellSize = 8; // Tamaño de la celda del halftone
+        const cellX = x % cellSize;
+        const cellY = y % cellSize;
+        const centerCellX = cellSize / 2;
+        const centerCellY = cellSize / 2;
+        
+        // Calcular distancia desde el centro de la celda
+        const distanceFromCenter = Math.sqrt(
+          Math.pow(cellX - centerCellX, 2) + Math.pow(cellY - centerCellY, 2)
+        );
+        
+        // Calcular la intensidad del color original (brightness)
+        const brightness = (color.r * 0.299 + color.g * 0.587 + color.b * 0.114) / 255;
+        
+        // El radio del punto depende de la intensidad (más oscuro = punto más grande)
+        const maxRadius = cellSize * 0.4;
+        const pointRadius = maxRadius * (1 - brightness) * ditheringStrength;
+        
+        // Si estamos dentro del radio del punto, hacer más oscuro, sino más claro
+        if (distanceFromCenter <= pointRadius) {
+          ditherValue = -80 * ditheringStrength; // Hacer más oscuro (el punto)
+        } else {
+          ditherValue = 40 * ditheringStrength; // Hacer más claro (el fondo)
+        }
+        break;
+        case 'orderedThreshold': {
+          // Matriz Bayer 4x4 normalizada [0, 1)
+          const bayerMatrix = [
+            [ 0 / 16,  8 / 16,  2 / 16, 10 / 16],
+            [12 / 16,  4 / 16, 14 / 16,  6 / 16],
+            [ 3 / 16, 11 / 16,  1 / 16,  9 / 16],
+            [15 / 16,  7 / 16, 13 / 16,  5 / 16]
+          ];
+          const patternX = x % 4;
+          const patternY = y % 4;
+          const threshold = bayerMatrix[patternY][patternX];
+        
+          // Obtener brillo normalizado del color
+          const brightness = (color.r * 0.299 + color.g * 0.587 + color.b * 0.114) / 255;
+        
+          // Comparar brillo con threshold
+          const isOn = brightness > threshold;
+        
+          const value = isOn ? 255 : 0;
+          return { r: value, g: value, b: value, a: color.a };
+        }
+        break;
+        
+        case 'orderedColor': {
+          const bayerMatrix = [
+            [ 0 / 16,  8 / 16,  2 / 16, 10 / 16],
+            [12 / 16,  4 / 16, 14 / 16,  6 / 16],
+            [ 3 / 16, 11 / 16,  1 / 16,  9 / 16],
+            [15 / 16,  7 / 16, 13 / 16,  5 / 16]
+          ];
+        
+          const patternX = x % 4;
+          const patternY = y % 4;
+          const threshold = bayerMatrix[patternY][patternX]; // entre 0 y 1
+        
+          // Para cada canal, compara contra el umbral + ditheringStrength
+          const applyToChannel = (channelValue) => {
+            const normalized = channelValue / 255;
+            return normalized > threshold ? 255 : 0;
+          };
+        
+          return {
+            r: applyToChannel(color.r),
+            g: applyToChannel(color.g),
+            b: applyToChannel(color.b),
+            a: color.a
+          };
+        }
+        
+      default:
+        ditherValue = 0;
+    }
+    
+    // Aplicar el dithering al color
+    return {
+      r: Math.max(0, Math.min(255, Math.round(color.r + ditherValue))),
+      g: Math.max(0, Math.min(255, Math.round(color.g + ditherValue))),
+      b: Math.max(0, Math.min(255, Math.round(color.b + ditherValue))),
+      a: color.a
+    };
+  };
+  
+  // Función para calcular la posición en el gradiente según el tipo
+  const calculateGradientPosition = (x, y) => {
+    if (gradientType === 'linear') {
+      const angleRad = (gradientAngle * Math.PI) / 180;
+      
+      // Centrar las coordenadas (-0.5 a 0.5)
+      const normalizedX = (x - minX) / Math.max(width - 1, 1) - 0.5;
+      const normalizedY = (y - minY) / Math.max(height - 1, 1) - 0.5;
+      
+      const cos = Math.cos(angleRad);
+      const sin = Math.sin(angleRad);
+      
+      // Proyectar el punto
+      const projection = normalizedX * cos + normalizedY * sin;
+      
+      // Mapear de [-0.5, 0.5] a [0, 100]
+      return (projection + 0.5) * 100;
+    } else if (gradientType === 'radial') {
+      // Para gradiente radial, calcular distancia desde el centro
+      const centerX = minX + width / 2;
+      const centerY = minY + height / 2;
+      
+      // Calcular distancia máxima posible (desde el centro a la esquina más lejana)
+      const maxDistance = Math.sqrt(
+        Math.pow(width / 2, 2) + Math.pow(height / 2, 2)
+      );
+      
+      // Calcular distancia actual desde el centro
+      const distance = Math.sqrt(
+        Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2)
+      );
+      
+      // Convertir a porcentaje (0-100)
+      return Math.min(100, (distance / maxDistance) * 100);
+    }
+    
+    return 0;
+  };
+  
+  // Obtener los datos de imagen del canvas
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  
+  // Aplicar el gradiente a cada píxel coincidente
+  matchingPixels.forEach(pixel => {
+    const { x, y } = pixel;
+    
+    // Calcular la posición en el gradiente para este píxel
+    const gradientPosition = calculateGradientPosition(x, y);
+    
+    // Obtener el color del gradiente en esa posición
+    let gradientColor = getGradientColorAt(gradientPosition);
+    
+    // Aplicar dithering si está activado
+    if (dithering) {
+      gradientColor = applyDithering(gradientColor, x, y);
+    }
+    
+    // Aplicar el color al píxel en el imageData
+    const index = (y * canvas.width + x) * 4;
+    data[index] = gradientColor.r;
+    data[index + 1] = gradientColor.g;
+    data[index + 2] = gradientColor.b;
+    data[index + 3] = Math.round(gradientColor.a * 255);
+  });
+  
+  // Aplicar los cambios al canvas
+  ctx.putImageData(imageData, 0, 0);
+  
+  // Re-renderizar la vista compuesta
+  compositeRender();
+  
+  console.log(`🎨 Gradiente aplicado a ${matchingPixels.length} píxeles`);
+  console.log(`📐 Área: ${width}x${height} px, Tipo: ${gradientType}, Ángulo: ${gradientAngle}°`);
+  if (dithering) {
+    console.log(`🔀 Dithering activado (tipo: ${ditheringType}, fuerza: ${ditheringStrength})`);
+  }
+  
+  return true;
+}, [getMatchingPixels, compositeRender]);
+// Ejemplo de uso:
+// const pixelesCoincidentes = getMatchingPixels('layer1', 100, 150, 10);
+// console.log(`Se encontraron ${pixelesCoincidentes.length} píxeles coincidentes`);
 
 /**
  * Función auxiliar para normalizar diferentes formatos de color a objeto RGBA
@@ -6295,6 +6862,8 @@ return {
   getPointerCoordsFromCanvas,
 //funcion para rellenado
   floodFill,
+  getMatchingPixels,
+  gradientFloodFill,
   // Estado de grupos
 pixelGroups,
 selectedGroup,
@@ -6438,7 +7007,7 @@ exportLayersAndFrames,
 //gestion del data url:
 
 createLayerAndPaintDataUrlCentered,
-
+//gestion de aislamiento de
 
 };
 }

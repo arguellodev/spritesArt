@@ -1,9 +1,8 @@
-import Navbar from "../Navbar/Navbar";
-import NavbarLateral from "../navbarLateral/Navbar";
+
 import { GoTools } from "react-icons/go";
 import { useState } from "react";
 import './editorMain.css'
-import { LuBrush, LuMousePointer2, LuEraser, LuHand, LuPaintBucket, LuTriangle } from "react-icons/lu";
+import { LuBrush, LuMousePointer2, LuEraser, LuHand, LuPaintBucket, LuTriangle, LuMousePointerClick } from "react-icons/lu";
 import CanvasTracker from "../Workspace/workspaceMain/workspaceContainer";
 import { LuLassoSelect } from "react-icons/lu";
 import { LuPipette } from "react-icons/lu";
@@ -93,6 +92,11 @@ const [loadedData, setLoadedData] = useState(null);
             { label: 'Preferencias', icon: '🔧', onClick: () => console.log('Preferencias') },
             { label: 'Cerrar sesión', icon: '🚪', onClick: () => console.log('Cerrar sesión') }
           ]
+        },
+        {
+          label: 'Selector por color',
+          icon: <LuMousePointerClick />,
+          onClick: () => setTool('selectByColor')
         },
         {
           label: 'Borrador',
@@ -232,19 +236,7 @@ if (!projectInitialized) {
     {/* Navbar lateral */}
     <div style={{display:'flex', flexDirection:'column'}}>
 
-    <NavbarLateral
-      logo={<div style={{ fontWeight: '400', fontSize: '1rem', marginTop:'0px', display:'flex', gap: '10px',
-        alignContent:'center', justifyContent:'center', width: "60px"
-       }}>
-        
-        <GoTools style={{fontSize:'1.2rem'}}/>
-      </div>}
-      items={navItemsLateral}
-      variant={navConfigLateral.variant}
-      theme={navConfigLateral.theme}
-      showOnlyIcons={navConfigLateral.showOnlyIcons}
-      twoColumns={navConfigLateral.twoColumns}
-    />
+    
 
      
 

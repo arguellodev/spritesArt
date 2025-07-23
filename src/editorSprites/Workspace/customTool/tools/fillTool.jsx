@@ -1,60 +1,69 @@
 import { useEffect, useState } from "react";
 import { LuChevronUp, LuChevronDown } from "react-icons/lu";
-import ToolColorPicker from "./toolColorPicker";
 
-// Simulación del ColorPicker component
-
-const FillTool = ({ setToolParameters, tool }) => {
-  // Estados para las diferentes configuraciones
+const FillTool = ({ setToolParameters, tool, toolParameters = {} }) => {
+  // Estados para las diferentes configuraciones básicas
   const [borderWidth, setBorderWidth] = useState(1);
   const [opacity, setOpacity] = useState(100);
-  const [borderColor, setBorderColor] = useState({ r: 255, g: 0, b: 0, a: 1 });
-  const [fillColor, setFillColor] = useState({ r: 0, g: 0, b: 0, a: 1 });
   const [vertices, setVertices] = useState(5);
   const [rotation, setRotation] = useState(0);
   const [pattern, setPattern] = useState("solid");
   const [pressure, setPressure] = useState(50);
-  const [hexFillColor, setFillHexColor] = useState('#FF0000');
-  const [hexBorderColor, setHexBorderColor] = useState('#FF0000');
   const [sharpen, setSharpen] = useState(0);
   const [paintMode, setPaintMode] = useState('hybrid');
-  const [velocitySensibility, setVelocitySensibility] = useState(0)
+  const [velocitySensibility, setVelocitySensibility] = useState(0);
 
-  const rgbToHex = ({ r, g, b }) => {
-    return (
-      "#" +
-      [r, g, b]
-        .map((x) => {
-          const hex = x.toString(16);
-          return hex.length === 1 ? "0" + hex : hex;
-        })
-        .join("")
-    );
-  };
+  // Estados para gradiente - configuraciones completas
+  const [isGradientMode, setIsGradientMode] = useState(false);
+  const [gradientStops, setGradientStops] = useState([]);
+ 
   
-  useEffect(() => {
-    setHexBorderColor(rgbToHex(borderColor));
-    setFillHexColor(rgbToHex(fillColor));
-  }, [borderColor, fillColor]);
-  
-  // Estados para color pickers
-  const [showBorderColorPicker, setShowBorderColorPicker] = useState(false);
-  const [showFillColorPicker, setShowFillColorPicker] = useState(false);
-
-  // Estados para opciones avanzadas
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  // Estados para dithering - manteniendo nombres originales + nuevos
+  const [isDitheringEnabled, setIsDitheringEnabled] = useState(false);
+  const [ditheringType, setDitheringType] = useState('noise');
+  const [ditheringStrength, setDitheringStrength] = useState(0.5);
 
   const patterns = ["solid", "dotted", "dashed", "pixel dust"];
+  
+  // Tipo de dithering: 'noise', 'ordered', 'checkerboard', 'horizontal', 'vertical', 'diagonal', 'random', 'halftone_radial'
+  // Tipos de dithering - manteniendo los originales que funcionaban
+  const ditheringTypes = [
+    "noise",
+    "ordered", 
+    "checkerboard",
+    "hotizontal",
+    "vertical",
+    "horizontal",
+    "diagonal",
+    "random",
+    "halftone_radial",
+    'orderedThreshold',
+    'orderedColor'
+  ];
 
-  // Función para convertir hex a rgb
-  const hexToRgb = (hex) => {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-      r: parseInt(result[1], 16),
-      g: parseInt(result[2], 16),
-      b: parseInt(result[3], 16)
-    } : { r: 0, g: 0, b: 0 };
-  };
+  // Sincronizar con toolParameters recibidos
+  useEffect(() => {
+    // Configuraciones básicas de gradiente
+    if (toolParameters.isGradientMode !== undefined) {
+      setIsGradientMode(toolParameters.isGradientMode);
+    }
+    if (toolParameters.gradientStops !== undefined) {
+      setGradientStops(toolParameters.gradientStops);
+    }
+ 
+ 
+    
+    // Configuraciones de dithering
+    if (toolParameters.isDitheringEnabled !== undefined) {
+      setIsDitheringEnabled(toolParameters.isDitheringEnabled);
+    }
+    if (toolParameters.ditheringType !== undefined) {
+      setDitheringType(toolParameters.ditheringType);
+    }
+    if (toolParameters.ditheringStrength !== undefined) {
+      setDitheringStrength(toolParameters.ditheringStrength);
+    }
+  }, [toolParameters]);
 
   // Función para manejar cambios en el grosor con botones
   const handleBorderWidthChange = (increment) => {
@@ -67,7 +76,6 @@ const FillTool = ({ setToolParameters, tool }) => {
   const handleBorderWidthInput = (e) => {
     const value = e.target.value;
     
-    // Permitir string vacío temporalmente
     if (value === '') {
       setBorderWidth('');
       return;
@@ -83,12 +91,19 @@ const FillTool = ({ setToolParameters, tool }) => {
   const handleBorderWidthBlur = (e) => {
     const value = e.target.value;
     if (value === '' || isNaN(parseInt(value))) {
-      setBorderWidth(3); // Valor por defecto
+      setBorderWidth(3);
     }
   };
 
+  // Función para formatear el nombre del tipo de dithering
+  const formatDitheringTypeName = (type) => {
+    return type.split('-').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
+  };
+
   useEffect(() => {
-    // Solo actualizar si todos los valores son números válidos
+    // Actualizar parámetros incluyendo configuraciones de gradiente
     if (typeof borderWidth === 'number' && 
         typeof vertices === 'number' && 
         typeof rotation === 'number') {
@@ -98,124 +113,110 @@ const FillTool = ({ setToolParameters, tool }) => {
             vertices: vertices,
             rotation: rotation,
             pattern: pattern,
-            pressure: pressure
+            pressure: pressure,
+            sharpen: sharpen,
+            paintMode: paintMode,
+            velocitySensibility: velocitySensibility,
+            // Parámetros de gradiente
+            isGradientMode: isGradientMode,
+       
+            dithering: isDitheringEnabled,
+            ditheringType: ditheringType,
+            ditheringStrength:  ditheringStrength
           }));
+      
     }
-  }, [borderWidth, opacity, borderColor, fillColor, vertices, rotation, pattern, pressure, setToolParameters,sharpen, paintMode, velocitySensibility]);
+  }, [borderWidth, opacity, vertices, rotation, pattern, pressure, 
+      sharpen, paintMode, velocitySensibility,
+      isGradientMode,
+      isDitheringEnabled, ditheringType, ditheringStrength, setToolParameters]);
 
   return (
     <>
       <div className="polygon-tool-container">
         <div className="tool-configs">
-          {/* Configuración de colores */}
-         
-
-          {/* Configuración de grosor */}
           
-
-        {/* Configuración de Sharpen */}
-
-
-          {/* Configuración de rotación */}
-
-
-{/*COnfiguracion de velcoidad */}
-
-
-
-
-
-          {/* Configuración de opacidad 
-          <div className="config-item">
-            <label className="tool-label">Opacity</label>
-            <div className="slider-container">
-              <input 
-                type="range" 
-                min="0" 
-                max="100" 
-                value={opacity} 
-                onChange={(e) => setOpacity(Number(e.target.value))} 
-                className="slider" 
-              />
-              <span className="tool-value">{opacity}%</span>
+          {/* Toggle para modo gradiente - solo visible si la herramienta es fill */}
+          {true && (
+            <div className="config-item">
+              <label className="tool-label">Gradient</label>
+              <div className="toggle-switch">
+                <input 
+                  type="checkbox" 
+                  id="gradientMode" 
+                  className="toggle-input"
+                  checked={isGradientMode}
+                  onChange={(e) => setIsGradientMode(e.target.checked)}
+                />
+                <label htmlFor="gradientMode" className="toggle-label"></label>
+              </div>
             </div>
-          </div>
-*/}
-          {/* Selector de patrón 
-          <div className="config-item">
-            <label className="tool-label">Pattern</label>
-            <select 
-              value={pattern} 
-              onChange={(e) => setPattern(e.target.value)}
-              className="pattern-selector"
-            >
-              {patterns.map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-          </div>*/}
+          )}
 
-          {/* Botón para mostrar/ocultar opciones avanzadas 
-          <button 
-            className="advanced-toggle"
-            onClick={() => setShowAdvanced(!showAdvanced)}
-          >
-            {showAdvanced ? "Hide Advanced" : "Show Advanced"}
-          </button>*/}
+          {/* Controles de gradiente - solo cuando está activado */}
+          {isGradientMode && (
+            <>
+             
 
-          {/* Opciones avanzadas */}
-         {/* showAdvanced && (
-            <div className="advanced-options">
+              {/* Toggle para dithering */}
               <div className="config-item">
-                <label className="tool-label">Pressure Sensitivity</label>
-                <div className="slider-container">
+                <label className="tool-label">Dithering</label>
+                <div className="toggle-switch">
                   <input 
-                    type="range" 
-                    min="0" 
-                    max="100" 
-                    value={pressure} 
-                    onChange={(e) => setPressure(Number(e.target.value))} 
-                    className="slider" 
+                    type="checkbox" 
+                    id="ditheringEnabled" 
+                    className="toggle-input"
+                    checked={isDitheringEnabled}
+                    onChange={(e) => setIsDitheringEnabled(e.target.checked)}
                   />
-                  <span className="tool-value">{pressure}%</span>
+                  <label htmlFor="ditheringEnabled" className="toggle-label"></label>
                 </div>
               </div>
 
-              <div className="config-item">
-                <label className="tool-label">Keyboard Shortcut</label>
-                <div className="shortcut-display">
-                  <span className="key">P</span>
-                  <button className="edit-shortcut">Edit</button>
-                </div>
-              </div>
+              {/* Controles de dithering - solo cuando está activado */}
+              {isDitheringEnabled && (
+                <>
+                  {/* Selector de tipo de dithering */}
+                  <div className="config-item">
+                    <label className="tool-label">Dithering Type</label>
+                    <select 
+                      value={ditheringType} 
+                      onChange={(e) => setDitheringType(e.target.value)}
+                      className="dithering-type-selector"
+                    >
+                      {ditheringTypes.map((type) => (
+                        <option key={type} value={type}>
+                          {formatDitheringTypeName(type)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div className="config-item">
-                <label className="tool-label">Anti-aliasing</label>
-                <div className="toggle-switch">
-                  <input type="checkbox" id="antialiasing" className="toggle-input" />
-                  <label htmlFor="antialiasing" className="toggle-label"></label>
-                </div>
-              </div>
+                  {/* Control de intensidad del dithering */}
+                  <div className="config-item">
+                    <label className="tool-label">Dithering Strength</label>
+                    <div className="horizontal-slider-container">
+                      <div className="slider-track-horizontal">
+                        <input 
+                          type="range" 
+                          min="0" 
+                          max="1" 
+                          step="0.1"
+                          value={ditheringStrength} 
+                          onChange={(e) => setDitheringStrength(Number(e.target.value))} 
+                          className="horizontal-slider" 
+                        />
+                      </div>
+                      <span className="current-value-horizontal">{ditheringStrength.toFixed(1)}</span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </>
+          )}
 
-              <div className="config-item">
-                <label className="tool-label">Pixel Perfect</label>
-                <div className="toggle-switch">
-                  <input type="checkbox" id="pixelperfect" className="toggle-input" defaultChecked />
-                  <label htmlFor="pixelperfect" className="toggle-label"></label>
-                </div>
-              </div>
-            </div>
-          )*/}
-
-          
         </div>
-
-
-
-
       </div>
-
-      
     </>
   );
 };

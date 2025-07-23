@@ -21,6 +21,224 @@
   --grid-color: rgba(121, 121, 121, 0.164);
 }
 
+
+/* Estilos base */
+.navbar {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  width: 100%;
+  transition: all 0.3s ease;
+}
+
+.navbar-container {
+ 
+  padding: 0 0.2rem;
+  padding-top: 15px;
+}
+
+.navbar-logo {
+
+}
+
+.navbar-logo img{
+  width:4.8rem;
+ 
+}
+
+.navbar-menu {
+  display: flex;
+  align-items: center;
+}
+
+.navbar-item {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  position: relative;
+  transition: background-color 0.2s ease;
+}
+
+.navbar-icon {
+  margin-right: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+}
+
+/* Estilos para navegación horizontal */
+.horizontal-navbar .navbar-container {
+  justify-content: space-between;
+  height: 4rem;
+}
+
+.horizontal-navbar .navbar-menu {
+  flex-grow: 1;
+  justify-content: flex-start;
+}
+
+/* Estilos para navegación vertical/aside */
+
+
+/* Estilos para solo iconos */
+.navbar-icons-only .navbar-label {
+  display: none;
+}
+
+
+
+/* Mostrar tooltip en hover para navbar de solo iconos */
+.navbar-icons-only .navbar-icon {
+  position: relative;
+}
+
+.navbar-icons-only .navbar-icon:hover::after {
+  content: attr(title);
+  position: absolute;
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  z-index: 10;
+}
+
+.horizontal-navbar.navbar-icons-only .navbar-icon:hover::after {
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 0.5rem;
+}
+
+.vertical-navbar.navbar-icons-only .navbar-icon:hover::after {
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 0.5rem;
+}
+
+.navbar-item:hover{
+  background-color: rgba(255, 255, 255, 0.082);
+}
+
+/* Estilos para dos columnas (solo para vertical) */
+.vertical-navbar .navbar-menu.two-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+/* Estilos para dropdown */
+
+
+.navbar-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  width: 100%;
+}
+
+.dropdown-arrow {
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.navbar-dropdown {
+  position: absolute;
+  background-color: white;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  z-index: 100;
+  min-width: 150px;
+}
+
+.horizontal-navbar .navbar-dropdown {
+  top: 100%;
+  left: 0;
+}
+
+.vertical-navbar .navbar-dropdown {
+  left: 100%;
+  top: 0;
+}
+
+.navbar-dropdown-item {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.navbar-dropdown-item:hover {
+  background-color: #f5f5f5;
+}
+
+/* Estilos por tema */
+.navbar-light {
+  background-color: white;
+  color: #333;
+  border-bottom: 1px solid #eaeaea;
+}
+
+.navbar-dark {
+  background-color: #2a2a2a;
+  color: white;
+}
+
+.navbar-dark .navbar-dropdown {
+  background-color: #444;
+  color: white;
+}
+
+.navbar-dark .navbar-dropdown-item:hover {
+  background-color: #555;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .horizontal-navbar .navbar-menu {
+    display: none;
+    position: absolute;
+    top: 4rem;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    background-color: inherit;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 10;
+  }
+  
+  .horizontal-navbar .navbar-menu.mobile-open {
+    display: flex;
+  }
+  
+  .mobile-menu-toggle {
+    display: block;
+    font-size: 1.5rem;
+    cursor: pointer;
+  }
+  
+  .horizontal-navbar .navbar-item {
+    width: 100%;
+  }
+  
+  .horizontal-navbar .navbar-dropdown {
+    position: relative;
+    width: 100%;
+    box-shadow: none;
+    margin-left: 1rem;
+  }
+}
+
+@media (min-width: 769px) {
+  .mobile-menu-toggle {
+    display: none;
+  }
+}
+
+
 /* Estilo para item activo en la navbar */
 .navbar-item-active {
   background-color: rgba(0, 123, 255, 0.1); /* Azul claro semi-transparente */
@@ -98,8 +316,16 @@
 
 }
 
+.dropdown-container{
+  position: relative;
+  border-left: 3px solid 'transparent'; /* Borde izquierdo azul para modo vertical */
+ 
+}
+
 .vertical-navbar .navbar-container {
   flex-direction: column;
+  justify-content: center;
+  align-items: center;
   height: 100%;
   
 }

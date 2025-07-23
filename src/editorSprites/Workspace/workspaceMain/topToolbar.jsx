@@ -96,15 +96,7 @@ const TopToolbar = ({ children, companyName = "Argánion", companyLogo = null })
 
       {/* Sección derecha - Powered by */}
       <div className="topToolbar-right">
-        <div className="powered-by">
-          <span className="powered-by-text">Powered by</span>
-          <div className="company-info">
-            {companyLogo && (
-              <img src={companyLogo} alt={companyName} className="company-logo" />
-            )}
-            <span className="company-name">Argánion</span>
-          </div>
-        </div>
+        
       </div>
     </div>
   );

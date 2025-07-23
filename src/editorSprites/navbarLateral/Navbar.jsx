@@ -1,36 +1,38 @@
 import { useState, useEffect, useRef } from "react";
 import "./Navbar.css";
-import { LuBrush, LuMousePointer2, LuEraser } from "react-icons/lu";
 
 // Componente principal Navbar con estilos integrados
 const NavbarLateral = ({
   logo,
   variant = "horizontal",
   lateralSide = "left",
-  items =[],
+  items = [],
   showOnlyIcons = false,
   twoColumns = false,
   theme = "light",
   onItemClick,
   className = "",
   showOnlyDropIcons = false, // Control independiente para los íconos de dropdown
+  activeTool, // Nueva prop para detectar herramienta activa
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openDropdowns, setOpenDropdowns] = useState({});
-  // Reemplazamos el estado único con un objeto que almacena el ítem seleccionado por cada dropdown
   const [selectedSubitems, setSelectedSubitems] = useState({});
-  const [actualIndexSelected, setActualIndexSelected] = useState(0);
 
   // Inicializar los subitems seleccionados al cargar el componente
   useEffect(() => {
     const initialSelectedSubitems = {};
     items.forEach((item, index) => {
       if (item.dropdown) {
-        initialSelectedSubitems[index] = 0; // Por defecto, selecciona el primer subitem
+        // Buscar si algún subitem está activo
+        const activeSubitemIndex = item.dropdown.findIndex(
+          subItem => subItem.toolValue === activeTool
+        );
+        initialSelectedSubitems[index] = activeSubitemIndex >= 0 ? activeSubitemIndex : 0;
       }
     });
     setSelectedSubitems(initialSelectedSubitems);
-  }, [items]);
+  }, [items, activeTool]);
   
   // Manejar clicks fuera de los dropdowns para cerrarlos
   const navbarRef = useRef(null);
@@ -61,6 +63,22 @@ const NavbarLateral = ({
     }
   };
 
+  // Función para verificar si un item está activo
+  const isItemActive = (item) => {
+    if (item.dropdown) {
+      // Para dropdowns, verificar si algún subitem está activo
+      return item.dropdown.some(subItem => subItem.toolValue === activeTool);
+    } else {
+      // Para items normales, verificar directamente
+      return item.toolValue === activeTool;
+    }
+  };
+
+  // Función para verificar si un subitem está activo
+  const isSubItemActive = (subItem) => {
+    return subItem.toolValue === activeTool;
+  };
+
   // Determinar clases CSS basadas en las props
   const navbarClasses = `
     navbar 
@@ -82,12 +100,11 @@ const NavbarLateral = ({
       return (
         <div
           key={`item-${index}`}
-          className={`navbar-item dropdown-container ${actualIndexSelected === index ? 'item-seleccionado' : ''}`}
+          className={`navbar-item dropdown-container ${isItemActive(item) ? 'item-seleccionado' : ''}`}
           onClick={() => {
             if (selectedSubitem && selectedSubitem.onClick) {
               selectedSubitem.onClick();
             }
-            setActualIndexSelected(index);
           }}
         >
           <div className="navbar-dropdown-trigger">
@@ -115,7 +132,7 @@ const NavbarLateral = ({
               {item.dropdown.map((subItem, subIndex) => (
                 <div
                   key={`subitem-${index}-${subIndex}`}
-                  className={`navbar-dropdown-item ${selectedSubitemIndex === subIndex ? 'selected' : ''}`}
+                  className={`navbar-dropdown-item ${isSubItemActive(subItem) ? 'selected' : ''}`}
                   onClick={(e) => {
                     e.stopPropagation(); // Evitar que el click se propague al contenedor padre
                     
@@ -130,9 +147,6 @@ const NavbarLateral = ({
                       ...prev,
                       [index]: false
                     }));
-                    
-                    // Establecer este ítem como el seleccionado
-                    setActualIndexSelected(index);
                     
                     // Ejecutar el onClick del subitem si existe
                     if (subItem.onClick) {
@@ -164,12 +178,11 @@ const NavbarLateral = ({
       return (
         <div
           key={`item-${index}`}
-          className={`navbar-item ${actualIndexSelected === index ? 'item-seleccionado' : ''}`}
+          className={`navbar-item ${isItemActive(item) ? 'item-seleccionado' : ''}`}
           onClick={() => {
             if (item.onClick) item.onClick();
             if (item.link) window.location.href = item.link;
             handleItemClick(item);
-            setActualIndexSelected(index);
           }}
         >
           {item.icon && (
@@ -194,8 +207,7 @@ const NavbarLateral = ({
       {variant === "horizontal" ? (
         <nav className={`${navbarClasses} horizontal-navbar `} ref={navbarRef}>
           <div className="navbar-container">
-            {logo && <div className="navbar-logo">{logo}</div>}
-
+            
             {/* Botón de menú móvil */}
             <div
               className="mobile-menu-toggle"
@@ -218,7 +230,10 @@ const NavbarLateral = ({
           ref={navbarRef}
         >
           <div className="navbar-container">
-            {logo && <div className="navbar-logo">{logo}</div>}
+          <div className="navbar-logo">
+              <img src="./pixcalli-serpiente.svg"></img>
+            </div>
+
 
             <div className={`navbar-menu ${twoColumns ? "two-columns" : ""}`}>
               {items.map(renderMenuItem)}

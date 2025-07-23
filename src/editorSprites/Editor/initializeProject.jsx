@@ -28,6 +28,7 @@ const InitializeProject = ({ onComplete, setLoadedData }) => {
     { name: 'Sprite Pequeño', width: 32, height: 32, description: 'Sprites clásicos retro' },
     { name: 'Sprite Mediano', width: 64, height: 64, description: 'Tamaño estándar para personajes' },
     { name: 'Sprite Grande', width: 128, height: 128, description: 'Tamaño estándar para personajes' },
+    { name: 'Gigante', width: 1000, height: 1000, description: 'Escenario de videojuegos' },
     { name: 'Personalizado', width: 0, height: 0, description: 'Define tus propias dimensiones' }
   ];
   
@@ -305,16 +306,15 @@ const InitializeProject = ({ onComplete, setLoadedData }) => {
       <div className="initialize-container">
         {/* Header */}
         <div className="initialize-header">
-          <div className="header-icon">
-            <div className="pixel-icon">
-              <div className="pixel"></div>
-              <div className="pixel"></div>
-              <div className="pixel"></div>
-              <div className="pixel"></div>
-            </div>
-          </div>
+          
+          <div>
           <h1 className="app-title">PixCalli Studio</h1>
           <p className="app-subtitle">Editor de Sprites para pixel art</p>
+          </div>
+          <div className="header-icon">
+            <img src='pixcalli-serpiente.svg'></img>
+          </div>
+          
         </div>
 
         {/* Main Content */}
@@ -524,7 +524,7 @@ const InitializeProject = ({ onComplete, setLoadedData }) => {
             <span>Powered by</span>
             <div className="company-logo">
               <div className="logo-icon">
-                <img src=''/>
+                <img src='./arganion.svg'/>
               </div>
               <span className="company-name">Argánion</span>
             </div>

@@ -103,9 +103,7 @@
 }
 
 /* Estilos para dropdown */
-.dropdown-container {
-  position: relative;
-}
+
 
 .navbar-dropdown-trigger {
   display: flex;

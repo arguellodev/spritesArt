@@ -3,12 +3,25 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
-  },
+  "main": "electron/main.js",      
+
+ "scripts": {
+  "dev": "vite",
+  "build": "vite build",
+  "lint": "eslint .",
+  "preview": "vite preview",
+  "electron": "VITE_DEV_SERVER=http://localhost:5173 electron --js-flags=\"--max-old-space-size=8192\" --enable-accelerated-2d-canvas --enable-gpu-rasterization --enable-zero-copy --disable-software-rasterizer --enable-accelerated-video-decode --force-gpu-mem-available-mb=2048 --enable-features=VaapiVideoDecoder electron/main.js",
+    
+    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && npm run electron\"",
+    
+    "electron:prod": "npm run build && electron --js-flags=\"--max-old-space-size=8192\" --enable-accelerated-2d-canvas --enable-gpu-rasterization electron/main.js",
+    
+    "electron:debug": "VITE_DEV_SERVER=http://localhost:5173 electron --inspect=9229 --js-flags=\"--max-old-space-size=8192\" --enable-accelerated-2d-canvas --enable-gpu-rasterization --enable-logging electron/main.js",
+  "start": "concurrently \"npm run dev\" \"npm run electron\"",
+  "dist": "vite build && electron-builder"
+}
+
+,
   "dependencies": {
     "@pixi/react": "^8.0.1",
     "pixi-painter": "^0.1.6-beta.1",
@@ -22,11 +35,30 @@
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react-swc": "^3.8.0",
-    "electron": "^37.1.0",
+    "concurrently": "^9.2.0",
+    "electron": "^37.2.1",
     "eslint": "^9.22.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^16.0.0",
     "vite": "^6.3.1"
+  },
+  "build": {
+  "appId": "com.tuapp.spritesgenerator",
+  "productName": "Sprites Generator",
+  "files": [
+    "dist",
+    "electron",
+    "package.json"
+  ],
+  "extraResources": [],
+  "directories": {
+    "buildResources": "build"
+  },
+  "linux": {
+    "target": "AppImage",
+    "category": "Graphics"
   }
+}
+
 }

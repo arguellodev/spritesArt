@@ -2,9 +2,7 @@ import { useEffect, useState } from "react";
 import { LuChevronUp, LuChevronDown } from "react-icons/lu";
 import ToolColorPicker from "./toolColorPicker";
 
-// Simulación del ColorPicker component
-
-const PolygonTool = ({ setToolParameters, tool }) => {
+const PolygonTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setToolConfigs }) => {
   // Estados para las diferentes configuraciones
   const [borderWidth, setBorderWidth] = useState(1);
   const [opacity, setOpacity] = useState(100);
@@ -16,6 +14,41 @@ const PolygonTool = ({ setToolParameters, tool }) => {
   const [pressure, setPressure] = useState(50);
   const [hexFillColor, setFillHexColor] = useState('#FF0000');
   const [hexBorderColor, setHexBorderColor] = useState('#FF0000');
+
+  // useEffect para cargar configuración guardada al montar el componente
+  useEffect(() => {
+    const polygonConfig = toolConfigs.polygon;
+    
+    if (polygonConfig !== null) {
+      // Cargar configuración guardada
+      setBorderWidth(polygonConfig.borderWidth || 1);
+      setVertices(polygonConfig.vertices || 5);
+      setRotation(polygonConfig.rotation || 0);
+     
+      
+    }
+  }, []); // Solo se ejecuta al montar
+
+  // useEffect para guardar cambios en la configuración de la herramienta
+  useEffect(() => {
+    const currentConfig = {
+      borderWidth,
+      vertices,
+      rotation,
+      opacity,
+      borderColor,
+      fillColor,
+      pattern,
+      pressure,
+      hexFillColor,
+      hexBorderColor
+    };
+
+    setToolConfigs(prev => ({
+      ...prev,
+      polygon: currentConfig
+    }));
+  }, [borderWidth, vertices, rotation, opacity, borderColor, fillColor, pattern, pressure, hexFillColor, hexBorderColor, setToolConfigs]);
 
   const rgbToHex = ({ r, g, b }) => {
     return (
@@ -90,7 +123,6 @@ const PolygonTool = ({ setToolParameters, tool }) => {
         typeof vertices === 'number' && 
         typeof rotation === 'number') {
      
-
       setToolParameters(prev => ({
         ...prev,
         borderWidth: borderWidth,
@@ -107,7 +139,6 @@ const PolygonTool = ({ setToolParameters, tool }) => {
       <div className="polygon-tool-container">
         <div className="tool-configs">
           {/* Configuración de colores */}
-
 
           {/* Configuración de grosor */}
           <div className="config-item">
@@ -140,8 +171,6 @@ const PolygonTool = ({ setToolParameters, tool }) => {
                <LuChevronDown />
               </button>
                </div>
-              
-              
             </div>
           </div>
 
@@ -153,7 +182,7 @@ const PolygonTool = ({ setToolParameters, tool }) => {
               <input 
                 type="number" 
                 min="3" 
-                max="12" 
+                max="100" 
                 value={vertices} 
                 onChange={(e) => {
                   const value = e.target.value;
@@ -178,7 +207,7 @@ const PolygonTool = ({ setToolParameters, tool }) => {
                   
                   const numValue = Number(value);
                   if (numValue < 3) setVertices(3);
-                  if (numValue > 12) setVertices(12);
+                  if (numValue > 100) setVertices(100);
                 }}
                 className="number-input" 
               />
@@ -187,10 +216,10 @@ const PolygonTool = ({ setToolParameters, tool }) => {
                 type="button"
                 onClick={() => {
                   const currentVertices = typeof vertices === 'number' ? vertices : 5;
-                  setVertices(Math.min(12, currentVertices + 1));
+                  setVertices(Math.min(100, currentVertices + 1));
                 }}
                 className="increment-btn"
-                disabled={(typeof vertices === 'number' ? vertices : 5) >= 12}
+                disabled={(typeof vertices === 'number' ? vertices : 5) >= 100}
               >
                <LuChevronUp />
               </button>
@@ -271,101 +300,14 @@ const PolygonTool = ({ setToolParameters, tool }) => {
               >
                 <LuChevronDown />
               </button>
-              
               </div>
-              
-              
             </div>
           </div>
-
-          {/* Configuración de opacidad 
-          <div className="config-item">
-            <label className="tool-label">Opacity</label>
-            <div className="slider-container">
-              <input 
-                type="range" 
-                min="0" 
-                max="100" 
-                value={opacity} 
-                onChange={(e) => setOpacity(Number(e.target.value))} 
-                className="slider" 
-              />
-              <span className="tool-value">{opacity}%</span>
-            </div>
-          </div>
-*/}
-          {/* Selector de patrón 
-          <div className="config-item">
-            <label className="tool-label">Pattern</label>
-            <select 
-              value={pattern} 
-              onChange={(e) => setPattern(e.target.value)}
-              className="pattern-selector"
-            >
-              {patterns.map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-          </div>*/}
-
-          {/* Botón para mostrar/ocultar opciones avanzadas 
-          <button 
-            className="advanced-toggle"
-            onClick={() => setShowAdvanced(!showAdvanced)}
-          >
-            {showAdvanced ? "Hide Advanced" : "Show Advanced"}
-          </button>*/}
-
-          {/* Opciones avanzadas */}
-         {/* showAdvanced && (
-            <div className="advanced-options">
-              <div className="config-item">
-                <label className="tool-label">Pressure Sensitivity</label>
-                <div className="slider-container">
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="100" 
-                    value={pressure} 
-                    onChange={(e) => setPressure(Number(e.target.value))} 
-                    className="slider" 
-                  />
-                  <span className="tool-value">{pressure}%</span>
-                </div>
-              </div>
-
-              <div className="config-item">
-                <label className="tool-label">Keyboard Shortcut</label>
-                <div className="shortcut-display">
-                  <span className="key">P</span>
-                  <button className="edit-shortcut">Edit</button>
-                </div>
-              </div>
-
-              <div className="config-item">
-                <label className="tool-label">Anti-aliasing</label>
-                <div className="toggle-switch">
-                  <input type="checkbox" id="antialiasing" className="toggle-input" />
-                  <label htmlFor="antialiasing" className="toggle-label"></label>
-                </div>
-              </div>
-
-              <div className="config-item">
-                <label className="tool-label">Pixel Perfect</label>
-                <div className="toggle-switch">
-                  <input type="checkbox" id="pixelperfect" className="toggle-input" defaultChecked />
-                  <label htmlFor="pixelperfect" className="toggle-label"></label>
-                </div>
-              </div>
-            </div>
-          )*/}
-
-          
         </div>
 
         {/* Vista previa de la herramienta */}
         <div className="tool-preview">
-          <div className="preview-label">Preview</div>
+         
           <div className="preview-container">
             <svg width="80" height="80" viewBox="0 0 80 80" className="preview-svg">
               <polygon
@@ -399,7 +341,6 @@ const PolygonTool = ({ setToolParameters, tool }) => {
         {/* Color Pickers */}
         {showBorderColorPicker && (
          <>
-       
            <ToolColorPicker
             color={borderColor}
             onChange={setBorderColor}
@@ -420,8 +361,6 @@ const PolygonTool = ({ setToolParameters, tool }) => {
         </>
         )}
       </div>
-
-      
     </>
   );
 };

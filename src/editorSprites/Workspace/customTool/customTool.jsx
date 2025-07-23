@@ -1,5 +1,5 @@
-import { useState } from "react";
-//import './customTool2.css';
+import { useState, useEffect } from "react";
+import './customTool2.css';
 import PencilTool from "./tools/pencilTool";
 import EraserTool from "./tools/eraserTool";
 import FillTool from "./tools/fillTool";
@@ -12,10 +12,39 @@ import PolygonTool from "./tools/polygonTool";
 import CurveTool from "./tools/curveTool";
 import DarkTool from "./tools/darkTool";
 import LightTool from "./tools/lightTool";
+import BlurFingerTool from "./tools/blurFingerTool";
+import SmudgeTool from "./tools/smudgeTool";
 import { BsChevronCompactDown, BsChevronCompactUp  } from "react-icons/bs";
 
-const CustomTool = ({ setToolParameters, tool, toolParameters }) => {
+const CustomTool = ({ setToolParameters, tool, toolParameters, myBrushes }) => {
     const [minimized, setMinimized] = useState(false);
+    
+    // Estados independientes para cada herramienta
+    const [toolConfigs, setToolConfigs] = useState({
+        pencil: null,
+        eraser: null,
+        fill: null,
+        line: null,
+        square: null,
+        triangle: null,
+        circle: null,
+        ellipse: null,
+        polygon: null,
+        curve: null,
+        dark: null,
+        light: null,
+        blurFinger: null,
+        smudge: null
+    });
+
+    useEffect(() => {
+        if(tool != 'fill'){
+            setToolParameters(prev => ({
+                ...prev,
+                isGradientMode: false,
+            }));
+        }
+    }, [tool]);
 
     const toggleMinimize = () => setMinimized(prev => !prev);
 
@@ -31,7 +60,9 @@ const CustomTool = ({ setToolParameters, tool, toolParameters }) => {
         polygon: { name: "Polígono", icon: "L", component: PolygonTool },
         curve: { name: "Linea Curva", icon: "C", component: CurveTool },
         dark: { name: "Oscurecedor", icon: "C", component: DarkTool },
-        light: { name: "Iluminador", icon: "C", component: LightTool }
+        light: { name: "Iluminador", icon: "C", component: LightTool },
+        blurFinger: { name: "Difuminador", icon: "C", component: BlurFingerTool },
+        smudge: { name: "Mezclador", icon: "C", component: SmudgeTool }
     };
 
     const currentTool = toolInfo[tool];
@@ -48,11 +79,18 @@ const CustomTool = ({ setToolParameters, tool, toolParameters }) => {
                 
                 <span className="minimize-toggle">{minimized ? <BsChevronCompactDown/> : <BsChevronCompactUp/>}</span>
             </div>*/}
-
+            <div className="current-tool">
+               {currentTool.icon}
+               
+                <p>{currentTool.name}</p>
+            </div>
             <div className={`tool-content ${minimized ? 'hidden' : ''}`}>
                 <ToolComponent
                     toolParameters={toolParameters}
                     setToolParameters={setToolParameters}
+                    toolConfigs={toolConfigs}
+                    setToolConfigs={setToolConfigs}
+                    myBrushes = {myBrushes}
                 />
             </div>
         </div>

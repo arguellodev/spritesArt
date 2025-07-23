@@ -3,5 +3,6 @@
 }
 
 body{
-    
+   background-color: black;
+   user-select: none;
 }
