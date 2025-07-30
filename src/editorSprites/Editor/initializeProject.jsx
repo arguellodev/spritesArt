@@ -10,7 +10,7 @@ const InitializeProject = ({ onComplete, setLoadedData }) => {
   const [isCustom, setIsCustom] = useState(false);
   const [completeInitialize, setCompleteInitialize] = useState(false);
 
-  // Estados para proyectos y carpetas
+  // Estados para proyectos y carpetasA
   const [recentProjects, setRecentProjects] = useState([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [defaultDirectoryHandle, setDefaultDirectoryHandle] = useState(null);
@@ -29,7 +29,7 @@ const InitializeProject = ({ onComplete, setLoadedData }) => {
     { name: 'Sprite Mediano', width: 64, height: 64, description: 'Tamaño estándar para personajes' },
     { name: 'Sprite Grande', width: 128, height: 128, description: 'Tamaño estándar para personajes' },
     { name: 'Gigante', width: 1000, height: 1000, description: 'Escenario de videojuegos' },
-    { name: 'Personalizado', width: 0, height: 0, description: 'Define tus propias dimensiones' }
+    { name: 'Ultra', width: 2000, height: 2000, description: 'Escenario de videojuegos gigante' }
   ];
   
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { usePointer, useLayerManager } from "../hooks/hooks";
 import { flushSync } from "react-dom";
 import PlayingAnimation from "./playingAnimation";
-
+import { jsAlgorithm } from "../rotesprite";
 import reactiveCursor from "./cursorIcons";
 import {
   LuEye,
@@ -64,6 +64,7 @@ import { BsPentagon } from "react-icons/bs";
 // Definición de las herramientas disponibles
 const TOOLS = {
   paint: "pencil",
+  pencilPerfect: "pencilPerfect",
   erase: "eraser",
   select: "select",
   lassoSelect: "lassoSelect",
@@ -115,6 +116,7 @@ function CanvasTracker({
           onClick: () => setTool("pencil"),
           toolValue: "pencil"
         },
+       
         { 
           label: "Perfil", 
           icon: "👤", 
@@ -162,6 +164,12 @@ function CanvasTracker({
           toolValue: null
         },
       ],
+    },
+    {
+      label: "Pencil Perfect",
+      icon: <LuBrush />,
+      onClick: () => setTool("pencilPerfect"),
+      toolValue: "pencilPerfect"
     },
     {
       label: "Selector por color",
@@ -302,6 +310,7 @@ const [myBrushes, setMyBrushes] = useState(null);
 
 
 
+const [rotationAngle, setRotationAngle] = useState(0);
   //Reproduccion:
   const [isPlaying, setIsPlaying] = useState(false);
   // estado especial para manejo de gradiente editable
@@ -309,6 +318,7 @@ const [myBrushes, setMyBrushes] = useState(null);
   //Estados de la inteligencia artificial:
   const [activeAI, setActiveAI] = useState(false);
   const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const [isShiftPressed, setIsShiftPressed] =useState(false);
 
   // Referencias a elementos del DOM
   const workspaceRef = useRef(null);
@@ -321,6 +331,12 @@ const [myBrushes, setMyBrushes] = useState(null);
   const rightMirrorCornerRef = useRef(null);
   const animationLayerRef = useRef(null);
   const previewAnimationRef = useRef(null);
+  const rotationHandlerRef = useRef(null);
+
+// Agregar estos refs al inicio del componente CanvasTracker
+const webglRendererRef = useRef(null);
+const textureRef = useRef(null);
+
 
   // Refs para inicio de herramientas
   const squareStartRef = useRef(null);
@@ -329,6 +345,10 @@ const [myBrushes, setMyBrushes] = useState(null);
   const ellipseStartRef = useRef(null);
   const polygonStartRef = useRef(null);
   
+//pencil perfect
+
+const [perfectCurves, setPerfectCurves] = useState(false);
+
   // Estados principales
 
   const [zoom, setZoom] = useState(10);
@@ -336,6 +356,7 @@ const [myBrushes, setMyBrushes] = useState(null);
   const [workspaceHeight, setWorkspaceHeight] = useState(1000);
   const [color, setColor] = useState({ r: 0, g: 0, b: 0, a: 1 });
   const [activeGrid, setActiveGrid] = useState(true);
+  const [rotationAngleSelection, setRotationAngleSelection] = useState(0);
 
   // Estados para herramientas específicas
   const [curveState, setCurveState] = useState("idle");
@@ -401,6 +422,7 @@ const [myBrushes, setMyBrushes] = useState(null);
     leftMirrorCornerRef,
     rightMirrorCornerRef,
     animationLayerRef,
+    rotationHandlerRef
   ]);
 
   const lastPixelRef = useRef(null);
@@ -605,17 +627,26 @@ const canPaintAtPixel = useCallback((x, y) => {
       alert("No hay datos para cargar");
       return;
     }
-
+  
     try {
-      // Opcional: mostrar preview antes de importar
       const preview = getJSONDataPreview(loadedData);
       console.log("Preview de datos:", preview);
-
+  
       if (!preview.isValid) {
         alert("Error en los datos: " + preview.error);
         return;
       }
-
+  
+      // APLICAR LAS DIMENSIONES ANTES DE IMPORTAR
+      if (preview.dimensions && preview.dimensions.width && preview.dimensions.height) {
+        console.log(`Aplicando dimensiones: ${preview.dimensions.width}x${preview.dimensions.height}`);
+        
+        setTotalWidth(preview.dimensions.width);
+        setTotalHeight(preview.dimensions.height);
+        setDrawableWidth(preview.dimensions.width);
+        setDrawableHeight(preview.dimensions.height);
+      }
+  
       // Importar datos
       await importFromJSONData(loadedData);
       alert("¡Animación cargada exitosamente!");
@@ -645,16 +676,16 @@ useEffect(() => {
 //guardado automatico
 const [contadorCambios, setContadorCambios] = useState(0);
 
-useEffect(() => {
-  setContadorCambios((prev) => {
-    const nuevoContador = prev + 1;
-    if (nuevoContador % 4 === 0) {
-      handleExport();
-    }
-    return nuevoContador;
-  });
-}, [framesResume, isPressed]);
 
+const [isRotationHandlerActive, setIsRotationHandlerActive] = useState(false);
+const [rotationHandlerRadius, setRotationHandlerRadius] = useState(50);
+const {
+  isPressed: isRotationHandlerContainerPressed,
+  relativeToTarget: rotationHandlerRelative,
+} = usePointer(rotationHandlerRef, artboardRef, [], {
+  endPressOnLeave: false,
+  preventContextMenu: true
+});
 
 
   //===============================Logica de canvas de espejo ====================================================//
@@ -687,9 +718,338 @@ const [isDraggingCorners, setIsDraggingCorners] = useState(false);
 
   //===============================Logica de canvas de espejo ====================================================//
 
-  ////============COmponentes memoizados ============================================
+// funcion para hacer regresion de las coordenadas y poder dibujar curvas perfectas: 
+/**
+ * Ajusta un canvasPath a curvas perfectas usando regresión y suavizado
+ * @param {Array} canvasPath - Array de puntos {x, y}
+ * @param {Object} options - Opciones de configuración
+ * @returns {Array} - Array de puntos suavizados
+ */
+function adjustToPerfectCurves(canvasPath, options = {}) {
+  const {
+    smoothness = 0.3,           // Factor de suavizado (0-1)
+    simplification = 2.0,       // Umbral de simplificación
+    minPoints = 3,              // Mínimo de puntos para procesar
+    curveDetection = true,      // Detectar formas geométricas
+    bezierPoints = 50           // Puntos por curva Bezier
+  } = options;
 
-  ////============COmponentes memoizados ============================================
+  if (!canvasPath || canvasPath.length < minPoints) {
+    return canvasPath;
+  }
+
+  // 1. Simplificar el path removiendo puntos redundantes
+  const simplifiedPath = simplifyPath(canvasPath, simplification);
+  
+  // 2. Detectar si es una forma geométrica conocida
+  if (curveDetection) {
+    const geometricShape = detectGeometricShape(simplifiedPath);
+    if (geometricShape) {
+      return geometricShape;
+    }
+  }
+
+  // 3. Aplicar suavizado con curvas Bezier
+  const smoothedPath = applyCubicBezierSmoothing(simplifiedPath, smoothness, bezierPoints);
+  
+  return smoothedPath;
+}
+
+/**
+ * Simplifica el path removiendo puntos innecesarios (algoritmo Douglas-Peucker)
+ */
+function simplifyPath(points, tolerance) {
+  if (points.length <= 2) return points;
+
+  // Encontrar el punto más alejado de la línea entre primer y último punto
+  let maxDistance = 0;
+  let maxIndex = 0;
+  
+  const start = points[0];
+  const end = points[points.length - 1];
+  
+  for (let i = 1; i < points.length - 1; i++) {
+    const distance = pointToLineDistance(points[i], start, end);
+    if (distance > maxDistance) {
+      maxDistance = distance;
+      maxIndex = i;
+    }
+  }
+
+  // Si la distancia máxima es mayor que la tolerancia, dividir recursivamente
+  if (maxDistance > tolerance) {
+    const leftPoints = simplifyPath(points.slice(0, maxIndex + 1), tolerance);
+    const rightPoints = simplifyPath(points.slice(maxIndex), tolerance);
+    
+    return [...leftPoints.slice(0, -1), ...rightPoints];
+  } else {
+    return [start, end];
+  }
+}
+
+/**
+ * Calcula la distancia de un punto a una línea
+ */
+function pointToLineDistance(point, lineStart, lineEnd) {
+  const A = point.x - lineStart.x;
+  const B = point.y - lineStart.y;
+  const C = lineEnd.x - lineStart.x;
+  const D = lineEnd.y - lineStart.y;
+
+  const dot = A * C + B * D;
+  const lenSq = C * C + D * D;
+  
+  if (lenSq === 0) return Math.sqrt(A * A + B * B);
+  
+  const param = dot / lenSq;
+  let xx, yy;
+
+  if (param < 0) {
+    xx = lineStart.x;
+    yy = lineStart.y;
+  } else if (param > 1) {
+    xx = lineEnd.x;
+    yy = lineEnd.y;
+  } else {
+    xx = lineStart.x + param * C;
+    yy = lineStart.y + param * D;
+  }
+
+  const dx = point.x - xx;
+  const dy = point.y - yy;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+/**
+ * Detecta formas geométricas conocidas y las perfecciona
+ */
+function detectGeometricShape(points) {
+  if (points.length < 4) return null;
+
+  // Detectar círculo
+  const circle = detectCircle(points);
+  if (circle) return generatePerfectCircle(circle);
+
+  // Detectar rectángulo
+  const rectangle = detectRectangle(points);
+  if (rectangle) return generatePerfectRectangle(rectangle);
+
+  // Detectar línea recta
+  const line = detectStraightLine(points);
+  if (line) return generatePerfectLine(line);
+
+  return null;
+}
+
+/**
+ * Detecta si los puntos forman un círculo
+ */
+function detectCircle(points) {
+  if (points.length < 6) return null;
+
+  // Calcular centro promedio
+  const center = {
+    x: points.reduce((sum, p) => sum + p.x, 0) / points.length,
+    y: points.reduce((sum, p) => sum + p.y, 0) / points.length
+  };
+
+  // Calcular radio promedio
+  const radii = points.map(p => Math.sqrt(
+    Math.pow(p.x - center.x, 2) + Math.pow(p.y - center.y, 2)
+  ));
+  
+  const avgRadius = radii.reduce((sum, r) => sum + r, 0) / radii.length;
+  
+  // Verificar si todos los puntos están cerca del radio promedio
+  const radiusVariance = radii.reduce((sum, r) => sum + Math.pow(r - avgRadius, 2), 0) / radii.length;
+  const radiusStdDev = Math.sqrt(radiusVariance);
+  
+  // Si la desviación estándar es pequeña, es probablemente un círculo
+  if (radiusStdDev < avgRadius * 0.15) {
+    return { center, radius: avgRadius };
+  }
+  
+  return null;
+}
+
+/**
+ * Genera un círculo perfecto
+ */
+function generatePerfectCircle({ center, radius }, pointCount = 64) {
+  const points = [];
+  for (let i = 0; i < pointCount; i++) {
+    const angle = (i / pointCount) * 2 * Math.PI;
+    points.push({
+      x: Math.round(center.x + radius * Math.cos(angle)),
+      y: Math.round(center.y + radius * Math.sin(angle))
+    });
+  }
+  return points;
+}
+
+/**
+ * Detecta líneas rectas
+ */
+function detectStraightLine(points) {
+  if (points.length < 2) return null;
+
+  const start = points[0];
+  const end = points[points.length - 1];
+  
+  // Verificar si todos los puntos están cerca de la línea recta
+  let maxDeviation = 0;
+  for (const point of points) {
+    const deviation = pointToLineDistance(point, start, end);
+    maxDeviation = Math.max(maxDeviation, deviation);
+  }
+
+  // Si la desviación máxima es pequeña, es una línea recta
+  if (maxDeviation < 3) {
+    return { start, end };
+  }
+  
+  return null;
+}
+
+/**
+ * Genera una línea perfecta
+ */
+function generatePerfectLine({ start, end }) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  const steps = Math.ceil(distance);
+  
+  const points = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    points.push({
+      x: Math.round(start.x + t * dx),
+      y: Math.round(start.y + t * dy)
+    });
+  }
+  
+  return points;
+}
+
+/**
+ * Detecta rectángulos (simplificado)
+ */
+function detectRectangle(points) {
+  // Implementación básica - se puede expandir
+  return null;
+}
+
+function generatePerfectRectangle(rectangle) {
+  return null;
+}
+
+/**
+ * Aplica suavizado con curvas Bezier cúbicas
+ */
+function applyCubicBezierSmoothing(points, smoothness, bezierPoints) {
+  if (points.length < 3) return points;
+
+  const smoothedPoints = [];
+  
+  // Agregar primer punto
+  smoothedPoints.push(points[0]);
+
+  // Procesar segmentos de 3 puntos para crear curvas Bezier
+  for (let i = 0; i < points.length - 2; i++) {
+    const p0 = points[i];
+    const p1 = points[i + 1];
+    const p2 = points[i + 2];
+
+    // Calcular puntos de control para la curva Bezier
+    const controlPoints = calculateBezierControlPoints(p0, p1, p2, smoothness);
+    
+    // Generar puntos de la curva Bezier
+    const bezierCurve = generateCubicBezier(
+      p0, controlPoints.cp1, controlPoints.cp2, p1, 
+      bezierPoints
+    );
+    
+    // Agregar puntos de la curva (excluyendo el primero para evitar duplicados)
+    smoothedPoints.push(...bezierCurve.slice(1));
+  }
+
+  // Agregar último punto si no se agregó
+  const lastOriginal = points[points.length - 1];
+  const lastSmoothed = smoothedPoints[smoothedPoints.length - 1];
+  if (lastOriginal.x !== lastSmoothed.x || lastOriginal.y !== lastSmoothed.y) {
+    smoothedPoints.push(lastOriginal);
+  }
+
+  return smoothedPoints;
+}
+
+/**
+ * Calcula puntos de control para curva Bezier
+ */
+function calculateBezierControlPoints(p0, p1, p2, smoothness) {
+  const d01 = Math.sqrt(Math.pow(p1.x - p0.x, 2) + Math.pow(p1.y - p0.y, 2));
+  const d12 = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+  
+  const fa = smoothness * d01 / (d01 + d12);
+  const fb = smoothness * d12 / (d01 + d12);
+
+  const cp1 = {
+    x: p1.x - fa * (p2.x - p0.x),
+    y: p1.y - fa * (p2.y - p0.y)
+  };
+
+  const cp2 = {
+    x: p1.x + fb * (p2.x - p0.x),  
+    y: p1.y + fb * (p2.y - p0.y)
+  };
+
+  return { cp1, cp2 };
+}
+
+/**
+ * Genera puntos de una curva Bezier cúbica
+ */
+function generateCubicBezier(p0, p1, p2, p3, steps) {
+  const points = [];
+  
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const point = cubicBezierPoint(p0, p1, p2, p3, t);
+    points.push({
+      x: Math.round(point.x),
+      y: Math.round(point.y)
+    });
+  }
+  
+  return points;
+}
+
+/**
+ * Calcula un punto en una curva Bezier cúbica
+ */
+function cubicBezierPoint(p0, p1, p2, p3, t) {
+  const u = 1 - t;
+  const tt = t * t;
+  const uu = u * u;
+  const uuu = uu * u;
+  const ttt = tt * t;
+
+  return {
+    x: uuu * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + ttt * p3.x,
+    y: uuu * p0.y + 3 * uu * t * p1.y + 3 * u * tt * p2.y + ttt * p3.y
+  };
+}
+
+// Ejemplo de uso:
+/*
+const perfectPath = adjustToPerfectCurves(canvasPath, {
+  smoothness: 0.4,        // Más suave
+  simplification: 1.5,    // Menos simplificación
+  curveDetection: true,   // Detectar formas geométricas
+  bezierPoints: 30        // Menos puntos por curva (más rápido)
+});
+*/
   // Función para dibujar una curva cuadrática Bézier
   const drawQuadraticCurve = useCallback(
     (ctx, start, end, control, width, color) => {
@@ -2674,78 +3034,500 @@ const [isDraggingCorners, setIsDraggingCorners] = useState(false);
     }
   }, [isPressed, tool]);
 
-  const withIsolationCheck = (drawFunction) => {
-    if (!isolatedPixels || isolatedPixels.length === 0) {
-      return drawFunction;
-    }
-  
-    // Pre-compilar máscara una sola vez si isolatedPixels no cambia
+  const withIsolationCheck = (() => {
     let cachedMask = null;
     let lastPixelsHash = null;
-    
-    return (ctx, ...args) => {
-      const { width, height } = ctx.canvas;
-      const currentHash = JSON.stringify(isolatedPixels); // Simple hash
-      
-      if (lastPixelsHash !== currentHash) {
-        // Recrear máscara
-        const maskCanvas = document.createElement('canvas');
-        const maskCtx = maskCanvas.getContext('2d');
-        maskCanvas.width = width;
-        maskCanvas.height = height;
-        
-        maskCtx.fillStyle = 'white';
-        for (const { x, y } of isolatedPixels) {
-          maskCtx.fillRect(x, y, 1, 1);
-        }
-        
-        cachedMask = maskCanvas;
-        lastPixelsHash = currentHash;
+    let cachedMaskCanvas = null;
+    let cachedTempCanvas = null;
+  
+    const hashPixels = (pixels) => {
+      let hash = 0;
+      for (let i = 0; i < pixels.length; i++) {
+        const { x, y } = pixels[i];
+        hash ^= ((x + 1) * 31 + (y + 1)) << (i % 8);
       }
-      
-      ctx.save();
-      
-      try {
-        // Dibujar en canvas temporal
-        const tempCanvas = document.createElement('canvas');
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCanvas.width = width;
-        tempCanvas.height = height;
-        
+      return hash;
+    };
+  
+    return (drawFunction) => {
+      if (!isolatedPixels || isolatedPixels.length === 0) {
+        return drawFunction;
+      }
+  
+      return (ctx, ...args) => {
+        const { width, height } = ctx.canvas;
+        const currentHash = hashPixels(isolatedPixels);
+  
+        // Regenerar la máscara solo si los píxeles han cambiado
+        if (lastPixelsHash !== currentHash) {
+          if (!cachedMaskCanvas) {
+            cachedMaskCanvas = document.createElement('canvas');
+          }
+          cachedMaskCanvas.width = width;
+          cachedMaskCanvas.height = height;
+  
+          const maskCtx = cachedMaskCanvas.getContext('2d');
+          maskCtx.clearRect(0, 0, width, height);
+          maskCtx.fillStyle = 'white';
+          for (const { x, y } of isolatedPixels) {
+            maskCtx.fillRect(x, y, 1, 1);
+          }
+  
+          cachedMask = cachedMaskCanvas;
+          lastPixelsHash = currentHash;
+        }
+  
+        // Reutilizar canvas temporal
+        if (!cachedTempCanvas) {
+          cachedTempCanvas = document.createElement('canvas');
+        }
+        cachedTempCanvas.width = width;
+        cachedTempCanvas.height = height;
+  
+        const tempCtx = cachedTempCanvas.getContext('2d');
+        tempCtx.clearRect(0, 0, width, height);
+  
+        // Ejecutar la función de dibujo sobre el canvas temporal
         const result = drawFunction(tempCtx, ...args);
-        
-        // Aplicar máscara y dibujar resultado
+  
+        // Aplicar la máscara con composición
         tempCtx.globalCompositeOperation = 'destination-in';
         tempCtx.drawImage(cachedMask, 0, 0);
-        
-        ctx.drawImage(tempCanvas, 0, 0);
-        
+  
+        // Dibujar el resultado final sobre el canvas real
+        ctx.drawImage(cachedTempCanvas, 0, 0);
+  
         return result;
-        
-      } finally {
-        ctx.restore();
-      }
+      };
     };
-  };
+  })();
+  
   const cachedImageDataRef = useRef(null);
 const cacheValidRef = useRef(false);
 
+const initializeWebGLImageRenderer = useCallback((canvas) => {
+  const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+  if (!gl) return null;
+  
+  // Vertex shader
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    attribute vec2 a_texCoord;
+    varying vec2 v_texCoord;
+    
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+      v_texCoord = a_texCoord;
+    }
+  `;
+  
+  // Fragment shader
+  const fragmentShaderSource = `
+    precision mediump float;
+    varying vec2 v_texCoord;
+    uniform sampler2D u_texture;
+    
+    void main() {
+      gl_FragColor = texture2D(u_texture, v_texCoord);
+    }
+  `;
+  
+  // Crear shaders
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+  const program = createProgram(gl, vertexShader, fragmentShader);
+  
+  // Configurar atributos
+  const positionLocation = gl.getAttribLocation(program, 'a_position');
+  const texCoordLocation = gl.getAttribLocation(program, 'a_texCoord');
+  const textureLocation = gl.getUniformLocation(program, 'u_texture');
+  
+  // Crear buffers para un quad completo
+  const positionBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+    -1, -1,  1, -1,  -1,  1,
+    -1,  1,  1, -1,   1,  1,
+  ]), gl.STATIC_DRAW);
+  
+  const texCoordBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+    0, 1,  1, 1,  0, 0,
+    0, 0,  1, 1,  1, 0,
+  ]), gl.STATIC_DRAW);
+  
+  return {
+    gl,
+    program,
+    positionLocation,
+    texCoordLocation,
+    textureLocation,
+    positionBuffer,
+    texCoordBuffer,
+    texture: gl.createTexture()
+  };
+}, []);
+
 // Función para inicializar/actualizar el cache
-const initializeImageDataCache = (ctx) => {
+const createShader = useCallback((gl, type, source) => {
+  const shader = gl.createShader(type);
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.error('Error compilando shader:', gl.getShaderInfoLog(shader));
+    gl.deleteShader(shader);
+    return null;
+  }
+  
+  return shader;
+}, []);
+
+const createProgram = useCallback((gl, vertexShader, fragmentShader) => {
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+  
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Error enlazando programa:', gl.getProgramInfoLog(program));
+    gl.deleteProgram(program);
+    return null;
+  }
+  
+  return program;
+}, []);
+
+// 3. FUNCIÓN OPTIMIZADA putImageData
+const putImageDataOptimized = useCallback((imageData, x = 0, y = 0) => {
+  const canvas = compositeCanvasRef.current;
+  if (!canvas) return;
+  
+  if (webglRendererRef.current) {
+    // Usar WebGL (RÁPIDO)
+    const { gl, program, positionLocation, texCoordLocation, textureLocation, 
+            positionBuffer, texCoordBuffer, texture } = webglRendererRef.current;
+    const { data, width, height } = imageData;
+    
+    // Configurar viewport
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    
+    // Usar el programa de shaders
+    gl.useProgram(program);
+    
+    // Configurar textura
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    
+    // Subir datos de imagen
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+    
+    // Configurar atributos
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.enableVertexAttribArray(positionLocation);
+    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+    gl.enableVertexAttribArray(texCoordLocation);
+    gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
+    
+    // Configurar uniforme
+    gl.uniform1i(textureLocation, 0);
+    
+    // Dibujar
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  } else {
+    // Fallback a Canvas 2D (LENTO pero compatible)
+    const ctx = canvas.getContext('2d');
+    ctx.putImageData(imageData, x, y);
+  }
+}, []);
+
+// 4. ACTUALIZAR LA FUNCIÓN initializeImageDataCache EXISTENTE
+const initializeImageDataCacheOptimized = (ctx) => {
   const canvas = ctx.canvas;
+  
   if (!cachedImageDataRef.current || 
       cachedImageDataRef.current.width !== canvas.width || 
       cachedImageDataRef.current.height !== canvas.height ||
       !cacheValidRef.current) {
-    cachedImageDataRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    
+    // Intentar WebGL solo para leer píxeles
+    let gl = null;
+    try {
+      gl = canvas.getContext('webgl2', { preserveDrawingBuffer: true }) || 
+           canvas.getContext('webgl', { preserveDrawingBuffer: true });
+    } catch (e) {
+      gl = null;
+    }
+    
+    if (gl) {
+      const pixels = new Uint8Array(canvas.width * canvas.height * 4);
+      gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      cachedImageDataRef.current = new ImageData(
+        new Uint8ClampedArray(pixels), 
+        canvas.width, 
+        canvas.height
+      );
+    } else {
+      // Fallback normal
+      cachedImageDataRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    }
+    
     cacheValidRef.current = true;
   }
+};
+
+// 5. INICIALIZACIÓN WEBGL EN useEffect
+// Agregar este useEffect después de los existentes
+useEffect(() => {
+  const canvas = compositeCanvasRef.current;
+  if (canvas) {
+    // Inicializar WebGL renderer
+    webglRendererRef.current = initializeWebGLImageRenderer(canvas);
+    
+    if (!webglRendererRef.current) {
+      console.log('WebGL no disponible, usando fallback a Canvas 2D');
+    } else {
+      console.log('WebGL inicializado correctamente para putImageData optimizado');
+    }
+  }
+}, [initializeWebGLImageRenderer]);
+
+
+useEffect(() => {
+  return () => {
+    // Limpiar recursos WebGL al desmontar
+    if (webglRendererRef.current) {
+      const { gl, program, texture, positionBuffer, texCoordBuffer } = webglRendererRef.current;
+      
+      if (gl) {
+        gl.deleteProgram(program);
+        gl.deleteTexture(texture);
+        gl.deleteBuffer(positionBuffer);
+        gl.deleteBuffer(texCoordBuffer);
+      }
+    }
+  };
+}, []);
+
+// 10. FUNCIÓN PARA INVALIDAR CACHE WEBGL
+const invalidateImageDataCacheOptimized = useCallback(() => {
+  cacheValidRef.current = false;
+}, []);
+
+useEffect(()=>{
+invalidateImageDataCacheOptimized();
+},[isPressed, tool, toolParameters])
+// Función auxiliar para voltear ImageData verticalmente (WebGL lee al revés)
+const flipImageDataVertically = (imageData) => {
+  const { data, width, height } = imageData;
+  const flippedData = new Uint8ClampedArray(data.length);
+  
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const sourceIndex = ((height - 1 - y) * width + x) * 4;
+      const targetIndex = (y * width + x) * 4;
+      
+      flippedData[targetIndex] = data[sourceIndex];         // R
+      flippedData[targetIndex + 1] = data[sourceIndex + 1]; // G
+      flippedData[targetIndex + 2] = data[sourceIndex + 2]; // B
+      flippedData[targetIndex + 3] = data[sourceIndex + 3]; // A
+    }
+  }
+  
+  return new ImageData(flippedData, width, height);
 };
 
 // Función para invalidar el cache (llamar cuando sea necesario)
 const invalidateImageDataCache = () => {
   cacheValidRef.current = false;
 };
+
+///=======================PIXEL PERFECT ============================================================
+// En el componente CanvasTracker, agregar estos estados:
+const [strokeHistory, setStrokeHistory] = useState([]);
+const [isRecordingStroke, setIsRecordingStroke] = useState(false);
+// Agregar estas funciones de utilidad para suavizado
+const smoothStroke = useCallback((points, perfectionLevel) => {
+  if (!points || points.length < 3 || perfectionLevel === 0) {
+    return points;
+  }
+
+  // Algoritmo 1: Promedio móvil ponderado
+  const windowSize = Math.max(3, Math.floor(5 + perfectionLevel * 10));
+  const smoothedPoints = [];
+
+  for (let i = 0; i < points.length; i++) {
+    let sumX = 0, sumY = 0, weightSum = 0;
+    
+    for (let j = -windowSize; j <= windowSize; j++) {
+      const idx = i + j;
+      if (idx >= 0 && idx < points.length) {
+        // Peso gaussiano
+        const weight = Math.exp(-(j * j) / (2 * windowSize * windowSize / 4));
+        sumX += points[idx].x * weight;
+        sumY += points[idx].y * weight;
+        weightSum += weight;
+      }
+    }
+    
+    smoothedPoints.push({
+      x: Math.round(sumX / weightSum),
+      y: Math.round(sumY / weightSum)
+    });
+  }
+
+  // Algoritmo 2: Detección y corrección de líneas casi rectas
+  if (perfectionLevel > 0.5) {
+    return straightenNearStraightSegments(smoothedPoints, perfectionLevel);
+  }
+
+  return smoothedPoints;
+}, []);
+
+// Función para detectar y enderezar segmentos casi rectos
+const straightenNearStraightSegments = useCallback((points, perfectionLevel) => {
+  if (points.length < 3) return points;
+
+  const threshold = 2 * (2 - perfectionLevel); // Más estricto con mayor perfection
+  const result = [points[0]];
+  let i = 0;
+
+  while (i < points.length - 1) {
+    let j = i + 2;
+    
+    // Buscar el segmento más largo que sea casi recto
+    while (j < points.length) {
+      if (isNearlyStrightLine(points, i, j, threshold)) {
+        j++;
+      } else {
+        break;
+      }
+    }
+    
+    if (j > i + 2) {
+      // Reemplazar con línea recta
+      const steps = j - i - 1;
+      for (let step = 1; step <= steps; step++) {
+        const t = step / steps;
+        result.push({
+          x: Math.round(points[i].x + t * (points[j - 1].x - points[i].x)),
+          y: Math.round(points[i].y + t * (points[j - 1].y - points[i].y))
+        });
+      }
+      i = j - 1;
+    } else {
+      result.push(points[i + 1]);
+      i++;
+    }
+  }
+
+  return result;
+}, []);
+
+// Verificar si los puntos forman casi una línea recta
+const isNearlyStrightLine = (points, start, end, threshold) => {
+  const x1 = points[start].x;
+  const y1 = points[start].y;
+  const x2 = points[end - 1].x;
+  const y2 = points[end - 1].y;
+
+  for (let i = start + 1; i < end - 1; i++) {
+    const distance = distanceToLine(points[i].x, points[i].y, x1, y1, x2, y2);
+    if (distance > threshold) {
+      return false;
+    }
+  }
+  
+  return true;
+};
+
+// Calcular distancia de un punto a una línea
+const distanceToLine = (px, py, x1, y1, x2, y2) => {
+  const A = px - x1;
+  const B = py - y1;
+  const C = x2 - x1;
+  const D = y2 - y1;
+
+  const dot = A * C + B * D;
+  const lenSq = C * C + D * D;
+  
+  if (lenSq === 0) return Math.sqrt(A * A + B * B);
+  
+  const param = dot / lenSq;
+  
+  let xx, yy;
+  if (param < 0) {
+    xx = x1;
+    yy = y1;
+  } else if (param > 1) {
+    xx = x2;
+    yy = y2;
+  } else {
+    xx = x1 + param * C;
+    yy = y1 + param * D;
+  }
+
+  const dx = px - xx;
+  const dy = py - yy;
+  
+  return Math.sqrt(dx * dx + dy * dy);
+};
+
+// Algoritmo adicional: Suavizado de curvas usando splines cúbicos simplificados
+const applyCurveSmoothing = useCallback((points, perfectionLevel) => {
+  if (points.length < 4) return points;
+
+  const result = [];
+  const tension = 0.5 * perfectionLevel; // Controla qué tan suave es la curva
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[Math.min(points.length - 1, i + 1)];
+    const p3 = points[Math.min(points.length - 1, i + 2)];
+
+    // Catmull-Rom spline
+    for (let t = 0; t < 1; t += 0.1) {
+      const t2 = t * t;
+      const t3 = t2 * t;
+
+      const x = 0.5 * (
+        (2 * p1.x) +
+        (-p0.x + p2.x) * t +
+        (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
+        (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3
+      );
+
+      const y = 0.5 * (
+        (2 * p1.y) +
+        (-p0.y + p2.y) * t +
+        (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
+        (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3
+      );
+
+      result.push({
+        x: Math.round(x),
+        y: Math.round(y)
+      });
+    }
+  }
+
+  // Agregar el último punto
+  result.push(points[points.length - 1]);
+
+  // Eliminar duplicados consecutivos
+  return result.filter((point, index) => 
+    index === 0 || point.x !== result[index - 1].x || point.y !== result[index - 1].y
+  );
+}, []);
+// Asegurarse de que perfection esté en toolParameters (en tu CustomTool component)
+// toolParameters.perfection = 0 a 1 (0 = sin suavizado, 1 = máximo suavizado)
 
   // Efecto principal para manejar el dibujo
   useEffect(() => {
@@ -2926,13 +3708,13 @@ const invalidateImageDataCache = () => {
 
       return;
     }
-    if (tool === TOOLS.line) {
+    if (tool === TOOLS.line || (isShiftPressed && tool === TOOLS.paint)) {
       if (isPressed) {
         if (!lineStartRef.current) {
           // SOLO guardar el botón cuando se inicia la línea por primera vez
           lineButton.current = isPressed;
           console.log("ispressed:", isPressed);
-
+    
           const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
           const canvasCoords = viewportToCanvasCoords(
             viewportPixelCoords.x,
@@ -2947,39 +3729,7 @@ const invalidateImageDataCache = () => {
             viewportPixelCoords.x,
             viewportPixelCoords.y
           );
-
-          const width = toolParameters.width;
-
-          // Calcular centro basado en bounds (igual que en paint)
-          const hasBounds =
-            mirrorState.bounds &&
-            (mirrorState.bounds.x2 > mirrorState.bounds.x1 ||
-              mirrorState.bounds.y2 > mirrorState.bounds.y1);
-
-          const centerX = hasBounds
-            ? Math.floor((mirrorState.bounds.x1 + mirrorState.bounds.x2) / 2)
-            : Math.floor(drawableWidth / 2);
-
-          const centerY = hasBounds
-            ? Math.floor((mirrorState.bounds.y1 + mirrorState.bounds.y2) / 2)
-            : Math.floor(drawableHeight / 2);
-
-          // Ajustes para dimensiones impares (igual que en paint)
-          const adjustment = -1;
-          const imparAdjustmentHeight = drawableHeight % 2 !== 0 ? 1 : 0;
-          const imparAdjustmentWidth = drawableWidth % 2 !== 0 ? 1 : 0;
-
-          const reflectHorizontal = (x) =>
-            centerX * 2 - x + adjustment + imparAdjustmentWidth;
-          const reflectVertical = (y) =>
-            centerY * 2 - y + adjustment + imparAdjustmentHeight;
-
-          const start = lineStartRef.current;
-          const startX = start.x;
-          const startY = start.y;
-          const endX = endCoords.x;
-          const endY = endCoords.y;
-
+    
           // Usar la referencia guardada (no isPressed actual)
           const selectedColor =
             lineButton.current === "left"
@@ -2987,51 +3737,244 @@ const invalidateImageDataCache = () => {
               : lineButton.current === "right"
               ? toolParameters.backgroundColor
               : toolParameters.foregroundColor; // fallback a foreground
-
-          drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
+    
+          drawOnLayer(activeLayerId, (ctx) => {
+            const canvas = ctx.canvas;
+            const width = toolParameters?.width || 1;
+            const blur = toolParameters.blur || 0;
+            const paintMode = toolParameters?.paintMode || "manual";
+    
+            // Parámetros para pattern alignment
+            const patternAlignment = toolParameters?.patternAlignment || "normal";
+    
+            // Nuevos parámetros para brocha personalizada
+            const useCustomBrush = toolParameters?.customBrush || false;
+            const customBrushType = toolParameters?.customBrushType;
+    
+            // MODIFICACIÓN PRINCIPAL: Procesar datos de brocha con el color seleccionado
+            let customBrushData = [];
+            if (
+              useCustomBrush &&
+              customBrushType &&
+              toolParameters.processCustomBrushData
+            ) {
+              customBrushData = toolParameters.processCustomBrushData(selectedColor);
+            }
+    
+            // Precalcular valores constantes
+            const maxRadius = width / 2;
+            const halfWidth = Math.floor(width / 2);
+    
+            // Configuración de espejo
+            const hasBounds =
+              mirrorState.bounds &&
+              (mirrorState.bounds.x2 > mirrorState.bounds.x1 ||
+                mirrorState.bounds.y2 > mirrorState.bounds.y1);
+    
+            const centerX = hasBounds
+              ? Math.floor((mirrorState.bounds.x1 + mirrorState.bounds.x2) / 2)
+              : Math.floor(drawableWidth / 2);
+    
+            const centerY = hasBounds
+              ? Math.floor((mirrorState.bounds.y1 + mirrorState.bounds.y2) / 2)
+              : Math.floor(drawableHeight / 2);
+    
+            // Ajustes para dimensiones impares (igual que en paint)
+            const adjustment = -1;
+            const imparAdjustmentHeight = drawableHeight % 2 !== 0 ? 1 : 0;
+            const imparAdjustmentWidth = drawableWidth % 2 !== 0 ? 1 : 0;
+    
+            const reflectHorizontal = (x) =>
+              centerX * 2 - x + adjustment + imparAdjustmentWidth;
+            const reflectVertical = (y) =>
+              centerY * 2 - y + adjustment + imparAdjustmentHeight;
+    
+            // Función para calcular las dimensiones del patrón de la brocha personalizada
+            const getBrushDimensions = () => {
+              if (!useCustomBrush || !customBrushData.length) {
+                return { width: width, height: width }; // Para brochas estándar usar el width configurado
+              }
+    
+              let minX = 0,
+                maxX = 0,
+                minY = 0,
+                maxY = 0;
+              customBrushData.forEach((pixel) => {
+                minX = Math.min(minX, pixel.x);
+                maxX = Math.max(maxX, pixel.x);
+                minY = Math.min(minY, pixel.y);
+                maxY = Math.max(maxY, pixel.y);
+              });
+    
+              return {
+                width: maxX - minX + 1,
+                height: maxY - minY + 1,
+              };
+            };
+    
+            // Función para obtener la posición de grilla más cercana
+            const getGridPosition = (x, y) => {
+              if (patternAlignment === "normal") {
+                return { x: x, y: y, shouldPaint: true };
+              }
+    
+              const brushDims = getBrushDimensions();
+              let gridOriginX, gridOriginY;
+    
+              if (patternAlignment === "source") {
+                // Para líneas, usar el punto de inicio como origen
+                gridOriginX = lineStartRef.current.x;
+                gridOriginY = lineStartRef.current.y;
+              } else if (patternAlignment === "destination") {
+                // Alinear al lienzo (origen en 0,0)
+                gridOriginX = 0;
+                gridOriginY = 0;
+              }
+    
+              // Calcular la posición de grilla más cercana desde el origen
+              const offsetX = x - gridOriginX;
+              const offsetY = y - gridOriginY;
+    
+              // Encontrar el punto de grilla más cercano (múltiplo del tamaño del patrón)
+              const gridStepX = Math.floor(offsetX / brushDims.width);
+              const gridStepY = Math.floor(offsetY / brushDims.height);
+    
+              const gridX = gridOriginX + gridStepX * brushDims.width;
+              const gridY = gridOriginY + gridStepY * brushDims.height;
+    
+              return { x: gridX, y: gridY, shouldPaint: true };
+            };
+    
+            // Función para dibujar brocha personalizada
+            const drawCustomBrush = (centerX, centerY) => {
+              for (const pixel of customBrushData) {
+                const pixelX = centerX + pixel.x;
+                const pixelY = centerY + pixel.y;
+    
+                if (pixelX < 0 || pixelX >= canvas.width || pixelY < 0 || pixelY >= canvas.height)
+                  continue;
+    
+                if (paintMode === "composite") {
+                  ctx.globalAlpha = pixel.color.a / 255;
+                  ctx.fillStyle = `rgba(${pixel.color.r}, ${pixel.color.g}, ${pixel.color.b}, ${pixel.color.a})`;
+                  ctx.fillRect(pixelX, pixelY, 1, 1);
+                } else {
+                  // Modo manual - para líneas, usar fillRect directo
+                  ctx.fillStyle = `rgba(${pixel.color.r}, ${pixel.color.g}, ${pixel.color.b}, ${pixel.color.a})`;
+                  ctx.fillRect(pixelX, pixelY, 1, 1);
+                }
+              }
+            };
+    
+            // Función para dibujar brocha personalizada con espejos
+            const drawCustomBrushWithMirrors = (x, y) => {
+              const gridPos = getGridPosition(x, y);
+              if (gridPos.shouldPaint) {
+                drawCustomBrush(gridPos.x, gridPos.y);
+    
+                if (mirrorState.vertical) {
+                  drawCustomBrush(gridPos.x, reflectVertical(gridPos.y));
+                }
+                if (mirrorState.horizontal) {
+                  drawCustomBrush(reflectHorizontal(gridPos.x), gridPos.y);
+                }
+                if (mirrorState.vertical && mirrorState.horizontal) {
+                  drawCustomBrush(reflectHorizontal(gridPos.x), reflectVertical(gridPos.y));
+                }
+              }
+            };
+    
+            // Función para dibujar brocha estándar
+            const drawStandardBrush = (x, y) => {
+              const gridPos = getGridPosition(x, y);
+              if (!gridPos.shouldPaint) return;
+    
+              ctx.fillStyle = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, ${selectedColor.a})`;
+    
+              if (blur === 0) {
+                // Sin blur: rectángulo simple
+                ctx.fillRect(gridPos.x - halfWidth, gridPos.y - halfWidth, width, width);
+              } else {
+                // Con blur: gradiente
+                const coreRadius = Math.max(0.5, (1 - blur) * maxRadius);
+                const gradient = ctx.createRadialGradient(
+                  gridPos.x,
+                  gridPos.y,
+                  0,
+                  gridPos.x,
+                  gridPos.y,
+                  maxRadius
+                );
+    
+                const coreStop = coreRadius / maxRadius;
+                const coreColor = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, ${selectedColor.a})`;
+                const edgeColor = `rgba(${selectedColor.r}, ${selectedColor.g}, ${
+                  selectedColor.b
+                }, ${selectedColor.a * 0.1})`;
+    
+                gradient.addColorStop(0, coreColor);
+                gradient.addColorStop(coreStop, coreColor);
+                gradient.addColorStop(1, edgeColor);
+    
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(gridPos.x, gridPos.y, maxRadius, 0, 2 * Math.PI);
+                ctx.fill();
+              }
+            };
+    
+            // Función para dibujar brocha estándar con espejos
+            const drawStandardBrushWithMirrors = (x, y) => {
+              drawStandardBrush(x, y);
+    
+              if (mirrorState.vertical) {
+                drawStandardBrush(x, reflectVertical(y));
+              }
+              if (mirrorState.horizontal) {
+                drawStandardBrush(reflectHorizontal(x), y);
+              }
+              if (mirrorState.vertical && mirrorState.horizontal) {
+                drawStandardBrush(reflectHorizontal(x), reflectVertical(y));
+              }
+            };
+    
+            // Función principal para dibujar línea usando algoritmo de Bresenham
+            const drawLineWithBrush = (startX, startY, endX, endY) => {
+              let x0 = startX, y0 = startY;
+              let x1 = endX, y1 = endY;
+              let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+              let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+              let err = dx + dy;
+    
+              // Elegir función de dibujo según el tipo de brocha
+              const drawFunction = useCustomBrush && customBrushData.length > 0
+                ? drawCustomBrushWithMirrors
+                : drawStandardBrushWithMirrors;
+    
+              while (true) {
+                drawFunction(x0, y0);
+    
+                if (x0 === x1 && y0 === y1) break;
+    
+                const e2 = 2 * err;
+                if (e2 >= dy) { err += dy; x0 += sx; }
+                if (e2 <= dx) { err += dx; y0 += sy; }
+              }
+            };
+    
+            // Configurar contexto
             ctx.globalCompositeOperation = "source-over";
-            ctx.fillStyle = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, ${selectedColor.a})`;
-
-            // Línea normal
-            drawPixelLine(ctx, startX, startY, endX, endY, width);
-
-            // Espejo vertical (refleja Y)
-            if (mirrorState.vertical) {
-              drawPixelLine(
-                ctx,
-                startX,
-                reflectVertical(startY),
-                endX,
-                reflectVertical(endY),
-                width
-              );
-            }
-
-            // Espejo horizontal (refleja X)
-            if (mirrorState.horizontal) {
-              drawPixelLine(
-                ctx,
-                reflectHorizontal(startX),
-                startY,
-                reflectHorizontal(endX),
-                endY,
-                width
-              );
-            }
-
-            // Espejo diagonal (refleja X e Y)
-            if (mirrorState.horizontal && mirrorState.vertical) {
-              drawPixelLine(
-                ctx,
-                reflectHorizontal(startX),
-                reflectVertical(startY),
-                reflectHorizontal(endX),
-                reflectVertical(endY),
-                width
-              );
-            }
-          }));
-
+    
+            const start = lineStartRef.current;
+            const startX = start.x;
+            const startY = start.y;
+            const endX = endCoords.x;
+            const endY = endCoords.y;
+    
+            // Dibujar la línea principal
+            drawLineWithBrush(startX, startY, endX, endY);
+          });
+    
           lineStartRef.current = null;
           lineButton.current = null; // Limpiar la referencia del botón
         }
@@ -3420,553 +4363,704 @@ const invalidateImageDataCache = () => {
 
     // Dentro del bloque if (tool === TOOLS.paint) en el useEffect:
 
-    if (tool === TOOLS.paint) {
-      // Determinar el color basado en el botón presionado
-      const selectedColor =
-        isPressed === "left"
-          ? toolParameters.foregroundColor
-          : isPressed === "right"
-          ? toolParameters.backgroundColor
-          : toolParameters.foregroundColor; // fallback a foreground
-    
-      drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
-        const canvas = ctx.canvas;
-        const width = toolParameters?.width || 1;
-        const blur = toolParameters.blur || 0;
-        const paintMode = toolParameters?.paintMode || "manual";
-        const velocitySensibility = toolParameters?.velocitySensibility || 0;
-    
-        // Parámetros para pattern alignment
-        const patternAlignment = toolParameters?.patternAlignment || "normal";
-    
-        // Nuevos parámetros para brocha personalizada
-        const useCustomBrush = toolParameters?.customBrush || false;
-        const customBrushType = toolParameters?.customBrushType;
-    
-        // MODIFICACIÓN PRINCIPAL: Procesar datos de brocha con el color seleccionado
-        let customBrushData = [];
-        if (
-          useCustomBrush &&
-          customBrushType &&
-          toolParameters.processCustomBrushData
-        ) {
-          customBrushData = toolParameters.processCustomBrushData(selectedColor);
+  if (tool === TOOLS.paint && !isShiftPressed) {
+  
+  console.log("ispressed", isPressed);
+  // Determinar el color basado en el botón presionado
+  const selectedColor =
+    isPressed === "left"
+      ? toolParameters.foregroundColor
+      : isPressed === "right"
+      ? toolParameters.backgroundColor
+      : toolParameters.foregroundColor; // fallback a foreground
+
+  drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
+    const canvas = ctx.canvas;
+    const width = toolParameters?.width || 1;
+    const blur = toolParameters.blur || 0;
+    const paintMode = toolParameters?.paintMode || "manual";
+    const velocitySensibility = toolParameters?.velocitySensibility || 0;
+
+    // Parámetros para pattern alignment
+    const patternAlignment = toolParameters?.patternAlignment || "normal";
+
+    // Nuevos parámetros para brocha personalizada
+    const useCustomBrush = toolParameters?.customBrush || false;
+    const customBrushType = toolParameters?.customBrushType;
+
+    // MODIFICACIÓN PRINCIPAL: Procesar datos de brocha con el color seleccionado
+    let customBrushData = [];
+    if (
+      useCustomBrush &&
+      customBrushType &&
+      toolParameters.processCustomBrushData
+    ) {
+      customBrushData = toolParameters.processCustomBrushData(selectedColor);
+    }
+
+    // Precalcular valores constantes
+    const maxRadius = width / 2;
+    const halfWidth = Math.floor(width / 2);
+
+    // Configuración de espejo
+    const hasBounds =
+      mirrorState.bounds &&
+      (mirrorState.bounds.x2 > mirrorState.bounds.x1 ||
+        mirrorState.bounds.y2 > mirrorState.bounds.y1);
+
+    const centerX = hasBounds
+      ? Math.floor((mirrorState.bounds.x1 + mirrorState.bounds.x2) / 2)
+      : Math.floor(drawableWidth / 2);
+
+    const centerY = hasBounds
+      ? Math.floor((mirrorState.bounds.y1 + mirrorState.bounds.y2) / 2)
+      : Math.floor(drawableHeight / 2);
+
+    const adjustment = -1;
+    const imparAdjustmentHeight = drawableHeight % 2 !== 0 ? 1 : 0;
+    const imparAdjustmentWidth = drawableWidth % 2 !== 0 ? 1 : 0;
+
+    const reflectHorizontal = (x) =>
+      centerX * 2 - x + adjustment + imparAdjustmentWidth;
+    const reflectVertical = (y) =>
+      centerY * 2 - y + adjustment + imparAdjustmentHeight;
+
+    // NUEVA FUNCIÓN: Algoritmo de suavizado
+    const applySmoothingAlgorithm = (points, intensity) => {
+      const numPoints = points.length;
+      const currentPoint = points[numPoints - 1];
+      
+      if (numPoints < 3) return currentPoint;
+
+      // Calcular punto suavizado usando spline cúbico simplificado
+      let smoothedX = currentPoint.x;
+      let smoothedY = currentPoint.y;
+
+      if (intensity > 0) {
+        // Usar los últimos 3-5 puntos para crear una curva suave
+        const usePoints = Math.min(numPoints, Math.max(3, Math.floor(5 * intensity)));
+        const recentPoints = points.slice(-usePoints);
+        
+        // Aplicar filtro de promedio ponderado
+        let totalWeight = 0;
+        let weightedX = 0;
+        let weightedY = 0;
+
+        recentPoints.forEach((point, index) => {
+          // Dar más peso a los puntos más recientes
+          const weight = Math.pow(index + 1, 1 + intensity);
+          weightedX += point.x * weight;
+          weightedY += point.y * weight;
+          totalWeight += weight;
+        });
+
+        if (totalWeight > 0) {
+          const avgX = weightedX / totalWeight;
+          const avgY = weightedY / totalWeight;
+
+          // Interpolar entre el punto original y el suavizado
+          smoothedX = currentPoint.x + (avgX - currentPoint.x) * intensity;
+          smoothedY = currentPoint.y + (avgY - currentPoint.y) * intensity;
         }
-    
-        // Precalcular valores constantes
-        const maxRadius = width / 2;
-        const halfWidth = Math.floor(width / 2);
-    
-        // Configuración de espejo
-        const hasBounds =
-          mirrorState.bounds &&
-          (mirrorState.bounds.x2 > mirrorState.bounds.x1 ||
-            mirrorState.bounds.y2 > mirrorState.bounds.y1);
-    
-        const centerX = hasBounds
-          ? Math.floor((mirrorState.bounds.x1 + mirrorState.bounds.x2) / 2)
-          : Math.floor(drawableWidth / 2);
-    
-        const centerY = hasBounds
-          ? Math.floor((mirrorState.bounds.y1 + mirrorState.bounds.y2) / 2)
-          : Math.floor(drawableHeight / 2);
-    
-        const adjustment = -1;
-        const imparAdjustmentHeight = drawableWidth % 2 !== 0 ? 1 : 0;
-        const imparAdjustmentWidth = drawableWidth % 2 !== 0 ? 1 : 0;
-    
-        const reflectHorizontal = (x) =>
-          centerX * 2 - x + adjustment + imparAdjustmentWidth;
-        const reflectVertical = (y) =>
-          centerY * 2 - y + adjustment + imparAdjustmentHeight;
-    
-        // Función para calcular las dimensiones del patrón de la brocha personalizada
-        const getBrushDimensions = () => {
-          if (!useCustomBrush || !customBrushData.length) {
-            return { width: width, height: width }; // Para brochas estándar usar el width configurado
-          }
-    
-          let minX = 0,
-            maxX = 0,
-            minY = 0,
-            maxY = 0;
-          customBrushData.forEach((pixel) => {
-            minX = Math.min(minX, pixel.x);
-            maxX = Math.max(maxX, pixel.x);
-            minY = Math.min(minY, pixel.y);
-            maxY = Math.max(maxY, pixel.y);
-          });
-    
-          return {
-            width: maxX - minX + 1,
-            height: maxY - minY + 1,
-          };
-        };
-    
-        // Set para rastrear posiciones ya pintadas en este trazo
-        const paintedPositions = new Set();
-    
-        // Función para obtener la posición de grilla más cercana
-        const getGridPosition = (x, y, isInitialClick = false) => {
-          if (patternAlignment === "normal") {
-            return { x: x, y: y, shouldPaint: true };
-          }
-    
-          const brushDims = getBrushDimensions();
-          let gridOriginX, gridOriginY;
-    
-          if (patternAlignment === "source") {
-            // Alinear al punto donde se hizo el primer clic
-            if (isInitialClick || !initialPatternOffset.current) {
-              // Guardar la coordenada inicial como origen de la grilla
-              initialPatternOffset.current = { x: x, y: y };
-              gridOriginX = x;
-              gridOriginY = y;
-            } else {
-              // Usar la coordenada inicial guardada como origen
-              gridOriginX = initialPatternOffset.current.x;
-              gridOriginY = initialPatternOffset.current.y;
-            }
-          } else if (patternAlignment === "destination") {
-            // Alinear al lienzo (origen en 0,0)
-            gridOriginX = 0;
-            gridOriginY = 0;
-          }
-    
-          // Calcular la posición de grilla más cercana desde el origen
-          const offsetX = x - gridOriginX;
-          const offsetY = y - gridOriginY;
-    
-          // Encontrar el punto de grilla más cercano (múltiplo del tamaño del patrón)
-          const gridStepX = Math.floor(offsetX / brushDims.width);
-          const gridStepY = Math.floor(offsetY / brushDims.height);
-    
-          const gridX = gridOriginX + gridStepX * brushDims.width;
-          const gridY = gridOriginY + gridStepY * brushDims.height;
-    
-          // Crear clave única para esta posición
-          const posKey = `${gridX},${gridY}`;
-    
-          // Verificar si ya pintamos en esta posición en este trazo
-          if (!paintedPositions.has(posKey)) {
-            paintedPositions.add(posKey);
-            return { x: gridX, y: gridY, shouldPaint: true };
-          }
-    
-          return { x: gridX, y: gridY, shouldPaint: false };
-        };
-    
-        // Función optimizada para calcular opacidad basada en velocidad
-        const calculateOpacity = (currentX, currentY, lastX, lastY) => {
-          if (velocitySensibility === 0) {
-            const widthFactor = Math.max(1, width / 8);
-            return selectedColor.a / widthFactor;
-          }
-    
-          const distance = Math.sqrt(
-            (currentX - lastX) ** 2 + (currentY - lastY) ** 2
-          );
-          const sensitivityCurve = ((11 - velocitySensibility) / 10) ** 1.5;
-          const maxDistance = 200 * sensitivityCurve;
-          const normalizedVelocity = Math.min(distance / maxDistance, 1);
-    
-          const widthCompensation = Math.max(1, width / 6);
-          const baseOpacity = selectedColor.a / widthCompensation;
-          const velocityReduction = normalizedVelocity * 0.8;
-          const finalOpacity = baseOpacity * (1 - velocityReduction);
-          const minOpacity = baseOpacity * 0.05;
-    
-          return Math.max(finalOpacity, minOpacity);
-        };
-    
-        // Si se usa brocha personalizada, usar la lógica personalizada
-        if (useCustomBrush && customBrushData.length > 0) {
-          const originalComposite = ctx.globalCompositeOperation;
-    
-          if (paintMode === "composite") {
-            ctx.globalCompositeOperation = "source-over";
-          } else {
-            // MODO MANUAL CON BROCHA PERSONALIZADA Y CACHE
-            initializeImageDataCache(ctx);
-          }
-    
-          // Función para dibujar brocha personalizada
-          const drawCustomBrush = (centerX, centerY, opacity = 1) => {
-            if (paintMode === "composite") {
-              // Modo composite: usar operaciones de canvas
-              for (const pixel of customBrushData) {
-                const pixelX = centerX + pixel.x;
-                const pixelY = centerY + pixel.y;
-    
-                if (pixelX < 0 || pixelX >= canvas.width || pixelY < 0 || pixelY >= canvas.height)
-                  continue;
-    
-                ctx.globalAlpha = opacity * (pixel.color.a / 255);
-                ctx.fillStyle = `rgba(${pixel.color.r}, ${pixel.color.g}, ${pixel.color.b}, ${pixel.color.a})`;
-                ctx.fillRect(pixelX, pixelY, 1, 1);
-              }
-            } else {
-              // Modo manual: usar ImageData cacheado
-              const data = cachedImageDataRef.current.data;
-              const canvasWidth = canvas.width;
-    
-              for (const pixel of customBrushData) {
-                const pixelX = centerX + pixel.x;
-                const pixelY = centerY + pixel.y;
-    
-                if (pixelX < 0 || pixelX >= canvas.width || pixelY < 0 || pixelY >= canvas.height)
-                  continue;
-    
-                const index = (pixelY * canvasWidth + pixelX) * 4;
-                data[index] = pixel.color.r;
-                data[index + 1] = pixel.color.g;
-                data[index + 2] = pixel.color.b;
-                data[index + 3] = pixel.color.a * opacity;
-              }
-            }
-            return true;
-          };
-    
-          // Función para dibujar brocha personalizada con espejos
-          const drawCustomBrushWithMirrors = (x, y, opacity = 1) => {
-            drawCustomBrush(x, y, opacity);
-    
-            if (mirrorState.vertical) {
-              drawCustomBrush(x, reflectVertical(y), opacity);
-            }
-            if (mirrorState.horizontal) {
-              drawCustomBrush(reflectHorizontal(x), y, opacity);
-            }
-            if (mirrorState.vertical && mirrorState.horizontal) {
-              drawCustomBrush(reflectHorizontal(x), reflectVertical(y), opacity);
-            }
-          };
-    
-          if (!lastPixelRef.current) {
-            // Primer clic del trazo
-            const gridPos = getGridPosition(canvasCoords.x, canvasCoords.y, true);
-            if (gridPos.shouldPaint) {
-              drawCustomBrushWithMirrors(gridPos.x, gridPos.y, 1.0);
-            }
-          } else {
-            const last = viewportToCanvasCoords(
-              lastPixelRef.current.x,
-              lastPixelRef.current.y
-            );
-    
-            // Algoritmo de Bresenham para interpolar entre puntos
-            let x0 = last.x, y0 = last.y;
-            let x1 = canvasCoords.x, y1 = canvasCoords.y;
-            let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
-            let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
-            let err = dx + dy;
-            let prevX = x0, prevY = y0;
-    
-            while (true) {
-              // Obtener la posición de grilla para esta coordenada
-              const gridPos = getGridPosition(x0, y0, false);
-              if (gridPos.shouldPaint) {
-                const opacity = calculateOpacity(x0, y0, prevX, prevY);
-                drawCustomBrushWithMirrors(gridPos.x, gridPos.y, opacity);
-              }
-    
-              if (x0 === x1 && y0 === y1) break;
-    
-              prevX = x0;
-              prevY = y0;
-    
-              const e2 = 2 * err;
-              if (e2 >= dy) {
-                err += dy;
-                x0 += sx;
-              }
-              if (e2 <= dx) {
-                err += dx;
-                y0 += sy;
-              }
-            }
-          }
-    
-          // Aplicar cambios al canvas
-          if (paintMode === "composite") {
-            ctx.globalCompositeOperation = originalComposite;
-            ctx.globalAlpha = 1;
-          } else {
-            // Para modo manual, aplicar el ImageData modificado
-            ctx.putImageData(cachedImageDataRef.current, 0, 0);
-          }
-    
-          return; // Salir temprano si se usó brocha personalizada
+
+        // Aplicar corrección de curva usando regresión cuadrática simple
+        if (usePoints >= 4 && intensity > 0.5) {
+          const { x: curveX, y: curveY } = applyCurveCorrection(recentPoints, intensity);
+          smoothedX = smoothedX + (curveX - smoothedX) * (intensity - 0.5) * 2;
+          smoothedY = smoothedY + (curveY - smoothedY) * (intensity - 0.5) * 2;
         }
-    
-        // Lógica para brochas estándar con pattern alignment
-        if (paintMode === "composite") {
-          // MODO COMPOSITE OPTIMIZADO (LÓGICA ORIGINAL COMPLETA)
-          const originalComposite = ctx.globalCompositeOperation;
-          ctx.globalCompositeOperation = "darker";
-    
-          const drawDot = (x, y, opacity = 1) => {
-            // Validar que esté dentro del canvas completo, no solo del viewport
-            if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height)
-              return;
-    
-            ctx.globalAlpha = opacity;
-            ctx.fillStyle = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, ${selectedColor.a})`;
-    
-            if (blur === 0) {
-              // Sin blur: rectángulo simple
-              ctx.fillRect(x - halfWidth, y - halfWidth, width, width);
-            } else {
-              // Con blur: gradiente optimizado
-              const coreRadius = Math.max(0.5, (1 - blur) * maxRadius);
-              const gradient = ctx.createRadialGradient(
-                x,
-                y,
-                0,
-                x,
-                y,
-                maxRadius
-              );
-    
-              const coreStop = coreRadius / maxRadius;
-              const coreColor = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, ${selectedColor.a})`;
-              const edgeColor = `rgba(${selectedColor.r}, ${selectedColor.g}, ${
-                selectedColor.b
-              }, ${selectedColor.a * 0.1})`;
-    
-              gradient.addColorStop(0, coreColor);
-              gradient.addColorStop(coreStop, coreColor);
-              gradient.addColorStop(1, edgeColor);
-    
-              ctx.fillStyle = gradient;
-              ctx.beginPath();
-              ctx.arc(x, y, maxRadius, 0, 2 * Math.PI);
-              ctx.fill();
-            }
-          };
-    
-          const drawWithMirrors = (x, y, opacity = 1) => {
-            drawDot(x, y, opacity);
-    
-            if (mirrorState.vertical) {
-              drawDot(x, reflectVertical(y), opacity);
-            }
-            if (mirrorState.horizontal) {
-              drawDot(reflectHorizontal(x), y, opacity);
-            }
-            if (mirrorState.vertical && mirrorState.horizontal) {
-              drawDot(reflectHorizontal(x), reflectVertical(y), opacity);
-            }
-          };
-    
-          if (!lastPixelRef.current) {
-            // Primer clic del trazo
-            const gridPos = getGridPosition(
-              canvasCoords.x,
-              canvasCoords.y,
-              true
-            );
-            if (gridPos.shouldPaint) {
-              drawWithMirrors(gridPos.x, gridPos.y, 1.0);
-            }
-          } else {
-            const last = viewportToCanvasCoords(
-              lastPixelRef.current.x,
-              lastPixelRef.current.y
-            );
-    
-            // Algoritmo de Bresenham optimizado
-            let x0 = last.x,
-              y0 = last.y;
-            let x1 = canvasCoords.x,
-              y1 = canvasCoords.y;
-            let dx = Math.abs(x1 - x0),
-              dy = -Math.abs(y1 - y0);
-            let sx = x0 < x1 ? 1 : -1,
-              sy = y0 < y1 ? 1 : -1;
-            let err = dx + dy;
-            let prevX = x0,
-              prevY = y0;
-    
-            while (true) {
-              // Obtener la posición de grilla para esta coordenada
-              const gridPos = getGridPosition(x0, y0, false);
-              if (gridPos.shouldPaint) {
-                const opacity = calculateOpacity(x0, y0, prevX, prevY);
-                drawWithMirrors(gridPos.x, gridPos.y, opacity);
-              }
-    
-              if (x0 === x1 && y0 === y1) break;
-    
-              prevX = x0;
-              prevY = y0;
-    
-              const e2 = 2 * err;
-              if (e2 >= dy) {
-                err += dy;
-                x0 += sx;
-              }
-              if (e2 <= dx) {
-                err += dx;
-                y0 += sy;
-              }
-            }
-          }
-    
-          ctx.globalCompositeOperation = originalComposite;
-          ctx.globalAlpha = 1;
+      }
+
+      return {
+        x: Math.round(smoothedX),
+        y: Math.round(smoothedY)
+      };
+    };
+
+    // NUEVA FUNCIÓN: Corrección de curva usando regresión
+    const applyCurveCorrection = (points, intensity) => {
+      if (points.length < 4) return points[points.length - 1];
+
+      // Usar regresión cuadrática para predecir el siguiente punto ideal
+      const n = points.length;
+      const lastPoint = points[n - 1];
+      
+      // Calcular tendencia usando los últimos puntos
+      let deltaX = 0;
+      let deltaY = 0;
+      let curvatureX = 0;
+      let curvatureY = 0;
+
+      for (let i = 1; i < n; i++) {
+        const dx = points[i].x - points[i - 1].x;
+        const dy = points[i].y - points[i - 1].y;
+        deltaX += dx;
+        deltaY += dy;
+
+        if (i > 1) {
+          const prevDx = points[i - 1].x - points[i - 2].x;
+          const prevDy = points[i - 1].y - points[i - 2].y;
+          curvatureX += dx - prevDx;
+          curvatureY += dy - prevDy;
+        }
+      }
+
+      // Promediar las tendencias
+      deltaX /= (n - 1);
+      deltaY /= (n - 1);
+      curvatureX /= Math.max(1, n - 2);
+      curvatureY /= Math.max(1, n - 2);
+
+      // Predecir el punto ideal basado en la tendencia y curvatura
+      const predictedX = lastPoint.x + deltaX + curvatureX * intensity;
+      const predictedY = lastPoint.y + deltaY + curvatureY * intensity;
+
+      return {
+        x: predictedX,
+        y: predictedY
+      };
+    };
+
+    // NUEVA FUNCIÓN: Suavizado de trayectoria usando perfection
+    const smoothPath = (currentPoint, lastPoint, pathHistory) => {
+      if (perfection === 0 || !lastPoint) {
+        return currentPoint; // Sin suavizado
+      }
+
+      // Mantener historial de puntos para suavizado
+      if (!pathHistory) {
+        pathHistory = [currentPoint];
+        return currentPoint;
+      }
+
+      // Agregar punto actual al historial
+      pathHistory.push(currentPoint);
+      
+      // Limitar el historial a los últimos N puntos para el suavizado
+      const historyLimit = Math.max(3, Math.floor(10 * perfection));
+      if (pathHistory.length > historyLimit) {
+        pathHistory.shift();
+      }
+
+      // Si tenemos pocos puntos, no suavizar
+      if (pathHistory.length < 3) {
+        return currentPoint;
+      }
+
+      // Aplicar suavizado usando promedio ponderado
+      const smoothedPoint = applySmoothingAlgorithm(pathHistory, perfection);
+      
+      return smoothedPoint;
+    };
+
+    // Función para calcular las dimensiones del patrón de la brocha personalizada
+    const getBrushDimensions = () => {
+      if (!useCustomBrush || !customBrushData.length) {
+        return { width: width, height: width }; // Para brochas estándar usar el width configurado
+      }
+
+      let minX = 0,
+        maxX = 0,
+        minY = 0,
+        maxY = 0;
+      customBrushData.forEach((pixel) => {
+        minX = Math.min(minX, pixel.x);
+        maxX = Math.max(maxX, pixel.x);
+        minY = Math.min(minY, pixel.y);
+        maxY = Math.max(maxY, pixel.y);
+      });
+
+      return {
+        width: maxX - minX + 1,
+        height: maxY - minY + 1,
+      };
+    };
+
+    // Set para rastrear posiciones ya pintadas en este trazo
+    const paintedPositions = new Set();
+
+    // Función para obtener la posición de grilla más cercana
+    const getGridPosition = (x, y, isInitialClick = false) => {
+      if (patternAlignment === "normal") {
+        return { x: x, y: y, shouldPaint: true };
+      }
+
+      const brushDims = getBrushDimensions();
+      let gridOriginX, gridOriginY;
+
+      if (patternAlignment === "source") {
+        // Alinear al punto donde se hizo el primer clic
+        if (isInitialClick || !initialPatternOffset.current) {
+          // Guardar la coordenada inicial como origen de la grilla
+          initialPatternOffset.current = { x: x, y: y };
+          gridOriginX = x;
+          gridOriginY = y;
         } else {
-          // MODO MANUAL ULTRA-OPTIMIZADO CON CACHE
-          initializeImageDataCache(ctx);
+          // Usar la coordenada inicial guardada como origen
+          gridOriginX = initialPatternOffset.current.x;
+          gridOriginY = initialPatternOffset.current.y;
+        }
+      } else if (patternAlignment === "destination") {
+        // Alinear al lienzo (origen en 0,0)
+        gridOriginX = 0;
+        gridOriginY = 0;
+      }
+
+      // Calcular la posición de grilla más cercana desde el origen
+      const offsetX = x - gridOriginX;
+      const offsetY = y - gridOriginY;
+
+      // Encontrar el punto de grilla más cercano (múltiplo del tamaño del patrón)
+      const gridStepX = Math.floor(offsetX / brushDims.width);
+      const gridStepY = Math.floor(offsetY / brushDims.height);
+
+      const gridX = gridOriginX + gridStepX * brushDims.width;
+      const gridY = gridOriginY + gridStepY * brushDims.height;
+
+      // Crear clave única para esta posición
+      const posKey = `${gridX},${gridY}`;
+
+      // Verificar si ya pintamos en esta posición en este trazo
+      if (!paintedPositions.has(posKey)) {
+        paintedPositions.add(posKey);
+        return { x: gridX, y: gridY, shouldPaint: true };
+      }
+
+      return { x: gridX, y: gridY, shouldPaint: false };
+    };
+
+    // Función optimizada para calcular opacidad basada en velocidad
+    const calculateOpacity = (currentX, currentY, lastX, lastY) => {
+      if (velocitySensibility === 0) {
+        const widthFactor = Math.max(1, width / 8);
+        return selectedColor.a / widthFactor;
+      }
+
+      const distance = Math.sqrt(
+        (currentX - lastX) ** 2 + (currentY - lastY) ** 2
+      );
+      const sensitivityCurve = ((11 - velocitySensibility) / 10) ** 1.5;
+      const maxDistance = 200 * sensitivityCurve;
+      const normalizedVelocity = Math.min(distance / maxDistance, 1);
+
+      const widthCompensation = Math.max(1, width / 6);
+      const baseOpacity = selectedColor.a / widthCompensation;
+      const velocityReduction = normalizedVelocity * 0.8;
+      const finalOpacity = baseOpacity * (1 - velocityReduction);
+      const minOpacity = baseOpacity * 0.05;
+
+      return Math.max(finalOpacity, minOpacity);
+    };
+
+    // APLICAR SUAVIZADO AL PUNTO ACTUAL
+    let finalCanvasCoords = canvasCoords;
+    
+    // Mantener historial de trayectoria para suavizado
+    if (!lastPixelRef.current) {
+      // Resetear historial al iniciar nuevo trazo
+      ctx.pathHistory = [];
+    }
+    
+   
+
+    // Si se usa brocha personalizada, usar la lógica personalizada
+    if (useCustomBrush && customBrushData.length > 0) {
+      const originalComposite = ctx.globalCompositeOperation;
+
+      if (paintMode === "composite") {
+        ctx.globalCompositeOperation = "source-over";
+      } else {
+        // MODO MANUAL CON BROCHA PERSONALIZADA Y CACHE
+       
+        if (!lastPixelRef.current) {
+           console.log("se actualizo el cache:");
+          // Primera vez en este trazo - obtener ImageData
+          initializeImageDataCacheOptimized(ctx)
+        }
+      }
+
+      // Función para dibujar brocha personalizada
+      const drawCustomBrush = (centerX, centerY, opacity = 1) => {
+        if (paintMode === "composite") {
+          // Modo composite: usar operaciones de canvas
+          for (const pixel of customBrushData) {
+            const pixelX = centerX + pixel.x;
+            const pixelY = centerY + pixel.y;
+
+            if (pixelX < 0 || pixelX >= canvas.width || pixelY < 0 || pixelY >= canvas.height)
+              continue;
+
+            ctx.globalAlpha = opacity * (pixel.color.a / 255);
+            ctx.fillStyle = `rgba(${pixel.color.r}, ${pixel.color.g}, ${pixel.color.b}, ${pixel.color.a})`;
+            ctx.fillRect(pixelX, pixelY, 1, 1);
+          }
+        } else {
+          // Modo manual: usar ImageData cacheado
           const data = cachedImageDataRef.current.data;
           const canvasWidth = canvas.width;
-    
-          // Precalcular valores para blur
-          let coreRadius, blurEnabled;
-          if (blur > 0) {
-            coreRadius = Math.max(0.5, (1 - blur) * maxRadius);
-            blurEnabled = true;
-          } else {
-            blurEnabled = false;
+
+          for (const pixel of customBrushData) {
+            const pixelX = centerX + pixel.x;
+            const pixelY = centerY + pixel.y;
+
+            if (pixelX < 0 || pixelX >= canvas.width || pixelY < 0 || pixelY >= canvas.height)
+              continue;
+
+            const index = (pixelY * canvasWidth + pixelX) * 4;
+            data[index] = pixel.color.r;
+            data[index + 1] = pixel.color.g;
+            data[index + 2] = pixel.color.b;
+            data[index + 3] = pixel.color.a * opacity;
           }
-    
-          const drawDot = (x, y) => {
-            // Validar que esté dentro del canvas completo, no solo del viewport
-            if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height)
-              return;
-    
-            const startX = x - halfWidth;
-            const startY = y - halfWidth;
-    
-            if (!blurEnabled) {
-              // Sin blur: optimización máxima con loop desenrollado cuando es posible
-              const endX = Math.min(startX + width, canvas.width);
-              const endY = Math.min(startY + width, canvas.height);
-              const actualStartX = Math.max(startX, 0);
-              const actualStartY = Math.max(startY, 0);
-    
-              for (let py = actualStartY; py < endY; py++) {
-                const rowIndex = py * canvasWidth * 4;
-                for (let px = actualStartX; px < endX; px++) {
-                  const index = rowIndex + px * 4;
-                  data[index] = selectedColor.r;
-                  data[index + 1] = selectedColor.g;
-                  data[index + 2] = selectedColor.b;
-                  data[index + 3] = selectedColor.a * 255;
-                }
-              }
-            } else {
-              // Con blur: optimizado con precálculos
-              const maxRadiusSquared = maxRadius * maxRadius;
-              const coreRadiusSquared = coreRadius * coreRadius;
-    
-              for (let dy = 0; dy < width; dy++) {
-                for (let dx = 0; dx < width; dx++) {
-                  const px = startX + dx;
-                  const py = startY + dy;
-    
-                  if (
-                    px < 0 ||
-                    px >= canvas.width ||
-                    py < 0 ||
-                    py >= canvas.height
-                  )
-                    continue;
-    
-                  // Calcular distancia al cuadrado (evitar sqrt cuando sea posible)
-                  const deltaX = px - x;
-                  const deltaY = py - y;
-                  const distanceSquared = deltaX * deltaX + deltaY * deltaY;
-    
-                  if (distanceSquared > maxRadiusSquared) continue;
-    
-                  let alpha;
-                  if (distanceSquared <= coreRadiusSquared) {
-                    alpha = selectedColor.a;
-                  } else {
-                    const distance = Math.sqrt(distanceSquared);
-                    const blurProgress =
-                      (distance - coreRadius) / (maxRadius - coreRadius);
-                    alpha = selectedColor.a * (1 - blurProgress * 0.9);
-                  }
-    
-                  const index = (py * canvasWidth + px) * 4;
-                  data[index] = selectedColor.r;
-                  data[index + 1] = selectedColor.g;
-                  data[index + 2] = selectedColor.b;
-                  data[index + 3] = alpha * 255;
-                }
-              }
-            }
-          };
-    
-          const drawWithMirrors = (x, y) => {
-            drawDot(x, y);
-    
-            if (mirrorState.vertical) {
-              drawDot(x, reflectVertical(y));
-            }
-            if (mirrorState.horizontal) {
-              drawDot(reflectHorizontal(x), y);
-            }
-            if (mirrorState.vertical && mirrorState.horizontal) {
-              drawDot(reflectHorizontal(x), reflectVertical(y));
-            }
-          };
-    
-          if (!lastPixelRef.current) {
-            // Primer clic del trazo
-            const gridPos = getGridPosition(
-              canvasCoords.x,
-              canvasCoords.y,
-              true
-            );
-            if (gridPos.shouldPaint) {
-              drawWithMirrors(gridPos.x, gridPos.y);
-            }
-          } else {
-            const last = viewportToCanvasCoords(
-              lastPixelRef.current.x,
-              lastPixelRef.current.y
-            );
-    
-            // Bresenham optimizado
-            let x0 = last.x,
-              y0 = last.y;
-            let x1 = canvasCoords.x,
-              y1 = canvasCoords.y;
-            let dx = Math.abs(x1 - x0),
-              dy = -Math.abs(y1 - y0);
-            let sx = x0 < x1 ? 1 : -1,
-              sy = y0 < y1 ? 1 : -1;
-            let err = dx + dy;
-    
-            while (true) {
-              // Obtener la posición de grilla para esta coordenada
-              const gridPos = getGridPosition(x0, y0, false);
-              if (gridPos.shouldPaint) {
-                drawWithMirrors(gridPos.x, gridPos.y);
-              }
-    
-              if (x0 === x1 && y0 === y1) break;
-    
-              const e2 = 2 * err;
-              if (e2 >= dy) {
-                err += dy;
-                x0 += sx;
-              }
-              if (e2 <= dx) {
-                err += dx;
-                y0 += sy;
-              }
-            }
-          }
-    
-          // Una sola llamada a putImageData al final
-          ctx.putImageData(cachedImageDataRef.current, 0, 0);
         }
-      }));
+        return true;
+      };
+
+      // Función para dibujar brocha personalizada con espejos
+      const drawCustomBrushWithMirrors = (x, y, opacity = 1) => {
+        drawCustomBrush(x, y, opacity);
+
+        if (mirrorState.vertical) {
+          drawCustomBrush(x, reflectVertical(y), opacity);
+        }
+        if (mirrorState.horizontal) {
+          drawCustomBrush(reflectHorizontal(x), y, opacity);
+        }
+        if (mirrorState.vertical && mirrorState.horizontal) {
+          drawCustomBrush(reflectHorizontal(x), reflectVertical(y), opacity);
+        }
+      };
+
+      if (!lastPixelRef.current) {
+        // Primer clic del trazo
+        const gridPos = getGridPosition(finalCanvasCoords.x, finalCanvasCoords.y, true);
+        if (gridPos.shouldPaint) {
+          drawCustomBrushWithMirrors(gridPos.x, gridPos.y, 1.0);
+        }
+      } else {
+        const last = viewportToCanvasCoords(
+          lastPixelRef.current.x,
+          lastPixelRef.current.y
+        );
+
+        // Algoritmo de Bresenham para interpolar entre puntos
+        let x0 = last.x, y0 = last.y;
+        let x1 = finalCanvasCoords.x, y1 = finalCanvasCoords.y;
+        let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+        let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+        let err = dx + dy;
+        let prevX = x0, prevY = y0;
+
+        while (true) {
+          // Obtener la posición de grilla para esta coordenada
+          const gridPos = getGridPosition(x0, y0, false);
+          if (gridPos.shouldPaint) {
+            const opacity = calculateOpacity(x0, y0, prevX, prevY);
+            drawCustomBrushWithMirrors(gridPos.x, gridPos.y, opacity);
+          }
+
+          if (x0 === x1 && y0 === y1) break;
+
+          prevX = x0;
+          prevY = y0;
+
+          const e2 = 2 * err;
+          if (e2 >= dy) {
+            err += dy;
+            x0 += sx;
+          }
+          if (e2 <= dx) {
+            err += dx;
+            y0 += sy;
+          }
+        }
+      }
+
+      // Aplicar cambios al canvas
+      if (paintMode === "composite") {
+        ctx.globalCompositeOperation = originalComposite;
+        ctx.globalAlpha = 1;
+      } else {
+        // Para modo manual, aplicar el ImageData modificado
+        ctx.putImageData(cachedImageDataRef.current, 0, 0);
+      }
+
+      return; // Salir temprano si se usó brocha personalizada
     }
+
+    // Lógica para brochas estándar con pattern alignment
+    if (paintMode === "composite") {
+      // MODO COMPOSITE OPTIMIZADO (LÓGICA ORIGINAL COMPLETA)
+      const originalComposite = ctx.globalCompositeOperation;
+      ctx.globalCompositeOperation = "source-over";
+
+      const drawDot = (x, y, opacity = 1) => {
+        // Validar que esté dentro del canvas completo, no solo del viewport
+        if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height)
+          return;
+
+        ctx.globalAlpha = opacity;
+        ctx.fillStyle = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, ${selectedColor.a})`;
+
+        if (blur === 0) {
+          // Sin blur: rectángulo simple
+          ctx.fillRect(x - halfWidth, y - halfWidth, width, width);
+        } else {
+          // Con blur: gradiente optimizado
+          const coreRadius = Math.max(0.5, (1 - blur) * maxRadius);
+          const gradient = ctx.createRadialGradient(
+            x,
+            y,
+            0,
+            x,
+            y,
+            maxRadius
+          );
+
+          const coreStop = coreRadius / maxRadius;
+          const coreColor = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, ${selectedColor.a})`;
+          const edgeColor = `rgba(${selectedColor.r}, ${selectedColor.g}, ${
+            selectedColor.b
+          }, ${selectedColor.a * 0.1})`;
+
+          gradient.addColorStop(0, coreColor);
+          gradient.addColorStop(coreStop, coreColor);
+          gradient.addColorStop(1, edgeColor);
+
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(x, y, maxRadius, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+      };
+
+      const drawWithMirrors = (x, y, opacity = 1) => {
+        drawDot(x, y, opacity);
+
+        if (mirrorState.vertical) {
+          drawDot(x, reflectVertical(y), opacity);
+        }
+        if (mirrorState.horizontal) {
+          drawDot(reflectHorizontal(x), y, opacity);
+        }
+        if (mirrorState.vertical && mirrorState.horizontal) {
+          drawDot(reflectHorizontal(x), reflectVertical(y), opacity);
+        }
+      };
+
+      if (!lastPixelRef.current) {
+        // Primer clic del trazo
+        const gridPos = getGridPosition(
+          finalCanvasCoords.x,
+          finalCanvasCoords.y,
+          true
+        );
+        if (gridPos.shouldPaint) {
+          drawWithMirrors(gridPos.x, gridPos.y, 1.0);
+        }
+      } else {
+        const last = viewportToCanvasCoords(
+          lastPixelRef.current.x,
+          lastPixelRef.current.y
+        );
+
+        // Algoritmo de Bresenham optimizado
+        let x0 = last.x,
+          y0 = last.y;
+        let x1 = finalCanvasCoords.x,
+          y1 = finalCanvasCoords.y;
+        let dx = Math.abs(x1 - x0),
+          dy = -Math.abs(y1 - y0);
+        let sx = x0 < x1 ? 1 : -1,
+          sy = y0 < y1 ? 1 : -1;
+        let err = dx + dy;
+        let prevX = x0,
+          prevY = y0;
+
+        while (true) {
+          // Obtener la posición de grilla para esta coordenada
+          const gridPos = getGridPosition(x0, y0, false);
+          if (gridPos.shouldPaint) {
+            const opacity = calculateOpacity(x0, y0, prevX, prevY);
+            drawWithMirrors(gridPos.x, gridPos.y, opacity);
+          }
+
+          if (x0 === x1 && y0 === y1) break;
+
+          prevX = x0;
+          prevY = y0;
+
+          const e2 = 2 * err;
+          if (e2 >= dy) {
+            err += dy;
+            x0 += sx;
+          }
+          if (e2 <= dx) {
+            err += dx;
+            y0 += sy;
+          }
+        }
+      }
+
+      ctx.globalCompositeOperation = originalComposite;
+      ctx.globalAlpha = 1;
+    } else {
+      // MODO MANUAL ULTRA-OPTIMIZADO CON CACHE
+      if (!lastPixelRef.current ) {
+        console.log("se actualizo el cache:");
+       // Primera vez en este trazo - obtener ImageData
+       initializeImageDataCacheOptimized(ctx)
+     }
+      const data = cachedImageDataRef.current.data;
+      const canvasWidth = canvas.width;
+
+      // Precalcular valores para blur
+      let coreRadius, blurEnabled;
+      if (blur > 0) {
+        coreRadius = Math.max(0.5, (1 - blur) * maxRadius);
+        blurEnabled = true;
+      } else {
+        blurEnabled = false;
+      }
+
+      const drawDot = (x, y) => {
+        // Validar que esté dentro del canvas completo, no solo del viewport
+        if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height)
+          return;
+
+        const startX = x - halfWidth;
+        const startY = y - halfWidth;
+
+        if (!blurEnabled) {
+          // Sin blur: optimización máxima con loop desenrollado cuando es posible
+          const endX = Math.min(startX + width, canvas.width);
+          const endY = Math.min(startY + width, canvas.height);
+          const actualStartX = Math.max(startX, 0);
+          const actualStartY = Math.max(startY, 0);
+
+          for (let py = actualStartY; py < endY; py++) {
+            const rowIndex = py * canvasWidth * 4;
+            for (let px = actualStartX; px < endX; px++) {
+              const index = rowIndex + px * 4;
+              data[index] = selectedColor.r;
+              data[index + 1] = selectedColor.g;
+              data[index + 2] = selectedColor.b;
+              data[index + 3] = selectedColor.a * 255;
+            }
+          }
+        } else {
+          // Con blur: optimizado con precálculos
+          const maxRadiusSquared = maxRadius * maxRadius;
+          const coreRadiusSquared = coreRadius * coreRadius;
+
+          for (let dy = 0; dy < width; dy++) {
+            for (let dx = 0; dx < width; dx++) {
+              const px = startX + dx;
+              const py = startY + dy;
+
+              if (
+                px < 0 ||
+                px >= canvas.width ||
+                py < 0 ||
+                py >= canvas.height
+              )
+                continue;
+
+              // Calcular distancia al cuadrado (evitar sqrt cuando sea posible)
+              const deltaX = px - x;
+              const deltaY = py - y;
+              const distanceSquared = deltaX * deltaX + deltaY * deltaY;
+
+              if (distanceSquared > maxRadiusSquared) continue;
+
+              let alpha;
+              if (distanceSquared <= coreRadiusSquared) {
+                alpha = selectedColor.a;
+              } else {
+                const distance = Math.sqrt(distanceSquared);
+                const blurProgress =
+                  (distance - coreRadius) / (maxRadius - coreRadius);
+                alpha = selectedColor.a * (1 - blurProgress * 0.9);
+              }
+
+              const index = (py * canvasWidth + px) * 4;
+              data[index] = selectedColor.r;
+              data[index + 1] = selectedColor.g;
+              data[index + 2] = selectedColor.b;
+              data[index + 3] = alpha * 255;
+            }
+          }
+        }
+      };
+
+      const drawWithMirrors = (x, y) => {
+        drawDot(x, y);
+
+        if (mirrorState.vertical) {
+          drawDot(x, reflectVertical(y));
+        }
+        if (mirrorState.horizontal) {
+          drawDot(reflectHorizontal(x), y);
+        }
+        if (mirrorState.vertical && mirrorState.horizontal) {
+          drawDot(reflectHorizontal(x), reflectVertical(y));
+        }
+      };
+
+      if (!lastPixelRef.current) {
+        // Primer clic del trazo
+        const gridPos = getGridPosition(
+          finalCanvasCoords.x,
+          finalCanvasCoords.y,
+          true
+        );
+        if (gridPos.shouldPaint) {
+          drawWithMirrors(gridPos.x, gridPos.y);
+        }
+      } else {
+        const last = viewportToCanvasCoords(
+          lastPixelRef.current.x,
+          lastPixelRef.current.y
+        );
+
+        // Bresenham optimizado
+        let x0 = last.x,
+          y0 = last.y;
+        let x1 = finalCanvasCoords.x,
+          y1 = finalCanvasCoords.y;
+        let dx = Math.abs(x1 - x0),
+          dy = -Math.abs(y1 - y0);
+        let sx = x0 < x1 ? 1 : -1,
+          sy = y0 < y1 ? 1 : -1;
+        let err = dx + dy;
+
+        while (true) {
+          // Obtener la posición de grilla para esta coordenada
+          const gridPos = getGridPosition(x0, y0, false);
+          if (gridPos.shouldPaint) {
+            drawWithMirrors(gridPos.x, gridPos.y);
+          }
+
+          if (x0 === x1 && y0 === y1) break;
+
+          const e2 = 2 * err;
+          if (e2 >= dy) {
+            err += dy;
+            x0 += sx;
+          }
+          if (e2 <= dx) {
+            err += dx;
+            y0 += sy;
+          }
+        }
+      }
+
+      // Una sola llamada a putImageData al final
+      ctx.putImageData(cachedImageDataRef.current, 0, 0);
+    }
+  }));
+
+}
 
     if (tool === TOOLS.dark) {
       const intensity = toolParameters.intensity
@@ -5361,60 +6455,82 @@ const invalidateImageDataCache = () => {
 
   // Efecto para manejar navegación con teclado
   // Reemplaza el useEffect existente para manejar navegación con teclado
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.code === "Space" && !isSpacePressed) {
-        e.preventDefault();
-        setIsSpacePressed(true);
-        // Cambiar cursor temporalmente
-       
-        return;
+useEffect(() => {
+  const isTyping = () => {
+    const tag = document.activeElement.tagName;
+    const isContentEditable = document.activeElement.isContentEditable;
+    return (
+      tag === "INPUT" ||
+      tag === "TEXTAREA" ||
+      isContentEditable
+    );
+  };
+
+  const handleKeyDown = (e) => {
+    if (activeAI || isTyping()) return;
+
+    console.log("se presionó una tecla");
+
+    if (e.code === "Space" && !isSpacePressed) {
+      e.preventDefault();
+      setIsSpacePressed(true);
+      // Cambiar cursor temporalmente
+      return;
+    }
+
+    if (e.code === "ShiftLeft" || e.code === "ShiftRight") {
+      if (!isShiftPressed) {
+        e.preventDefault(); // Opcional
+        setIsShiftPressed(true);
       }
+      return;
+    }
 
-      // Solo permitir navegación con flechas si no se está presionando espacio
-      if (!isSpacePressed) {
-        const step = 1;
-        switch (e.key) {
-          case "ArrowRight":
-            moveViewport(step, 0);
-            break;
-          case "ArrowLeft":
-            moveViewport(-step, 0);
-            break;
-          case "ArrowDown":
-            moveViewport(0, step);
-            break;
-          case "ArrowUp":
-            moveViewport(0, -step);
-            break;
-          case "d":
-            setDrawMode("draw");
-            break;
-          case "e":
-            setDrawMode("erase");
-            break;
-        }
+    if (!isSpacePressed) {
+      const step = 1;
+      switch (e.key) {
+        case "ArrowRight":
+          moveViewport(step, 0);
+          break;
+        case "ArrowLeft":
+          moveViewport(-step, 0);
+          break;
+        case "ArrowDown":
+          moveViewport(0, step);
+          break;
+        case "ArrowUp":
+          moveViewport(0, -step);
+          break;
+        case "d":
+          setDrawMode("draw");
+          break;
+        case "e":
+          setDrawMode("erase");
+          break;
       }
-    };
+    }
+  };
 
-    const handleKeyUp = (e) => {
-      if (activeAI) return;
-      if (e.code === "Space" && isSpacePressed) {
-        //e.preventDefault();
-        setIsSpacePressed(false);
-        // Restaurar cursor original
-        
-      }
-    };
+  const handleKeyUp = (e) => {
+    if (activeAI || isTyping()) return;
 
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
+    if (e.code === "Space") {
+      setIsSpacePressed(false);
+    }
 
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-    };
-  }, [moveViewport, isSpacePressed, drawMode]);
+    if (e.code === "ShiftLeft" || e.code === "ShiftRight") {
+      setIsShiftPressed(false);
+    }
+  };
+
+  window.addEventListener("keydown", handleKeyDown);
+  window.addEventListener("keyup", handleKeyUp);
+
+  return () => {
+    window.removeEventListener("keydown", handleKeyDown);
+    window.removeEventListener("keyup", handleKeyUp);
+  };
+}, [moveViewport, isSpacePressed, drawMode, activeAI]);
 
   // Efecto para manejar el canvas de preview
   useEffect(() => {
@@ -5927,18 +7043,153 @@ const invalidateImageDataCache = () => {
         }
 
         ctx.restore();
-      } else if (tool === TOOLS.paint) {
+      } else if (tool === TOOLS.paint && !isShiftPressed) {
+        if(!toolParameters.perfectCurves) return
+        console.log("el toolparametes de curvas es,", toolParameters.perfectCurves);
+        // Determinar el color basado en el botón presionado
+        const selectedColor =
+          isPressed === "left"
+            ? toolParameters.foregroundColor
+            : isPressed === "right"
+            ? toolParameters.backgroundColor
+            : toolParameters.foregroundColor; // fallback a foreground
+      
         ctx.globalCompositeOperation = "source-over";
-        ctx.fillStyle = `rgba(
-          ${toolParameters.fillColor.r},
-          ${toolParameters.fillColor.g},
-          ${toolParameters.fillColor.b},
-          ${0.7}
-        )`;
+        ctx.fillStyle = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, 0.7)`;
+       
+        // Configuración básica
+        const width = toolParameters?.width || 1;
+        const blur = toolParameters.blur || 0;
+        const offset = Math.floor(width / 2);
+      
+        // Configuración de espejo
+        const hasBounds =
+          mirrorState.bounds &&
+          (mirrorState.bounds.x2 > mirrorState.bounds.x1 ||
+           mirrorState.bounds.y2 > mirrorState.bounds.y1);
+      
+        const centerX = hasBounds
+          ? Math.floor((mirrorState.bounds.x1 + mirrorState.bounds.x2) / 2)
+          : Math.floor(drawableWidth / 2);
+      
+        const centerY = hasBounds
+          ? Math.floor((mirrorState.bounds.y1 + mirrorState.bounds.y2) / 2)
+          : Math.floor(drawableHeight / 2);
+      
+        const adjustment = -1;
+        const imparAdjustmentHeight = drawableHeight % 2 !== 0 ? 1 : 0;
+        const imparAdjustmentWidth = drawableWidth % 2 !== 0 ? 1 : 0;
+      
+        const reflectHorizontal = (x) =>
+          centerX * 2 - x + adjustment + imparAdjustmentWidth;
+        const reflectVertical = (y) =>
+          centerY * 2 - y + adjustment + imparAdjustmentHeight;
+      
+        // Función para dibujar preview con espejos
+        const drawPreviewDot = (canvasX, canvasY) => {
+          const x = canvasX - offset;
+          const y = canvasY - offset;
+          const screenX = (x - viewportOffset.x) * zoom;
+          const screenY = (y - viewportOffset.y) * zoom;
+      
+          if (blur === 0) {
+            // Sin blur: rectángulo simple
+            ctx.fillRect(screenX, screenY, width * zoom, width * zoom);
+          } else {
+            // Con blur: círculo con gradiente
+            const maxRadius = (width / 2) * zoom;
+            const coreRadius = Math.max(0.5, (1 - blur) * maxRadius);
+            
+            const gradient = ctx.createRadialGradient(
+              screenX + (width * zoom) / 2,
+              screenY + (width * zoom) / 2,
+              0,
+              screenX + (width * zoom) / 2,
+              screenY + (width * zoom) / 2,
+              maxRadius
+            );
+      
+            const coreStop = coreRadius / maxRadius;
+            const coreColor = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, 0.7)`;
+            const edgeColor = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, 0.1)`;
+      
+            gradient.addColorStop(0, coreColor);
+            gradient.addColorStop(coreStop, coreColor);
+            gradient.addColorStop(1, edgeColor);
+      
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(
+              screenX + (width * zoom) / 2,
+              screenY + (width * zoom) / 2,
+              maxRadius,
+              0,
+              2 * Math.PI
+            );
+            ctx.fill();
+            
+            // Restaurar color para próximos dibujos
+            ctx.fillStyle = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, 0.7)`;
+          }
+        };
+      
+        const drawPreviewWithMirrors = (x, y) => {
+          drawPreviewDot(x, y);
+      
+          if (mirrorState.vertical) {
+            drawPreviewDot(x, reflectVertical(y));
+          }
+          if (mirrorState.horizontal) {
+            drawPreviewDot(reflectHorizontal(x), y);
+          }
+          if (mirrorState.vertical && mirrorState.horizontal) {
+            drawPreviewDot(reflectHorizontal(x), reflectVertical(y));
+          }
+        };
+      
+        // Si está presionado, mostrar todo el trazo
+        if (isPressed && path.length > 0) {
+          // Convertir todo el path a coordenadas de canvas
+          const canvasPath = path.map((point) => {
+            const viewportPixelCoords = getPixelCoordinates(point);
+            return viewportToCanvasCoords(viewportPixelCoords.x, viewportPixelCoords.y);
+          });
+      
+          // Dibujar el primer punto
+          if (canvasPath.length > 0) {
+            drawPreviewWithMirrors(canvasPath[0].x, canvasPath[0].y);
+          }
+      
+          // Dibujar líneas entre todos los puntos usando Bresenham
+          for (let i = 0; i < canvasPath.length - 1; i++) {
+            const start = canvasPath[i];
+            const end = canvasPath[i + 1];
+      
+            let x0 = start.x, y0 = start.y;
+            let x1 = end.x, y1 = end.y;
+            let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+            let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+            let err = dx + dy;
+      
+            while (true) {
+              drawPreviewWithMirrors(x0, y0);
+      
+              if (x0 === x1 && y0 === y1) break;
+      
+              const e2 = 2 * err;
+              if (e2 >= dy) { err += dy; x0 += sx; }
+              if (e2 <= dx) { err += dx; y0 += sy; }
+            }
+          }
+        }
+        // Si no está presionado, solo mostrar el cursor
+        else if (!isPressed) {
+          drawPreviewWithMirrors(canvasCoords.x, canvasCoords.y);
+        }
       } else if (tool === TOOLS.erase) {
         ctx.globalCompositeOperation = "source-over";
         ctx.fillStyle = "rgba(255, 0, 0, 0.3)";
-      } else if (tool === TOOLS.line && isPressed && lineStartRef.current) {
+      } else if ((tool === TOOLS.line || (isShiftPressed && tool=== TOOLS.paint)) && isPressed && lineStartRef.current) {
         const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
         const currentCanvasCoords = viewportToCanvasCoords(
           viewportPixelCoords.x,
@@ -6523,6 +7774,8 @@ const invalidateImageDataCache = () => {
     curveState,
     color,
     mirrorState,
+  
+  
   ]);
 
   //Useeffect para el esc de herramientas
@@ -6775,6 +8028,10 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
   // Estados para la selección
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [selectedPixels, setSelectedPixels] = useState([]);
+  const [originalSelectedPixels, setOriginalSelectedPixels] = useState([]); // Píxeles originales sin rotar
+const [originalSelectionBounds, setOriginalSelectionBounds] = useState(null); // Bounds originales
+const [cumulativeRotationAngle, setCumulativeRotationAngle] = useState(0); // Ángulo total acumulado
+
   const [originalPixelColors, setOriginalPixelColors] = useState([]); // Nuevo estado para guardar colores originales
   const [finalizedSelection, setFinalizedSelection] = useState(false);
   const [selectionDragging, setSelectionDragging] = useState(false);
@@ -6895,7 +8152,8 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
 
   // Función para limpiar la selección actual
   const clearCurrentSelection = useCallback(() => {
-    
+    setRotationAngleSelection(0);
+    setCumulativeRotationAngle(0);
     // 1. Actualizar el grupo ANTES de limpiar (si hay arrastre y grupo seleccionado)
     if (selectedGroup && (dragOffset.x !== 0 || dragOffset.y !== 0)) {
       console.log("e actualizaron los pixeles del grupo");
@@ -6952,8 +8210,9 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
     updatePixelGroup, // Función del hook useLayerManager,
   ]);
 
-  // Auto-crop de la selección
 
+
+  // Auto-crop de la selección
   const autoCropSelection = useCallback(async () => {
     if (!activeLayerId || !selectionCoords || selectionCoords.length < 1)
       return;
@@ -7365,20 +8624,20 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
 
   // Dibujar el rectángulo de selección
   useEffect(() => {
-    if (!croppedSelectionBounds || isPressed || selectedPixels.length > 0)
-      return;
-
+   
+    if (!croppedSelectionBounds || isPressed || selectedPixels.length > 0) return;
+  
     const { x, y, width, height } = croppedSelectionBounds;
-
+  
     // Verificación rápida si hay píxeles visibles
     const quickCheckPromise = async () => {
       const sampleSize = Math.min(100, width * height);
       const samplePromises = [];
-
+  
       for (let i = 0; i < sampleSize; i++) {
         const sampleX = x + Math.floor(Math.random() * width);
         const sampleY = y + Math.floor(Math.random() * height);
-
+  
         // Para el lazo, solo verificar puntos dentro del polígono
         if (
           tool === TOOLS.select ||
@@ -7393,7 +8652,7 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
           samplePromises.push(promise);
         }
       }
-
+  
       const sampleResults = await Promise.all(samplePromises);
       const hasVisiblePixels = sampleResults.some(
         ({ color }) =>
@@ -7401,10 +8660,10 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
           color.a > 0 &&
           !(color.r === 0 && color.g === 0 && color.b === 0 && color.a === 0)
       );
-
+  
       return hasVisiblePixels;
     };
-
+  
     if (selectedPixels.length === 0) {
       quickCheckPromise()
         .then((hasVisiblePixels) => {
@@ -7414,10 +8673,10 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
             setSelectionActive(false);
             return;
           }
-
+  
           // Procesar todos los píxeles en el área
           let pixelPromises = [];
-
+  
           for (let i = y; i < y + height; i++) {
             for (let j = x; j < x + width; j++) {
               // Para el lazo, verificar si el punto está dentro del polígono
@@ -7425,7 +8684,7 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
                 tool === TOOLS.select ||
                 (tool === TOOLS.lassoSelect &&
                   isPointInPolygon(j, i, lassoPoints));
-
+  
               if (shouldCheck) {
                 const promise = getPixelColor(j, i).then((color) => ({
                   x: j,
@@ -7436,7 +8695,7 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
               }
             }
           }
-
+  
           Promise.all(pixelPromises).then((allPixels) => {
             const selectionPixels = allPixels.filter(({ color }) => {
               return (
@@ -7450,16 +8709,55 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
                 )
               );
             });
-
+  
             if (selectionPixels.length > 0) {
-              // Guardar colores originales antes de modificarlos
-              const originalColors = selectionPixels.map(
-                (pixel) => pixel.color
-              );
+              // MODIFICACIÓN PRINCIPAL: Guardar estado original
+              
+              // 1. Crear copias profundas de los píxeles originales
+              const originalPixelsCopy = selectionPixels.map((pixel) => ({
+                x: pixel.x,
+                y: pixel.y,
+                color: {
+                  r: pixel.color.r,
+                  g: pixel.color.g,
+                  b: pixel.color.b,
+                  a: pixel.color.a
+                }
+              }));
+  
+              // 2. Crear copia profunda de los bounds originales
+              const originalBoundsCopy = {
+                x: croppedSelectionBounds.x,
+                y: croppedSelectionBounds.y,
+                width: croppedSelectionBounds.width,
+                height: croppedSelectionBounds.height
+              };
+  
+              // 3. Guardar estados originales para RotSprite
+              setOriginalSelectedPixels(originalPixelsCopy);
+              setOriginalSelectionBounds(originalBoundsCopy);
+              
+              // 4. Resetear ángulo de rotación acumulado
+              setCumulativeRotationAngle(0);
+  
+              // 5. Guardar colores originales (para otras operaciones)
+              const originalColors = selectionPixels.map((pixel) => ({
+                r: pixel.color.r,
+                g: pixel.color.g,
+                b: pixel.color.b,
+                a: pixel.color.a
+              }));
               setOriginalPixelColors(originalColors);
-
+  
+              // 6. Establecer píxeles seleccionados actuales
               setSelectedPixels(selectionPixels);
+              
+              // 7. Finalizar selección
               setFinalizedSelection(true);
+  
+              console.log(`Selección creada: ${selectionPixels.length} píxeles`);
+              console.log('Estado original guardado para RotSprite');
+              
             } else {
               setCroppedSelectionBounds(null);
               setSelectionActive(false);
@@ -7485,6 +8783,11 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
     setFinalizedSelection,
     setCroppedSelectionBounds,
     setSelectionActive,
+    // NUEVAS DEPENDENCIAS PARA ROTSPRITE:
+    rotationAngle,
+    setOriginalSelectedPixels,
+    setOriginalSelectionBounds, 
+    setCumulativeRotationAngle
   ]);
 
   // Manejar el arrastre de la selección
@@ -7668,6 +8971,7 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
 
     // Si hay una selección activa, mostrar el borde y los pixeles seleccionados
     if (selectionActive && selectedPixels.length > 0) {
+      
       if (croppedSelectionBounds) {
         const { x, y, width, height } = croppedSelectionBounds;
 
@@ -7678,7 +8982,10 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
         const screenY = Math.round((finalY - viewportOffset.y) * zoom);
 
         // Dibuja el área de selección (verde)
-        ctx.strokeStyle = isDraggingSelection
+
+        // bloquear el dibujado del recuadro verde mientras se rota: 
+        if(!isRotationHandlerContainerPressed){
+          ctx.strokeStyle = isDraggingSelection
           ? "rgba(255, 150, 0, 0.8)"
           : "rgba(0, 200, 100, 0.8)";
         ctx.fillStyle = isDraggingSelection
@@ -7717,6 +9024,8 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
           markerSize,
           markerSize
         );
+        }
+       
       }
 
       // Pintar píxeles seleccionados (ya corregido con la función paintPixelInSelectionCanvas)
@@ -7741,6 +9050,7 @@ Este canvas es necesario para seleccionar agrupaciones de pixeles, y poder manip
     selectionCoords,
     lassoPoints,
     paintPixelInSelectionCanvas,
+    isRotationHandlerContainerPressed
   ]);
 
   // Añadir un nuevo estado
@@ -8528,7 +9838,8 @@ const debugClipboard = useCallback(() => {
     zoom,
     framesResume,
     selectedPixels,
-    dragOffset
+    dragOffset,
+    layers
 
     // NO incluir position ni relativeToTarget aquí
   ]);
@@ -8541,7 +9852,10 @@ const debugClipboard = useCallback(() => {
           padding: 10,
         }}
       >
-        {true && (
+        /
+        {/*
+        Necesito solucionar problemas de optimizacion aqui:
+        true && (
           <ViewportNavigator
             totalWidth={totalWidth}
             totalHeight={totalHeight}
@@ -8554,7 +9868,7 @@ const debugClipboard = useCallback(() => {
             compositeCanvasRef={compositeCanvasRef}
             getFullCanvas={getFullCanvas}
           />
-        )}
+        )*/}
         <LayerColor
           tool={tool}
           toolParameters={toolParameters}
@@ -8572,7 +9886,7 @@ const debugClipboard = useCallback(() => {
     );
   }, [
     // Solo dependencias estables
-    isPressed,
+   
     viewportOffset,
     totalWidth,
     totalHeight,
@@ -8585,7 +9899,7 @@ const debugClipboard = useCallback(() => {
 
     // NO incluir datos de mouse
   ]);
-  const [contadorFrames, setContadorFrames] = useState(0);
+ 
 
   //autoguardado
   /*
@@ -8616,13 +9930,13 @@ const debugClipboard = useCallback(() => {
 
     
   },[tool,drawMode,isDragging, isSpacePressed,toolParameters])
-
+/*
 
   useEffect(() => {
     // Invalidar cache al cambiar de capa activa
     invalidateImageDataCache();
-  }, [activeLayerId,toolParameters,currentFrame,drawableWidth, drawableHeight, isolatedPixels, tool, framesResume, selectedPixels]);
-  
+  }, [activeLayerId,toolParameters,currentFrame,drawableWidth, drawableHeight, isolatedPixels, tool, framesResume, selectedPixels, !isPressed]);
+  */
   useEffect(() => {
     const handleKeyDown = (e) => {
       // Solo procesar si hay una selección activa o píxeles copiados (para pegar)
@@ -8799,6 +10113,494 @@ useEffect(() => {
   setTool
 ]);
   const [checkerboardFactor, setCheckerboardFactor] = useState(32);
+
+//====== Algoritmo de RotSprite ==================//
+
+// 2. ESTADOS ADICIONALES: Agregar estos estados después de los estados existentes
+const [showRotationInput, setShowRotationInput] = useState(false);
+
+const [isRotating, setIsRotating] = useState(false);
+
+// 3. FUNCIÓN ROTSPRITE: Implementación del algoritmo completo
+const applyRotSprite = useCallback(async (pixels, angle, bounds) => {
+  if (!pixels.length || angle === 0) return pixels;
+
+  try {
+    setIsRotating(true);
+
+    // Crear canvas temporal para la selección
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    // Calcular dimensiones de la selección
+    const width = bounds.width;
+    const height = bounds.height;
+    
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+
+    // Dibujar los píxeles en el canvas temporal
+    const imageData = tempCtx.createImageData(width, height);
+    const data = imageData.data;
+
+    // Llenar con transparencia
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = 0;     // R
+      data[i + 1] = 0; // G
+      data[i + 2] = 0; // B
+      data[i + 3] = 0; // A
+    }
+
+    // Dibujar píxeles seleccionados
+    pixels.forEach(pixel => {
+      const relativeX = pixel.x - bounds.x;
+      const relativeY = pixel.y - bounds.y;
+      
+      if (relativeX >= 0 && relativeX < width && relativeY >= 0 && relativeY < height) {
+        const index = (relativeY * width + relativeX) * 4;
+        const color = pixel.color;
+        
+        data[index] = color.r;
+        data[index + 1] = color.g;
+        data[index + 2] = color.b;
+        data[index + 3] = color.a * 255;
+      }
+    });
+
+    tempCtx.putImageData(imageData, 0, 0);
+
+    // Convertir canvas a imagen para jsAlgorithm
+    const imageUrl = tempCanvas.toDataURL('image/png');
+    
+    // Crear canvas para el resultado rotado
+    const resultCanvas = document.createElement('canvas');
+    
+    // Aplicar el algoritmo RotSprite
+    const rotatedDataUrl = await jsAlgorithm(resultCanvas, imageUrl, angle);
+    
+    // Crear imagen del resultado
+    const resultImage = new Image();
+    
+    return new Promise((resolve, reject) => {
+      resultImage.onload = () => {
+        try {
+          // Canvas para extraer píxeles del resultado
+          const extractCanvas = document.createElement('canvas');
+          const extractCtx = extractCanvas.getContext('2d');
+          
+          extractCanvas.width = resultImage.naturalWidth;
+          extractCanvas.height = resultImage.naturalHeight;
+          
+          extractCtx.drawImage(resultImage, 0, 0);
+          
+          const resultImageData = extractCtx.getImageData(
+            0, 0, 
+            extractCanvas.width, 
+            extractCanvas.height
+          );
+          
+          // Convertir píxeles de vuelta al formato de la aplicación
+          const rotatedPixels = [];
+          const resultData = resultImageData.data;
+          
+          // Calcular offset para centrar la rotación
+          const centerX = bounds.x + bounds.width / 2;
+          const centerY = bounds.y + bounds.height / 2;
+          const newCenterX = Math.floor(extractCanvas.width / 2);
+          const newCenterY = Math.floor(extractCanvas.height / 2);
+          
+          for (let y = 0; y < extractCanvas.height; y++) {
+            for (let x = 0; x < extractCanvas.width; x++) {
+              const index = (y * extractCanvas.width + x) * 4;
+              const alpha = resultData[index + 3];
+              
+              if (alpha > 0) {
+                // Calcular posición final
+                const finalX = Math.round(centerX + (x - newCenterX));
+                const finalY = Math.round(centerY + (y - newCenterY));
+                
+                // Asegurar que esté dentro del canvas
+                if (finalX >= 0 && finalX < totalWidth && finalY >= 0 && finalY < totalHeight) {
+                  rotatedPixels.push({
+                    x: finalX,
+                    y: finalY,
+                    color: {
+                      r: resultData[index],
+                      g: resultData[index + 1],
+                      b: resultData[index + 2],
+                      a: alpha / 255
+                    }
+                  });
+                }
+              }
+            }
+          }
+          
+          resolve(rotatedPixels);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      
+      resultImage.onerror = reject;
+      resultImage.src = rotatedDataUrl;
+    });
+    
+  } catch (error) {
+    console.error('Error en RotSprite:', error);
+    return pixels; // Retornar píxeles originales en caso de error
+  } finally {
+    setIsRotating(false);
+  }
+}, [totalWidth, totalHeight]);
+
+// 4. FUNCIÓN PARA MANEJAR LA ROTACIÓN
+
+// Función modificada para aplicar rotación automáticamente
+const handleRotSprite = useCallback(async (angle,applyBounds) => {
+  if (!selectedPixels.length || !croppedSelectionBounds) {
+    console.warn('No hay selección para rotar');
+    return;
+  }
+
+  if (angle === 0) {
+    console.warn('Ángulo de rotación es 0, no se aplicará rotación');
+    return;
+  }
+
+  try {
+    // Normalizar el ángulo para mantenerlo entre 0-360°
+    const normalizedAngle = ((angle % 360) + 360) % 360;
+
+    // SIEMPRE usar píxeles originales si están disponibles
+    const pixelsToRotate = originalSelectedPixels.length > 0 
+      ? originalSelectedPixels 
+      : selectedPixels;
+    
+    const boundsToUse = originalSelectionBounds || croppedSelectionBounds;
+
+    let rotatedPixels;
+
+    // Verificar si el ángulo normalizado es múltiplo de 90°
+    if (normalizedAngle % 90 === 0) {
+      console.log(`🎯 Usando rotación optimizada de 90° (ángulo: ${normalizedAngle}°)`);
+      
+      // Calcular cuántas rotaciones de 90° necesitamos
+      const rotations90 = (normalizedAngle / 90) % 4;
+      
+      // Aplicar rotaciones de 90° secuencialmente para mayor precisión
+      let currentPixels = [...pixelsToRotate];
+      
+      for (let i = 0; i < rotations90; i++) {
+        currentPixels = rotatePixels90(currentPixels, "right");
+      }
+      
+      rotatedPixels = currentPixels;
+      
+      console.log(`✅ Rotación de 90° aplicada ${rotations90} veces`);
+      
+    } else {
+      console.log(`🎨 Usando algoritmo RotSprite para ángulo: ${normalizedAngle}°`);
+      
+      // Usar RotSprite para ángulos que no son múltiplos de 90°
+      rotatedPixels = await applyRotSprite(
+        pixelsToRotate, 
+        normalizedAngle,
+        boundsToUse
+      );
+    }
+
+    if (rotatedPixels && rotatedPixels.length > 0) {
+      // Actualizar píxeles seleccionados con los rotados
+      setSelectedPixels(rotatedPixels);
+      
+      // Crear copias profundas para los colores originales
+      const newOriginalColors = rotatedPixels.map(pixel => ({
+        r: pixel.color.r,
+        g: pixel.color.g,
+        b: pixel.color.b,
+        a: pixel.color.a
+      }));
+      setOriginalPixelColors(newOriginalColors);
+
+      // Calcular nuevos bounds basados en los píxeles rotados
+      const xCoords = rotatedPixels.map(p => p.x);
+      const yCoords = rotatedPixels.map(p => p.y);
+      const newBounds = {
+        x: Math.min(...xCoords),
+        y: Math.min(...yCoords),
+        width: Math.max(...xCoords) - Math.min(...xCoords) + 1,
+        height: Math.max(...yCoords) - Math.min(...yCoords) + 1
+      };
+      
+      // Actualizar bounds y resetear controles
+   if(applyBounds){
+    setCroppedSelectionBounds(newBounds);
+   }
+     /*
+        setCroppedSelectionBounds(null);
+        setRotationAngleSelection(0);
+        setDragOffset({ x: 0, y: 0 });
+     
+      /*
+      if()
+      ;*/
+
+      console.log(`✅ Rotación aplicada exitosamente!`);
+      console.log(`   Método usado: ${normalizedAngle % 90 === 0 ? 'Rotación de 90°' : 'RotSprite'}`);
+      console.log(`   Ángulo aplicado: ${normalizedAngle}°`);
+      console.log(`   Nuevos bounds: ${newBounds.width}x${newBounds.height} en (${newBounds.x}, ${newBounds.y})`);
+      console.log(`   Píxeles resultantes: ${rotatedPixels.length}`);
+      
+    } else {
+      console.warn('❌ La rotación no produjo píxeles válidos');
+    }
+    
+  } catch (error) {
+    console.error('💥 Error aplicando rotación:', error);
+    alert('Error al aplicar la rotación');
+  }
+}, [
+  selectedPixels, 
+  croppedSelectionBounds, 
+  rotatePixels90,
+  applyRotSprite, 
+  setSelectedPixels, 
+  setOriginalPixelColors, 
+  setCroppedSelectionBounds, 
+  setDragOffset, 
+  setRotationAngleSelection
+]);
+
+
+// 2. Función para calcular el ángulo basado en la posición del mouse
+const calculateRotationAngle = useCallback((mouseX, mouseY, centerX, centerY) => {
+  const deltaX = mouseX - centerX;
+  const deltaY = mouseY - centerY;
+  // Convertir de radianes a grados y ajustar para que 0° sea hacia arriba
+  let angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+  // Ajustar para que 0° sea hacia arriba en lugar de hacia la derecha
+  angle = angle + 90;
+  // Normalizar el ángulo entre 0 y 360
+  if (angle < 0) angle += 360;
+  return Math.round(angle);
+}, []);
+// 4. useEffect para manejar la rotación en tiempo real
+useEffect(() => {
+  if (!isRotationHandlerContainerPressed || !rotationHandlerRelative.x || !rotationHandlerRelative.y) {
+    return;
+  }
+
+  if (!croppedSelectionBounds) return;
+
+  // Calcular el centro de la selección en coordenadas de pantalla
+  const selectionCenterX = (croppedSelectionBounds.x + croppedSelectionBounds.width/2 + dragOffset.x - viewportOffset.x) * zoom;
+  const selectionCenterY = (croppedSelectionBounds.y + croppedSelectionBounds.height/2 + dragOffset.y - viewportOffset.y) * zoom;
+
+  // Calcular el ángulo basado en la posición del mouse
+  const newAngle = calculateRotationAngle(
+    rotationHandlerRelative.x,
+    rotationHandlerRelative.y,
+    selectionCenterX,
+    selectionCenterY
+  );
+
+  setRotationAngleSelection(newAngle);
+  setIsRotationHandlerActive(true);
+
+}, [isRotationHandlerContainerPressed, rotationHandlerRelative, croppedSelectionBounds, dragOffset, viewportOffset, zoom, calculateRotationAngle]);
+
+// 5. useEffect para resetear el estado cuando se suelta
+useEffect(() => {
+  if (!isRotationHandlerContainerPressed) {
+    setIsRotationHandlerActive(false);
+  }
+}, [isRotationHandlerContainerPressed]);
+
+// 6. Función para calcular la posición del punto de control
+const getRotationHandlerPosition = useCallback(() => {
+  if (!croppedSelectionBounds) return { x: 0, y: 0 };
+
+  // Centro de la selección
+  const centerX = croppedSelectionBounds.x + croppedSelectionBounds.width/2 + dragOffset.x;
+  const centerY = croppedSelectionBounds.y + croppedSelectionBounds.height/2 + dragOffset.y;
+
+  // Convertir el ángulo a radianes (ajustando para que 0° sea hacia arriba)
+  const angleRad = (rotationAngleSelection - 90) * (Math.PI / 180);
+  
+  // Calcular la posición del punto de control
+  const radiusInCanvas = rotationHandlerRadius / zoom; // Convertir radio a coordenadas de canvas
+  const handleX = centerX + Math.cos(angleRad) * radiusInCanvas;
+  const handleY = centerY + Math.sin(angleRad) * radiusInCanvas;
+
+  return { x: handleX, y: handleY };
+}, [croppedSelectionBounds, dragOffset, rotationAngleSelection, rotationHandlerRadius, zoom]);
+
+// 7. Componente del círculo de rotación (agregar esto en el JSX)
+const RotationCircleComponent = () => {
+  if (!croppedSelectionBounds || !selectionActive) return null;
+
+  // Crear el ref localmente
+  const localRotationHandlerRef = useRef(null);
+  
+  // Estado local para trackear el ángulo inicial cuando se presiona
+  const [initialAngle, setInitialAngle] = useState(0);
+  const [wasPressed, setWasPressed] = useState(false);
+
+  // Mover el usePointer aquí
+  const {
+    isPressed: isRotationHandlerPressed,
+    relativeToTarget: rotationHandlerRelative,
+  } = usePointer(localRotationHandlerRef, artboardRef, [], {
+    endPressOnLeave: false,
+    preventContextMenu: true
+  });
+
+  // Detectar cuando se suelta el handler y aplicar rotación
+ 
+
+  // Mover toda la lógica de rotación aquí
+  useEffect(() => {
+    if (!isRotationHandlerPressed || !rotationHandlerRelative.x || !rotationHandlerRelative.y) {
+      return;
+    }
+
+    if (!croppedSelectionBounds) return;
+
+    // Calcular el centro de la selección en coordenadas de pantalla
+    const selectionCenterX = (croppedSelectionBounds.x + croppedSelectionBounds.width/2 + dragOffset.x - viewportOffset.x) * zoom;
+    const selectionCenterY = (croppedSelectionBounds.y + croppedSelectionBounds.height/2 + dragOffset.y - viewportOffset.y) * zoom;
+
+    // Calcular el ángulo basado en la posición del mouse
+    const newAngle = calculateRotationAngle(
+      rotationHandlerRelative.x,
+      rotationHandlerRelative.y,
+      selectionCenterX,
+      selectionCenterY
+    );
+
+    setRotationAngleSelection(newAngle);
+    setIsRotationHandlerActive(true);
+
+  }, [isRotationHandlerPressed, rotationHandlerRelative, croppedSelectionBounds, dragOffset, viewportOffset, zoom]);
+
+  // Resetear cuando se suelta
+  useEffect(() => {
+    if (!isRotationHandlerPressed) {
+      setIsRotationHandlerActive(false);
+    }
+  }, [isRotationHandlerPressed]);
+
+  const centerX = (croppedSelectionBounds.x + croppedSelectionBounds.width/2 + dragOffset.x - viewportOffset.x) * zoom;
+  const centerY = (croppedSelectionBounds.y + croppedSelectionBounds.height/2 + dragOffset.y - viewportOffset.y) * zoom;
+  
+  const handlePos = getRotationHandlerPosition();
+  const handleScreenX = (handlePos.x - viewportOffset.x) * zoom;
+  const handleScreenY = (handlePos.y - viewportOffset.y) * zoom;
+
+
+
+  return (
+    <>
+      {/* Círculo de rotación */}
+      <div
+        style={{
+          position: "absolute",
+          top: centerY - rotationHandlerRadius,
+          left: centerX - rotationHandlerRadius,
+          width: rotationHandlerRadius * 2,
+          height: rotationHandlerRadius * 2,
+          border: `2px dashed ${isRotationHandlerActive ? '#ff6b35' : '#4a90e2'}`,
+          borderRadius: '50%',
+          pointerEvents: 'none',
+          zIndex: 12,
+          opacity: 0.7,
+        }}
+      />
+      
+      {/* Línea desde el centro al punto de control */}
+      <svg
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          pointerEvents: 'none',
+          zIndex: 11,
+        }}
+      >
+        <line
+          x1={centerX}
+          y1={centerY}
+          x2={handleScreenX}
+          y2={handleScreenY}
+          stroke={isRotationHandlerActive ? '#ff6b35' : '#4a90e2'}
+          strokeWidth="2"
+          strokeDasharray="5,5"
+          opacity="0.7"
+        />
+      </svg>
+
+      {/* Punto de control de rotación */}
+      <div
+        ref={localRotationHandlerRef}
+      
+        style={{
+          position: "absolute",
+          top: handleScreenY - 8,
+          left: handleScreenX - 8,
+          width: 16,
+          height: 16,
+          backgroundColor: isRotationHandlerPressed ? '#ff6b35' : '#4a90e2',
+          border: '2px solid white',
+          borderRadius: '50%',
+          cursor: isRotationHandlerPressed ? 'grabbing' : 'grab',
+          zIndex: 13,
+          pointerEvents: "auto",
+          boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+          transform: isRotationHandlerPressed ? 'scale(1.2)' : 'scale(1)',
+          transition: 'all 0.1s ease',
+        }}
+      />
+
+      {/* Indicador de ángulo */}
+      <div
+        style={{
+          position: "absolute",
+          top: centerY - 80,
+          left: centerX - 30,
+          width: 60,
+          height: 20,
+          backgroundColor: 'rgba(0,0,0,0.8)',
+          color: 'white',
+          borderRadius: '4px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '12px',
+          fontFamily: 'monospace',
+          pointerEvents: 'none',
+          zIndex: 14,
+          opacity: isRotationHandlerActive ? 1 : 0.7,
+        }}
+      >
+        {rotationAngleSelection}°
+      </div>
+    </>
+  );
+};
+
+useEffect(()=>{
+  
+handleRotSprite(rotationAngleSelection);
+if(!isRotationHandlerContainerPressed){
+
+//este parametro true es para aplicar los nuevos bounds despues de soltar
+handleRotSprite(rotationAngleSelection, true);
+}
+  },[rotationAngleSelection, isRotationHandlerContainerPressed]);
+
   return (
     <div className="complete-canvas-tracker">
        <TopToolbar companyName="Argánion">
@@ -8997,7 +10799,22 @@ useEffect(() => {
     `,
                 }}
               >
-                {croppedSelectionBounds && selectionActive && !isPressed && (
+                <div
+                ref={rotationHandlerRef}>
+                <RotationCircleComponent 
+  // Pasar las funciones y estados que necesita
+  calculateRotationAngle={calculateRotationAngle}
+  setRotationAngleSelection={setRotationAngleSelection}
+  setIsRotationHandlerActive={setIsRotationHandlerActive}
+  rotationAngleSelection={rotationAngleSelection}
+  isRotationHandlerActive={isRotationHandlerActive}
+
+  // ... otras props necesarias
+/>
+                </div>
+            
+                {croppedSelectionBounds && selectionActive && !isPressed && !isRotationHandlerContainerPressed &&(
+                  <>
                   <div
                     ref={selectionActionsRef}
                     className="workspace-selection-actions"
@@ -9108,8 +10925,19 @@ useEffect(() => {
                         <span className="icon">I</span>
                         <p className="action-text">Aislar pixeles </p>
                       </button>
+                      <button
+  className="action-button"
+  onClick={() => setShowRotationInput(true)}
+  disabled={!selectedPixels.length}
+>
+  <span className="icon">🔄</span>
+  <p className="action-text">RotSprite</p>
+</button>
+
                     </div>
                   </div>
+  
+                  </>
                 )}
               
   <div style={{display: mirrorState.customArea ? "block" : "none" }}>
@@ -9233,7 +11061,7 @@ useEffect(() => {
             </div>
           </div>
 
-          {
+          { 
             <div
               onContextMenu={(e) => e.preventDefault()}
               ref={animationLayerRef}
@@ -9268,6 +11096,8 @@ useEffect(() => {
           />
         )}
       </div>
+     
+
     </div>
   );
 }

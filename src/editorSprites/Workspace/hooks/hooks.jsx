@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { nanoid } from 'nanoid';
 import React from 'react';
-
+import { useOptimizedFloodFill } from './optimizedFloodFill';
 /**
  * Custom hook for tracking pointer/mouse interactions
  */
@@ -4466,92 +4466,10 @@ const getPointerCoordsFromCanvas = useCallback((canvasX, canvasY) => {
  * @param {number} tolerance - Tolerancia de color (0-255, por defecto 0 para color exacto)
  * @returns {boolean} - True si se realizó el relleno correctamente, false si hubo algún error
  */
-const floodFill = useCallback((layerId, startX, startY, fillColor, tolerance = 0) => {
-  const canvas = layerCanvasesRef.current[layerId];
-  if (!canvas) return false;
-  
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) return false;
-  
-  // Verificar que las coordenadas estén dentro del canvas
-  if (startX < 0 || startX >= canvas.width || startY < 0 || startY >= canvas.height) {
-    return false;
-  }
-  
-  // Normalizar el color de relleno a objeto RGBA
-  const fillRGBA = normalizeToRGBA(fillColor);
-  if (!fillRGBA) return false;
-  
-  // Obtener los datos de imagen del canvas completo
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imageData.data;
-  
-  // Obtener el color del píxel inicial
-  const startIndex = (startY * canvas.width + startX) * 4;
-  const targetColor = {
-    r: data[startIndex],
-    g: data[startIndex + 1], 
-    b: data[startIndex + 2],
-    a: data[startIndex + 3]
-  };
-  
-  // Si el color inicial es igual al color de relleno, no hacer nada
-  if (colorsEqual(targetColor, fillRGBA, 0)) {
-    return true;
-  }
-  
-  // Pila para almacenar los píxeles a procesar
-  const pixelStack = [{x: startX, y: startY}];
-  const processedPixels = new Set();
-  
-  while (pixelStack.length > 0) {
-    const {x, y} = pixelStack.pop();
-    
-    // Crear clave única para este píxel
-    const pixelKey = `${x},${y}`;
-    if (processedPixels.has(pixelKey)) continue;
-    
-    // Verificar límites
-    if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) continue;
-    
-    // Obtener el color del píxel actual
-    const currentIndex = (y * canvas.width + x) * 4;
-    const currentColor = {
-      r: data[currentIndex],
-      g: data[currentIndex + 1],
-      b: data[currentIndex + 2], 
-      a: data[currentIndex + 3]
-    };
-    
-    // Verificar si el color actual coincide con el color objetivo (dentro de la tolerancia)
-    if (!colorsEqual(currentColor, targetColor, tolerance)) {
-      continue;
-    }
-    
-    // Marcar este píxel como procesado
-    processedPixels.add(pixelKey);
-    
-    // Cambiar el color del píxel actual
-    data[currentIndex] = fillRGBA.r;
-    data[currentIndex + 1] = fillRGBA.g;
-    data[currentIndex + 2] = fillRGBA.b;
-    data[currentIndex + 3] = fillRGBA.a;
-    
-    // Añadir píxeles adyacentes a la pila (4-conectividad)
-    pixelStack.push({x: x + 1, y: y});     // Derecha
-    pixelStack.push({x: x - 1, y: y});     // Izquierda  
-    pixelStack.push({x: x, y: y + 1});     // Abajo
-    pixelStack.push({x: x, y: y - 1});     // Arriba
-  }
-  
-  // Aplicar los cambios al canvas
-  ctx.putImageData(imageData, 0, 0);
-  
-  // Re-renderizar la vista compuesta
-  compositeRender();
-  
-  return true;
-}, [compositeRender]);
+ const { floodFill, cancelFloodFill, isProcessing } = useOptimizedFloodFill(
+  layerCanvasesRef, 
+  compositeRender
+);
 
 //Funcion para obtener los pixeles que coinciden con ese color: 
 const getMatchingPixels = useCallback((layerId, startX, startY, tolerance = 0) => {
@@ -5729,6 +5647,7 @@ const getFullCanvas = useCallback((includeHiddenLayers = false) => {
   }
   
   return fullCanvas;
+  
 }, [width, height, currentFrame, getHierarchicalLayers]);
 
 /**

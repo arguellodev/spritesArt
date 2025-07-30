@@ -744,3 +744,9 @@ cursor: grab;
   color: black;
   font-weight: 300;
 }
+
+.rotation-handler-container{
+  background: red;
+  width: 20px;
+  height: 20px;
+}

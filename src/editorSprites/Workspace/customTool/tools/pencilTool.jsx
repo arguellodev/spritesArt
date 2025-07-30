@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { LuChevronUp, LuChevronDown } from "react-icons/lu";
 
-import CustomSelect from "../customSelect";
+
 import BrushSelect from "./brushSelect";
 
 const PencilTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setToolConfigs, myBrushes }) => {
@@ -16,6 +16,8 @@ const PencilTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
   const [paintMode, setPaintMode] = useState('manual');
   const [velocitySensibility, setVelocitySensibility] = useState(0);
   const [patternAlignment, setPatternAlignment] = useState('normal');
+  const [perfectCurves, setPerfectCurves] = useState(false);
+
   
   // Estado para el tipo de brocha seleccionada
   const [selectedBrushType, setSelectedBrushType] = useState('estandar');
@@ -391,6 +393,7 @@ const PencilTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
       setVelocitySensibility(pencilConfig.velocitySensibility || 0);
       setPatternAlignment(pencilConfig.patternAlignment || 'normal');
       setSelectedBrushType(pencilConfig.selectedBrushType || 'estandar');
+      setPerfectCurves(pencilConfig.perfectCurves || false);
     }
   }, []); // Solo se ejecuta al montar
 
@@ -416,14 +419,15 @@ const PencilTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
       paintMode,
       velocitySensibility,
       patternAlignment,
-      selectedBrushType
+      selectedBrushType,
+      perfectCurves
     };
 
     setToolConfigs(prev => ({
       ...prev,
       pencil: currentConfig
     }));
-  }, [borderWidth, opacity, vertices, rotation, pattern, pressure, sharpen, paintMode, velocitySensibility, patternAlignment, selectedBrushType, setToolConfigs]);
+  }, [borderWidth, opacity, vertices, rotation, pattern, pressure, sharpen, paintMode, velocitySensibility, patternAlignment, selectedBrushType,perfectCurves, setToolConfigs]);
 
   // Función para procesar los datos de la brocha según el color actual
   const processCustomBrushData = (brushType, currentColor) => {
@@ -511,12 +515,13 @@ const PencilTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
         customBrush: selectedBrush.customBrush,
         customBrushData: selectedBrush.data, // Datos sin procesar
         customBrushType: selectedBrush, // Información completa de la brocha
+        perfectCurves: perfectCurves,
         // Función para procesar la brocha con cualquier color
         processCustomBrushData: (color) => processCustomBrushData(selectedBrush, color)
         // NO establecemos foregroundColor ni backgroundColor aquí
       }));
     }
-  }, [borderWidth, opacity, vertices, rotation, pattern, pressure, setToolParameters, sharpen, paintMode, velocitySensibility, patternAlignment, selectedBrushType, myBrushes]);
+  }, [borderWidth, opacity, vertices, rotation, pattern, pressure, setToolParameters, sharpen, paintMode, velocitySensibility, patternAlignment, selectedBrushType, perfectCurves, myBrushes]);
 
   const allBrushes = getAllBrushTypes();
   const currentBrush = allBrushes[selectedBrushType];
@@ -571,7 +576,7 @@ const PencilTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
           )}
 
           {/* Configuración de Sharpen (solo para brocha estándar) */}
-          {!currentBrush.customBrush && (
+          {false && (
             <div className="config-item">
               <label className="tool-label">Sharpen</label>
               <div className="input-container">
@@ -635,7 +640,7 @@ const PencilTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
 
           {/* Configuración de Paint Mode */}
           <div className="config-item">
-            <label className="tool-label">Paint Mode</label>
+            <label className="tool-label">Alpha Mode</label>
             <div className="input-container">
               <select
                 value={paintMode}
@@ -658,11 +663,27 @@ const PencilTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
                 className="select-input"
               >
                 <option value="normal">Normal</option>
-                <option value="source">🟨 Aligned to Source</option>
-                <option value="destination">🟩 Aligned to Destination</option>
+                <option value="source">Source</option>
+                <option value="destination">Destination</option>
               </select>
             </div>
           </div>
+
+            {/* Toggle para dithering */}
+            <div className="config-item">
+                <label className="tool-label">Perfect curves</label>
+                <div className="toggle-switch">
+                  <input 
+                    type="checkbox" 
+                    id="perfectCurvesEnabled" 
+                    className="toggle-input"
+                    checked={perfectCurves} // Cambiar esta línea
+                    onChange={(e) => setPerfectCurves(e.target.checked)} // Cambiar esta línea
+                  />
+                  <label htmlFor="perfectCurvesEnabled" className="toggle-label"></label>
+                </div>
+              </div>
+
 
         </div>
       </div>
