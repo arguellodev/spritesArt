@@ -29,7 +29,7 @@ const InitializeProject = ({ onComplete, setLoadedData }) => {
     { name: 'Sprite Mediano', width: 64, height: 64, description: 'Tamaño estándar para personajes' },
     { name: 'Sprite Grande', width: 128, height: 128, description: 'Tamaño estándar para personajes' },
     { name: 'Gigante', width: 1000, height: 1000, description: 'Escenario de videojuegos' },
-    { name: 'Ultra', width: 2000, height: 2000, description: 'Escenario de videojuegos gigante' }
+    { name: 'Ultra', width: 2048, height: 2048, description: 'Escenario de videojuegos gigante' }
   ];
   
 

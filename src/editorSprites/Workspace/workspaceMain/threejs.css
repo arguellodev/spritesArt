@@ -1,0 +1,115 @@
+.three-container {
+  background: rgba(63, 63, 63, 0.404);
+  backdrop-filter: blur(10px);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 100000;
+  display: flex;
+  flex-direction: row;
+}
+
+.controls {
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 20px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 250px;
+  max-width: 300px; /* ✅ Limitar ancho máximo de controles */
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  z-index: 10000000000000;
+  overflow-y: auto; /* ✅ Scroll si hay muchos controles */
+  flex-shrink: 0; /* ✅ Evitar que se comprima */
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.control-label {
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.control-input {
+  padding: 5px;
+}
+
+.control-range {
+  width: 100%;
+}
+
+.control-checkbox {
+  margin-right: 8px;
+}
+
+/* ✅ SECCIÓN CORREGIDA - Canvas ocupa toda la altura restante */
+.three-canvas-container {
+  flex: 1; /* ✅ Ocupa todo el espacio restante */
+  height: 100%; /* ✅ Altura completa del contenedor padre */
+  min-width: 400px;
+  min-height: 400px;
+  border: 1px solid #ddd;
+  overflow: hidden;
+  position: relative;
+  display: flex; /* ✅ Flex para centrar el canvas si es necesario */
+  align-items: center;
+  justify-content: center;
+}
+
+.three-canvas-container canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* Botones de descarga */
+.download-button {
+  padding: 10px 15px;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  transition: background-color 0.3s;
+  width: 100%;
+}
+
+.download-button:hover {
+  background: #45a049;
+}
+
+.download-button-highres {
+  background: #FF6B35;
+}
+
+.download-button-highres:hover {
+  background: #e55a30;
+}
+
+.threejs-pixelcanvas {
+  position: absolute;
+  top: 0px;
+  right: 0px;
+  border: 2px solid #00ff00;
+  background: #000;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+  z-index: 1000;
+  /* Remover max-width y max-height fijos */
+  /* El tamaño ahora se controla desde JavaScript */
+}

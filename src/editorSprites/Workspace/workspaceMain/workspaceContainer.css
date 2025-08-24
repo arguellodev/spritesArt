@@ -750,3 +750,22 @@ cursor: grab;
   width: 20px;
   height: 20px;
 }
+
+.worspace-actual-layername{
+  display: flex;
+  background: var(--accent-color);
+  padding: 8px;
+  border-radius: 5px;
+  font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+  gap: 10px;
+}
+
+.layer-name-label{
+  font-weight: 600;
+  color: rgb(223, 223, 223);
+}
+
+.actual-layername{
+  color: white;
+  font-weight: 600;
+}

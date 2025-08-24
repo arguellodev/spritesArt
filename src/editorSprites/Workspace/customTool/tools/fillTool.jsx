@@ -21,7 +21,8 @@ const FillTool = ({ setToolParameters, tool, toolParameters = {} }) => {
   // Estados para dithering - manteniendo nombres originales + nuevos
   const [isDitheringEnabled, setIsDitheringEnabled] = useState(false);
   const [ditheringType, setDitheringType] = useState('noise');
-  const [ditheringStrength, setDitheringStrength] = useState(0.5);
+  const ditheringStrength = toolParameters.ditheringStrength ?? 0.5;
+
 
   const patterns = ["solid", "dotted", "dashed", "pixel dust"];
   
@@ -60,9 +61,10 @@ const FillTool = ({ setToolParameters, tool, toolParameters = {} }) => {
     if (toolParameters.ditheringType !== undefined) {
       setDitheringType(toolParameters.ditheringType);
     }
-    if (toolParameters.ditheringStrength !== undefined) {
-      setDitheringStrength(toolParameters.ditheringStrength);
-    }
+    if (toolParameters.ditheringStrength !== undefined &&
+      toolParameters.ditheringStrength !== ditheringStrength) {
+    setDitheringStrength(toolParameters.ditheringStrength);
+  }
   }, [toolParameters]);
 
   // Función para manejar cambios en el grosor con botones
@@ -197,15 +199,25 @@ const FillTool = ({ setToolParameters, tool, toolParameters = {} }) => {
                     <label className="tool-label">Dithering Strength</label>
                     <div className="horizontal-slider-container">
                       <div className="slider-track-horizontal">
-                        <input 
-                          type="range" 
-                          min="0" 
-                          max="1" 
-                          step="0.1"
-                          value={ditheringStrength} 
-                          onChange={(e) => setDitheringStrength(Number(e.target.value))} 
-                          className="horizontal-slider" 
-                        />
+                    
+  
+
+<input
+  type="range"
+  min="0"
+  max="1"
+  step="0.1"
+  value={ditheringStrength}
+  className="horizontal-slider" 
+  onChange={(e) =>
+    setToolParameters(prev => ({
+      ...prev,
+      ditheringStrength: Number(e.target.value)
+    }))
+  }
+/>
+
+
                       </div>
                       <span className="current-value-horizontal">{ditheringStrength.toFixed(1)}</span>
                     </div>

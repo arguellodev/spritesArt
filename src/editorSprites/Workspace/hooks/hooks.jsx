@@ -49,7 +49,7 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
   // Refs para el throttling
   const lastUpdateTime = useRef(0);
   const positionUpdateTimer = useRef(null);
-  const POSITION_UPDATE_INTERVAL = 16; // ~60fps para preview
+  const POSITION_UPDATE_INTERVAL = 8; // ~60fps para preview
   
   // Refs estables para las dependencias
   const ignoreRefsRef = useRef(ignoreRefs);
@@ -486,7 +486,7 @@ const getGroupLayersForParent = useCallback((parentLayerId) => {
    const canvas = document.createElement('canvas');
    canvas.width = width;
    canvas.height = height;
-   const ctx = canvas.getContext('2d');
+   const ctx = canvas.getContext('2d', { willReadFrequently: true });
    ctx.imageSmoothingEnabled = false;
    
    // Limpiar cache si está lleno
@@ -528,7 +528,7 @@ const getGroupLayersForParent = useCallback((parentLayerId) => {
       const canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { willReadFrequently: false });
       ctx.imageSmoothingEnabled = false;
       
       initialFrame.canvases[defaultLayerId] = canvas;
@@ -673,130 +673,7 @@ const getOnionSkinFrameConfig = useCallback((frameOffset) => {
   }
 }, [onionSkinSettings]);
 
-// Función para aplicar filtro de color a un canvas
-// Función corregida para aplicar filtro de color a un canvas
-const applyColorFilter = useCallback((sourceCanvas, hue, saturation, lightness, opacity) => {
-  const tempCanvas = document.createElement('canvas');
-  tempCanvas.width = sourceCanvas.width;
-  tempCanvas.height = sourceCanvas.height;
-  const tempCtx = tempCanvas.getContext('2d');
 
-  try {
-    tempCtx.drawImage(sourceCanvas, 0, 0);
-    const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-    const data = imageData.data;
-
-    // Convertir HSL deseado a RGB
-    const [targetR, targetG, targetB] = hslToRgb(hue / 360, saturation / 100, lightness / 100);
-
-    // Aplicar el nuevo color a cada píxel no transparente
-    for (let i = 0; i < data.length; i += 4) {
-      const a = data[i + 3];
-
-      if (a > 0) {
-        data[i]     = targetR;
-        data[i + 1] = targetG;
-        data[i + 2] = targetB;
-        data[i + 3] = Math.round(a * opacity); // mantener transparencia proporcional
-      }
-    }
-
-    tempCtx.putImageData(imageData, 0, 0);
-  } catch (error) {
-    console.warn('Error aplicando filtro de color, usando método de respaldo:', error);
-    tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
-
-    const filters = [];
-    if (hue !== 0) filters.push(`hue-rotate(${hue}deg)`);
-    if (saturation !== 100) filters.push(`saturate(${saturation}%)`);
-    if (lightness !== 50) filters.push(`brightness(${lightness}%)`);
-
-    if (filters.length > 0) {
-      tempCtx.filter = filters.join(' ');
-    }
-
-    tempCtx.globalAlpha = opacity;
-    tempCtx.drawImage(sourceCanvas, 0, 0);
-  }
-
-  return tempCanvas;
-}, []);
-
-
-// Funciones auxiliares para conversión de color
-const rgbToHsl = (r, g, b) => {
-  r /= 255;
-  g /= 255;
-  b /= 255;
-  
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  let h, s, l = (max + min) / 2;
-  
-  if (max === min) {
-    h = s = 0; // achromatic
-  } else {
-    const d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    
-    switch (max) {
-      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-      case g: h = (b - r) / d + 2; break;
-      case b: h = (r - g) / d + 4; break;
-    }
-    h /= 6;
-  }
-  
-  return [h, s, l];
-};
-
-const hslToRgb = (h, s, l) => {
-  let r, g, b;
-  
-  if (s === 0) {
-    r = g = b = l; // achromatic
-  } else {
-    const hue2rgb = (p, q, t) => {
-      if (t < 0) t += 1;
-      if (t > 1) t -= 1;
-      if (t < 1/6) return p + (q - p) * 6 * t;
-      if (t < 1/2) return q;
-      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
-      return p;
-    };
-    
-    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-    const p = 2 * l - q;
-    
-    r = hue2rgb(p, q, h + 1/3);
-    g = hue2rgb(p, q, h);
-    b = hue2rgb(p, q, h - 1/3);
-  }
-  
-  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
-};
-
-// Función mejorada para renderizar con onion skin
-// Cache para canvas filtrados
-// Cache para canvas filtrados
-// Cache para canvas filtrados
-// Cache para canvas filtrados
-const onionSkinCache = useRef(new Map());
-
-// Función para generar key de cache
-const getCacheKey = (frameNumber, layerId, config) => {
-  return `${frameNumber}-${layerId}-${config.hue}-${config.saturation}-${config.lightness}-${config.opacity}`;
-};
-
-// Limpiar cache cuando sea necesario
-const clearOnionSkinCache = useCallback(() => {
-  onionSkinCache.current.clear();
-}, []);
-
-// Función optimizada para aplicar filtros con cache
-
-////===================== LOgica para reproduccion de animacion =============================//
-const [activePlay, setActivePlay] = useState(false);
 
 
 ////===================== LOgica para reproduccion de animacion =============================//
@@ -807,189 +684,10 @@ const [activePlay, setActivePlay] = useState(false);
 
 
 
-const getFilteredCanvas = useCallback((canvas, config, cacheKey) => {
-  // Verificar cache primero
-  if (onionSkinCache.current.has(cacheKey)) {
-    return onionSkinCache.current.get(cacheKey);
-  }
-  
-  // Crear canvas filtrado solo si no existe en cache
-  const filteredCanvas = applyColorFilter(
-    canvas, 
-    config.hue, 
-    config.saturation, 
-    config.lightness, 
-    config.opacity
-  );
-  
-  // Guardar en cache con límite de tamaño
-  if (onionSkinCache.current.size > 100) { // Limitar cache
-    const firstKey = onionSkinCache.current.keys().next().value;
-    onionSkinCache.current.delete(firstKey);
-  }
-  
-  onionSkinCache.current.set(cacheKey, filteredCanvas);
-  return filteredCanvas;
-}, [applyColorFilter]);
 
-// Memoizar cálculo de frames de onion skin
-const onionFrames = useMemo(() => {
-  if (!onionSkinEnabled) return [];
-  
-  const frames_array = [];
-  const frameNumbers = Object.keys(frames).map(Number).sort((a, b) => a - b);
-  
-  // Frames anteriores
-  for (let i = 1; i <= onionSkinSettings.previousFrames; i++) {
-    const frameNumber = currentFrame - i;
-    if (frames[frameNumber]) {
-      const offset = -i;
-      const config = getOnionSkinFrameConfig(offset);
-      frames_array.push({
-        frameNumber,
-        frameData: frames[frameNumber],
-        offset,
-        type: 'previous',
-        zIndex: config.zIndex,
-        config
-      });
-    }
-  }
-  
-  // Frames siguientes
-  for (let i = 1; i <= onionSkinSettings.nextFrames; i++) {
-    const frameNumber = currentFrame + i;
-    if (frames[frameNumber]) {
-      const offset = i;
-      const config = getOnionSkinFrameConfig(offset);
-      frames_array.push({
-        frameNumber,
-        frameData: frames[frameNumber],
-        offset,
-        type: 'next',
-        zIndex: config.zIndex,
-        config
-      });
-    }
-  }
-  
-  // Frame actual
-  if (frames[currentFrame]) {
-    frames_array.push({
-      frameNumber: currentFrame,
-      frameData: frames[currentFrame],
-      offset: 0,
-      type: 'current',
-      zIndex: 0,
-      config: { opacity: 1.0, hue: 0, saturation: 100, lightness: 50 }
-    });
-  }
 
-  return frames_array.sort((a, b) => a.zIndex - b.zIndex);
-}, [
-  onionSkinEnabled,
-  currentFrame,
-  frames,
-  onionSkinSettings.previousFrames,
-  onionSkinSettings.nextFrames,
-  onionSkinSettings, // Agregar toda la configuración
-  getOnionSkinFrameConfig
-]);
-
-// 8. NUEVA FUNCIÓN: renderWithOnionSkinOptimized
-const renderWithOnionSkinOptimized = useCallback((ctx) => {
-  // 1. Frames anteriores (con menor opacidad)
-  for (let i = onionSkinSettings.previousFrames; i >= 1; i--) {
-    const frameNumber = currentFrame - i;
-    if (frames[frameNumber]) {
-      const config = getOnionSkinFrameConfig(-i);
-      renderFrameSimple(ctx, frameNumber, config.opacity);
-    }
-  }
-  
-  // 2. Frame actual (opacidad completa)
-  renderFrameSimple(ctx, currentFrame, 1.0);
-  
-  // 3. Frames siguientes (con menor opacidad)
-  for (let i = 1; i <= onionSkinSettings.nextFrames; i++) {
-    const frameNumber = currentFrame + i;
-    if (frames[frameNumber]) {
-      const config = getOnionSkinFrameConfig(i);
-      renderFrameSimple(ctx, frameNumber, config.opacity);
-    }
-  }
-}, [onionSkinSettings, currentFrame, frames, getOnionSkinFrameConfig]);
 
 // 4. FUNCIÓN DE RENDERIZADO SIMPLE POR FRAME (NUEVA)
-const renderFrameSimple = useCallback((ctx, frameNumber, globalOpacity) => {
-  const frameData = frames[frameNumber];
-  if (!frameData) return;
-  
-  // Obtener capas jerárquicas del frame específico
-  const frameLayers = frameData.layers || [];
-  const hierarchicalLayers = frameLayers
-    .filter(layer => !layer.isGroupLayer)
-    .map(mainLayer => ({
-      ...mainLayer,
-      groupLayers: frameLayers
-        .filter(layer => layer.isGroupLayer && layer.parentLayerId === mainLayer.id)
-        .sort((a, b) => a.zIndex - b.zIndex)
-    }))
-    .sort((a, b) => a.zIndex - b.zIndex);
-  
-  // Renderizar cada capa con la opacidad global del onion skin
-  for (const mainLayer of hierarchicalLayers) {
-    // Verificar visibilidad en este frame específico
-    const isVisible = mainLayer.visible && (mainLayer.visible[frameNumber] !== false);
-    if (!isVisible) continue;
-    
-    // Verificar si debe mostrarse en onion skin
-    const shouldShowInOnion = frameNumber === currentFrame || shouldShowLayerInOnionSkin(mainLayer.id);
-    if (!shouldShowInOnion) continue;
-    
-    // Renderizar capa principal
-    const mainCanvas = frameData.canvases[mainLayer.id];
-    if (mainCanvas) {
-      const layerOpacity = (mainLayer.opacity ?? 1.0);
-      const finalOpacity = layerOpacity * globalOpacity;
-      
-      ctx.globalAlpha = finalOpacity;
-      ctx.drawImage(
-        mainCanvas,
-        viewportOffset.x, viewportOffset.y,
-        viewportWidth, viewportHeight,
-        0, 0,
-        viewportWidth * zoom, viewportHeight * zoom
-      );
-    }
-    
-    // Renderizar capas de grupo
-    for (const groupLayer of mainLayer.groupLayers) {
-      if (!groupLayer.visible) continue;
-      
-      const shouldShowGroup = frameNumber === currentFrame || shouldShowLayerInOnionSkin(groupLayer.id);
-      if (!shouldShowGroup) continue;
-      
-      const groupCanvas = frameData.canvases[groupLayer.id];
-      if (groupCanvas) {
-        const groupOpacity = (groupLayer.opacity ?? 1.0);
-        const finalOpacity = groupOpacity * globalOpacity;
-        
-        ctx.globalAlpha = finalOpacity;
-        ctx.drawImage(
-          groupCanvas,
-          viewportOffset.x, viewportOffset.y,
-          viewportWidth, viewportHeight,
-          0, 0,
-          viewportWidth * zoom, viewportHeight * zoom
-        );
-      }
-    }
-  }
-  
-  // Restaurar opacidad
-  ctx.globalAlpha = 1.0;
-}, [frames, shouldShowLayerInOnionSkin, currentFrame, viewportOffset, viewportWidth, viewportHeight, zoom]);
 
 
 const renderCurrentFrameOnly = useCallback((ctx) => {
@@ -1054,81 +752,268 @@ const renderCurrentFrameOnly = useCallback((ctx) => {
 
 //funcion pseudo onion skin:
 
-const renderCurrentFrameWithAdjacent = useCallback((ctx) => {
-  const hierarchicalLayers = getHierarchicalLayers();
-  const sortedMainLayers = hierarchicalLayers.sort((a, b) => a.zIndex - b.zIndex);
+// ============ ESTADO ONION FRAMES CONFIG ============
+// ============ CAMBIO 1: ACTUALIZAR EL ESTADO DE CONFIGURACIÓN ============
+// REEMPLAZA tu estado actual por este:
+const [onionFramesConfig, setOnionFramesConfig] = useState({
+  enabled: true,
+  // Configuración para múltiples frames anteriores
+  previousFrames: [
+    {
+      enabled: true,
+      opacity: 0.4,
+      hue: 240,        // Azul directo
+      saturation: 60,  // Saturación moderada
+      brightness: 90,  // Ligeramente más oscuro
+      offset: 1        // Frame -1 (anterior inmediato)
+    },
+    {
+      enabled: true,  // Deshabilitado por defecto
+      opacity: 0.25,   // Más transparente para frames más lejanos
+      hue: 220,        // Azul más oscuro
+      saturation: 40,
+      brightness: 80,
+      offset: 2        // Frame -2
+    },
+    {
+      enabled: true,  // Deshabilitado por defecto
+      opacity: 0.15,
+      hue: 200,        // Azul aún más oscuro
+      saturation: 30,
+      brightness: 70,
+      offset: 3        // Frame -3
+    }
+  ],
+  // Configuración para múltiples frames siguientes
+  nextFrames: [
+    {
+      enabled: true,
+      opacity: 0.4,
+      hue: 30,         // Naranja directo
+      saturation: 60,  // Saturación moderada
+      brightness: 110, // Ligeramente más brillante
+      offset: 1        // Frame +1 (siguiente inmediato)
+    },
+    {
+      enabled: true,  // Deshabilitado por defecto
+      opacity: 0.25,   // Más transparente para frames más lejanos
+      hue: 50,         // Naranja más claro
+      saturation: 40,
+      brightness: 120,
+      offset: 2        // Frame +2
+    },
+    {
+      enabled: false,  // Deshabilitado por defecto
+      opacity: 0.15,
+      hue: 70,         // Amarillo-naranja
+      saturation: 30,
+      brightness: 130,
+      offset: 3        // Frame +3
+    }
+  ]
+});
+
+// ============ SISTEMA DE CANVAS PRE-RENDERIZADO CON MATICES ============
+const tintedCanvasCache = useRef(new Map()); // Cache para canvas con matices
+
+// Función para aplicar matiz a un canvas (manipulación directa de píxeles)
+const applyTintToCanvas = useCallback((sourceCanvas, config, frameNumber, layerId) => {
+  const { hue, saturation, brightness, opacity } = config;
   
-  // Configuración de opacidad para frames adyacentes
-  const previousFrameOpacity = 0.3; // Opacidad para frame anterior
-  const nextFrameOpacity = 0.3;     // Opacidad para frame siguiente
+  const cacheKey = `frame_${frameNumber}_layer_${layerId}_${hue}_${saturation}_${brightness}_${opacity}`;
   
-  // Calcular números de frames anterior y siguiente
-  const previousFrame = currentFrame - 1;
-  const nextFrame = currentFrame + 1;
+  if (tintedCanvasCache.current.has(cacheKey)) {
+    return tintedCanvasCache.current.get(cacheKey);
+  }
   
-  // ============ RENDERIZAR FRAME ANTERIOR (solo capa activa) ============
-  if (frames[previousFrame] && activeLayerId) {
-    const previousFrameData = frames[previousFrame];
+  const tintedCanvas = document.createElement('canvas');
+  tintedCanvas.width = sourceCanvas.width;
+  tintedCanvas.height = sourceCanvas.height;
+  const tintedCtx = tintedCanvas.getContext('2d');
+  
+  tintedCtx.drawImage(sourceCanvas, 0, 0);
+  
+  if (hue !== 0 || saturation !== 100 || brightness !== 100) {
+    const imageData = tintedCtx.getImageData(0, 0, tintedCanvas.width, tintedCanvas.height);
+    const data = imageData.data;
     
-    // Buscar la capa activa en el frame anterior
-    const previousActiveLayer = previousFrameData.layers.find(layer => layer.id === activeLayerId);
+    const targetHue = (hue % 360) / 360;
+    const targetSaturation = saturation / 100;
+    const targetLightness = (brightness / 100) * 0.5; // Lightness fijo basado en brightness
     
-    if (previousActiveLayer) {
-      // Verificar visibilidad en el frame anterior
-      const isPreviousVisible = previousActiveLayer.visible[previousFrame] ?? true;
+    // Convertir el color objetivo a RGB una sola vez
+    const [targetR, targetG, targetB] = hslToRgb(targetHue, targetSaturation, targetLightness);
+    
+    for (let i = 0; i < data.length; i += 4) {
+      const a = data[i + 3]; // Solo necesitamos el alpha original
       
-      if (isPreviousVisible) {
-        // Renderizar capa principal del frame anterior
-        const previousMainCanvas = previousFrameData.canvases[activeLayerId];
-        if (previousMainCanvas) {
-          const layerOpacity = (previousActiveLayer.opacity ?? 1.0) * previousFrameOpacity;
-          
-          ctx.globalAlpha = layerOpacity;
-          
-          ctx.drawImage(
-            previousMainCanvas,
-            viewportOffset.x, viewportOffset.y,
-            viewportWidth, viewportHeight,
-            0, 0,
-            viewportWidth * zoom, viewportHeight * zoom
-          );
-          
-          ctx.globalAlpha = 1.0;
-        }
-        
-        // Renderizar capas de grupo relacionadas del frame anterior
-        const previousGroupLayers = previousFrameData.layers.filter(layer => 
-          layer.isGroupLayer && layer.parentLayerId === activeLayerId
-        );
-        
-        for (const groupLayer of previousGroupLayers) {
-          const isGroupVisible = groupLayer.visible && (groupLayer.visible[previousFrame] !== false);
-          if (!isGroupVisible) continue;
-          
-          const previousGroupCanvas = previousFrameData.canvases[groupLayer.id];
-          if (previousGroupCanvas) {
-            const groupOpacity = (groupLayer.opacity ?? 1.0) * previousFrameOpacity;
-            
-            ctx.globalAlpha = groupOpacity;
-            
-            ctx.drawImage(
-              previousGroupCanvas,
-              viewportOffset.x, viewportOffset.y,
-              viewportWidth, viewportHeight,
-              0, 0,
-              viewportWidth * zoom, viewportHeight * zoom
-            );
-            
-            ctx.globalAlpha = 1.0;
-          }
-        }
+      // Solo procesar píxeles no transparentes
+      if (a > 0) {
+        // IGNORAR COMPLETAMENTE EL COLOR ORIGINAL
+        // Aplicar el mismo color a todos los píxeles visibles
+        data[i] = targetR;     // Red = color objetivo
+        data[i + 1] = targetG; // Green = color objetivo  
+        data[i + 2] = targetB; // Blue = color objetivo
+        // data[i + 3] = a;    // Alpha = transparencia original (preservada)
       }
+    }
+    
+    tintedCtx.putImageData(imageData, 0, 0);
+  }
+  
+  tintedCanvasCache.current.set(cacheKey, tintedCanvas);
+  
+  return tintedCanvas;
+}, []);
+
+// Funciones auxiliares para conversión de color más precisas
+const rgbToHsl = (r, g, b) => {
+  r /= 255;
+  g /= 255;
+  b /= 255;
+  
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const diff = max - min;
+  
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+  
+  if (diff !== 0) {
+    s = l > 0.5 ? diff / (2 - max - min) : diff / (max + min);
+    
+    switch (max) {
+      case r:
+        h = ((g - b) / diff + (g < b ? 6 : 0)) / 6;
+        break;
+      case g:
+        h = ((b - r) / diff + 2) / 6;
+        break;
+      case b:
+        h = ((r - g) / diff + 4) / 6;
+        break;
     }
   }
   
-  // ============ RENDERIZAR FRAME ACTUAL (todas las capas) ============
+  return [h, s, l];
+};
+
+const hslToRgb = (h, s, l) => {
+  let r, g, b;
+  
+  if (s === 0) {
+    r = g = b = l; // Gris
+  } else {
+    const hue2rgb = (p, q, t) => {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1/6) return p + (q - p) * 6 * t;
+      if (t < 1/2) return q;
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      return p;
+    };
+    
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    
+    r = hue2rgb(p, q, h + 1/3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1/3);
+  }
+  
+  return [
+    Math.round(r * 255),
+    Math.round(g * 255),
+    Math.round(b * 255)
+  ];
+};
+
+// Función para limpiar cache cuando cambian las configuraciones
+const clearTintCache = useCallback(() => {
+  tintedCanvasCache.current.clear();
+}, []);
+
+// ============ FUNCIÓN DE RENDERIZADO ACTUALIZADA ============
+const renderCurrentFrameWithAdjacent = useCallback((ctx) => {
+  if (!onionFramesConfig.enabled) {
+    // Si los onion frames están deshabilitados, renderizar solo el frame actual
+    renderCurrentFrameOnly(ctx);
+    return;
+  }
+
+  const hierarchicalLayers = getHierarchicalLayers();
+  const sortedMainLayers = hierarchicalLayers.sort((a, b) => a.zIndex - b.zIndex);
+  
+  // Función auxiliar para renderizar un frame específico con configuración
+  const renderFrameWithConfig = (frameIndex, config) => {
+    if (!frames[frameIndex] || !activeLayerId) return;
+    
+    const frameData = frames[frameIndex];
+    const activeLayer = frameData.layers.find(layer => layer.id === activeLayerId);
+    
+    if (!activeLayer) return;
+    
+    const isVisible = activeLayer.visible[frameIndex] ?? true;
+    if (!isVisible) return;
+    
+    // Renderizar capa principal del frame con matiz
+    const mainCanvas = frameData.canvases[activeLayerId];
+    if (mainCanvas) {
+      const tintedCanvas = applyTintToCanvas(mainCanvas, config, frameIndex, activeLayerId);
+      const layerOpacity = (activeLayer.opacity ?? 1.0) * config.opacity;
+      
+      ctx.globalAlpha = layerOpacity;
+      ctx.drawImage(
+        tintedCanvas,
+        viewportOffset.x, viewportOffset.y,
+        viewportWidth, viewportHeight,
+        0, 0,
+        viewportWidth * zoom, viewportHeight * zoom
+      );
+      ctx.globalAlpha = 1.0;
+    }
+    
+    // Renderizar capas de grupo relacionadas con matiz
+    const groupLayers = frameData.layers.filter(layer => 
+      layer.isGroupLayer && layer.parentLayerId === activeLayerId
+    );
+    
+    for (const groupLayer of groupLayers) {
+      const isGroupVisible = groupLayer.visible && (groupLayer.visible[frameIndex] !== false);
+      if (!isGroupVisible) continue;
+      
+      const groupCanvas = frameData.canvases[groupLayer.id];
+      if (groupCanvas) {
+        const tintedGroupCanvas = applyTintToCanvas(groupCanvas, config, frameIndex, groupLayer.id);
+        const groupOpacity = (groupLayer.opacity ?? 1.0) * config.opacity;
+        
+        ctx.globalAlpha = groupOpacity;
+        ctx.drawImage(
+          tintedGroupCanvas,
+          viewportOffset.x, viewportOffset.y,
+          viewportWidth, viewportHeight,
+          0, 0,
+          viewportWidth * zoom, viewportHeight * zoom
+        );
+        ctx.globalAlpha = 1.0;
+      }
+    }
+  };
+
+  // ============ RENDERIZAR FRAMES ANTERIORES ============
+  // Ordenar por offset descendente para que los más lejanos se rendericen primero
+  const enabledPreviousFrames = onionFramesConfig.previousFrames
+    .filter(config => config.enabled)
+    .sort((a, b) => b.offset - a.offset);
+    
+  for (const config of enabledPreviousFrames) {
+    const frameIndex = currentFrame - config.offset;
+    renderFrameWithConfig(frameIndex, config);
+  }
+  
+  // ============ RENDERIZAR FRAME ACTUAL (mantener tu código existente) ============
   for (const mainLayer of sortedMainLayers) {
-    // Usar la visibilidad del frame actual solamente
     const isVisible = mainLayer.visible[currentFrame] ?? true;
     if (!isVisible) continue;
     
@@ -1181,66 +1066,20 @@ const renderCurrentFrameWithAdjacent = useCallback((ctx) => {
     }
   }
   
-  // ============ RENDERIZAR FRAME SIGUIENTE (solo capa activa) ============
-  if (frames[nextFrame] && activeLayerId) {
-    const nextFrameData = frames[nextFrame];
+  // ============ RENDERIZAR FRAMES SIGUIENTES ============
+  // Ordenar por offset descendente para que los más lejanos se rendericen primero
+  const enabledNextFrames = onionFramesConfig.nextFrames
+    .filter(config => config.enabled)
+    .sort((a, b) => b.offset - a.offset);
     
-    // Buscar la capa activa en el frame siguiente
-    const nextActiveLayer = nextFrameData.layers.find(layer => layer.id === activeLayerId);
-    
-    if (nextActiveLayer) {
-      // Verificar visibilidad en el frame siguiente
-      const isNextVisible = nextActiveLayer.visible[nextFrame] ?? true;
-      
-      if (isNextVisible) {
-        // Renderizar capa principal del frame siguiente
-        const nextMainCanvas = nextFrameData.canvases[activeLayerId];
-        if (nextMainCanvas) {
-          const layerOpacity = (nextActiveLayer.opacity ?? 1.0) * nextFrameOpacity;
-          
-          ctx.globalAlpha = layerOpacity;
-          
-          ctx.drawImage(
-            nextMainCanvas,
-            viewportOffset.x, viewportOffset.y,
-            viewportWidth, viewportHeight,
-            0, 0,
-            viewportWidth * zoom, viewportHeight * zoom
-          );
-          
-          ctx.globalAlpha = 1.0;
-        }
-        
-        // Renderizar capas de grupo relacionadas del frame siguiente
-        const nextGroupLayers = nextFrameData.layers.filter(layer => 
-          layer.isGroupLayer && layer.parentLayerId === activeLayerId
-        );
-        
-        for (const groupLayer of nextGroupLayers) {
-          const isGroupVisible = groupLayer.visible && (groupLayer.visible[nextFrame] !== false);
-          if (!isGroupVisible) continue;
-          
-          const nextGroupCanvas = nextFrameData.canvases[groupLayer.id];
-          if (nextGroupCanvas) {
-            const groupOpacity = (groupLayer.opacity ?? 1.0) * nextFrameOpacity;
-            
-            ctx.globalAlpha = groupOpacity;
-            
-            ctx.drawImage(
-              nextGroupCanvas,
-              viewportOffset.x, viewportOffset.y,
-              viewportWidth, viewportHeight,
-              0, 0,
-              viewportWidth * zoom, viewportHeight * zoom
-            );
-            
-            ctx.globalAlpha = 1.0;
-          }
-        }
-      }
-    }
+  for (const config of enabledNextFrames) {
+    const frameIndex = currentFrame + config.offset;
+    renderFrameWithConfig(frameIndex, config);
   }
+  
 }, [
+  onionFramesConfig,
+  applyTintToCanvas,
   getHierarchicalLayers, 
   currentFrame, 
   viewportOffset, 
@@ -1251,17 +1090,145 @@ const renderCurrentFrameWithAdjacent = useCallback((ctx) => {
   activeLayerId
 ]);
 
+
+// ============ FUNCIONES DE UTILIDAD PARA MANEJAR LA CONFIG ============
+
+// Actualizar configuración del frame anterior
+// Función para agregar un nuevo frame anterior
+const addPreviousFrame = useCallback(() => {
+  setOnionFramesConfig(prev => {
+    const maxOffset = Math.max(0, ...prev.previousFrames.map(f => f.offset));
+    const newFrame = {
+      enabled: false,
+      opacity: Math.max(0.1, 0.4 - (maxOffset * 0.1)), // Opacidad decrece con la distancia
+      hue: 240 - (maxOffset * 20), // Hue cambia gradualmente
+      saturation: Math.max(20, 60 - (maxOffset * 10)),
+      brightness: Math.max(50, 90 - (maxOffset * 10)),
+      offset: maxOffset + 1
+    };
+    
+    return {
+      ...prev,
+      previousFrames: [...prev.previousFrames, newFrame]
+    };
+  });
+}, []);
+
+// Función para agregar un nuevo frame siguiente
+const addNextFrame = useCallback(() => {
+  setOnionFramesConfig(prev => {
+    const maxOffset = Math.max(0, ...prev.nextFrames.map(f => f.offset));
+    const newFrame = {
+      enabled: false,
+      opacity: Math.max(0.1, 0.4 - (maxOffset * 0.1)),
+      hue: 30 + (maxOffset * 20), // Hue cambia gradualmente hacia amarillo
+      saturation: Math.max(20, 60 - (maxOffset * 10)),
+      brightness: Math.min(150, 110 + (maxOffset * 10)),
+      offset: maxOffset + 1
+    };
+    
+    return {
+      ...prev,
+      nextFrames: [...prev.nextFrames, newFrame]
+    };
+  });
+}, []);
+
+// Función para remover un frame por índice
+const removeFrame = useCallback((type, index) => {
+  setOnionFramesConfig(prev => ({
+    ...prev,
+    [type]: prev[type].filter((_, i) => i !== index)
+  }));
+  clearTintCache(); // Limpiar cache al remover frames
+}, [clearTintCache]);
+
+// Función para actualizar un frame específico
+const updateFrameConfig = useCallback((type, index, updates) => {
+  setOnionFramesConfig(prev => ({
+    ...prev,
+    [type]: prev[type].map((frame, i) => 
+      i === index ? { ...frame, ...updates } : frame
+    )
+  }));
+  clearTintCache(); // Limpiar cache al actualizar configuración
+}, [clearTintCache]);
+
+// Actualizar configuración del frame anterior (para compatibilidad)
+const updatePreviousFrameConfig = useCallback((updates) => {
+  updateFrameConfig('previousFrames', 0, updates);
+}, [updateFrameConfig]);
+
+// Actualizar configuración del frame siguiente (para compatibilidad)
+const updateNextFrameConfig = useCallback((updates) => {
+  updateFrameConfig('nextFrames', 0, updates);
+}, [updateFrameConfig]);
+
+// Alternar onion frames
+const toggleOnionFrames = useCallback(() => {
+  setOnionFramesConfig(prev => ({
+    ...prev,
+    enabled: !prev.enabled
+  }));
+}, []);
+
+// Presets predefinidos
+const applyOnionFramesPreset = useCallback((presetName) => {
+  const presets = {
+    classic: {
+      previousFrames: [
+        { enabled: true, hue: 240, saturation: 50, brightness: 100, opacity: 0.3, offset: 1 }
+      ],
+      nextFrames: [
+        { enabled: true, hue: 0, saturation: 50, brightness: 100, opacity: 0.3, offset: 1 }
+      ]
+    },
+    warm: {
+      previousFrames: [
+        { enabled: true, hue: 60, saturation: 30, brightness: 90, opacity: 0.25, offset: 1 }
+      ],
+      nextFrames: [
+        { enabled: true, hue: 300, saturation: 30, brightness: 90, opacity: 0.25, offset: 1 }
+      ]
+    },
+    subtle: {
+      previousFrames: [
+        { enabled: true, hue: 0, saturation: 0, brightness: 80, opacity: 0.2, offset: 1 }
+      ],
+      nextFrames: [
+        { enabled: true, hue: 0, saturation: 0, brightness: 120, opacity: 0.2, offset: 1 }
+      ]
+    },
+    neon: {
+      previousFrames: [
+        { enabled: true, hue: 180, saturation: 100, brightness: 150, opacity: 0.4, offset: 1 }
+      ],
+      nextFrames: [
+        { enabled: true, hue: 320, saturation: 100, brightness: 150, opacity: 0.4, offset: 1 }
+      ]
+    }
+  };
+  
+  if (presets[presetName]) {
+    setOnionFramesConfig(prev => ({
+      ...prev,
+      ...presets[presetName]
+    }));
+    clearTintCache();
+  }
+}, [clearTintCache]);
+
+
+// ============ CLEANUP ============
+useEffect(() => {
+  return () => {
+    clearTintCache(); // Limpiar cache al desmontar el componente
+  };
+}, [clearTintCache, currentFrame]);
+
 // 9. NUEVA FUNCIÓN: renderLayerWithConfig
 
-// 10. NUEVA FUNCIÓN: invalidateRenderCache
-const invalidateRenderCache = useCallback((reason = 'manual') => {
-  renderCache.current.needsFullRender = true;
-  
-  // Limpiar también cache de onion skin si es necesario
-  if (reason === 'onionSkinChange') {
-    clearOnionSkinCache();
-  }
-}, [clearOnionSkinCache]);
+
 
 // Efecto para limpiar cache cuando cambien configuraciones críticas
 
@@ -1357,7 +1324,7 @@ const createTempLighterCanvas = useCallback((layerId, frameId) => {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   ctx.imageSmoothingEnabled = false;
   
   setTempLighterCanvas(canvas);
@@ -1496,7 +1463,7 @@ const compositeRender = useCallback(() => {
   ctx.globalAlpha = 1.0;
   
   // 1. Renderizar el contenido base
-  if (onionSkinSettings.enabled) {
+  if (onionFramesConfig.enabled) {
     renderCurrentFrameWithAdjacent(ctx);
   } else {
     renderCurrentFrameOnly(ctx);
@@ -3930,63 +3897,89 @@ const getFrameRate = useCallback((frameNumber) => {
 const lastModifiedLayer = useRef(null);
 const geometricToolDrawn = useRef(false);
 const [lastModifiedLayerState, setLastModifiedLayerState] = useState(null);
-// useEffect para actualizar framesResume cuando termine el dibujo
-/*
-useEffect(() => {
-  if (lastModifiedLayerState && !isPressed) {
-    const layerId = lastModifiedLayerState;
-    
-    setTimeout(() => {
-      const canvas = layerCanvasesRef.current[layerId];
-      let hasActualContent = false;
-      
-      if (canvas) {
-        const ctx = canvas.getContext('2d');
-        
-        // ✅ OPTIMIZACIÓN 1: Solo verificar contenido, NO procesar cambios
-        // Usar una versión optimizada que se detiene en el primer píxel encontrado
-        hasActualContent = hasCanvasContent(ctx, canvas.width, canvas.height);
-        
-        // ✅ OPTIMIZACIÓN 2: Solo procesar cambios si realmente se necesita
-        // (por ejemplo, solo para undo/redo crítico)
-        if (ENABLE_PIXEL_TRACKING) {
-          processPixelChangesOptimized(ctx, layerId, currentFrame);
-        }
-      }
-      
-      // ✅ OPTIMIZACIÓN 3: Solo actualizar si hay cambio real
-      setFramesResume(prev => {
-        const currentHasContent = prev.frames[currentFrame]?.layerHasContent[layerId];
-        
-        if (currentHasContent === hasActualContent) {
-          return prev; // No hay cambio, retornar mismo objeto
-        }
-        
-        // Solo crear nuevo objeto si hay cambio real
-        const updated = { ...prev };
-        updated.frames[currentFrame].layerHasContent[layerId] = hasActualContent;
-        updated.computed.resolvedFrames[currentFrame].layerHasContent[layerId] = hasActualContent;
-        
-        const currentFrames = updated.computed.framesByLayer[layerId] || [];
-        if (hasActualContent && !currentFrames.includes(currentFrame)) {
-          updated.computed.framesByLayer[layerId] = [...currentFrames, currentFrame].sort((a, b) => a - b);
-        } else if (!hasActualContent && currentFrames.includes(currentFrame)) {
-          updated.computed.framesByLayer[layerId] = currentFrames.filter(f => f !== currentFrame);
-        }
-        
-        return updated;
+
+const checkIfCanvasIsPaintedViaBlob = async (ctx, layerId, currentFrame, setFramesResume) => {
+  try {
+    const canvas = ctx.canvas;
+    if (!canvas) {
+      console.warn('[BlobCheck] No se encontró canvas');
+      return;
+    }
+
+    const getBlobSize = (canvasRef) => {
+      return new Promise((resolve, reject) => {
+        canvasRef.toBlob((blob) => {
+          if (!blob) {
+            reject('[BlobCheck] Blob no generado');
+            return;
+          }
+          resolve(blob.size);
+        }, 'image/png');
       });
-    }, 50);
-    
-    setLastModifiedLayerState(null);
-    lastModifiedLayer.current = null;
+    };
+
+    const blankCanvas = document.createElement('canvas');
+    blankCanvas.width = canvas.width;
+    blankCanvas.height = canvas.height;
+
+    const [currentSize, blankSize] = await Promise.all([
+      getBlobSize(canvas),
+      getBlobSize(blankCanvas),
+    ]);
+
+    const hasContent = currentSize !== blankSize;
+
+    console.log(
+      hasContent
+        ? '%cCanvas pintado ✅'
+        : '%cCanvas vacío 💤',
+      hasContent ? 'color: green; font-weight: bold' : 'color: gray; font-style: italic'
+    );
+
+    // ✅ Actualizar estado de framesResume
+    setFramesResume(prev => {
+      const currentHasContent = prev.frames[currentFrame]?.layerHasContent[layerId];
+
+      if (currentHasContent === hasContent) return prev;
+
+      const updated = { ...prev };
+      updated.frames[currentFrame].layerHasContent[layerId] = hasContent;
+      updated.computed.resolvedFrames[currentFrame].layerHasContent[layerId] = hasContent;
+
+      const currentFrames = updated.computed.framesByLayer[layerId] || [];
+
+      if (hasContent && !currentFrames.includes(currentFrame)) {
+        updated.computed.framesByLayer[layerId] = [...currentFrames, currentFrame].sort((a, b) => a - b);
+      } else if (!hasContent && currentFrames.includes(currentFrame)) {
+        updated.computed.framesByLayer[layerId] = currentFrames.filter(f => f !== currentFrame);
+      }
+
+      return updated;
+    });
+
+  } catch (error) {
+    console.error('[BlobCheck] Error:', error);
   }
-}, [lastModifiedLayerState, isPressed, currentFrame]);
-*/
-// ===== FUNCIÓN DRAWONLAYER MODIFICADA =====
+};
+// useEffect para actualizar framesResume cuando termine el dibujo
 
+useEffect(() => {
+  if (!isPressed) {
+    const layerId = activeLayerId; // ← Usa tu identificador de layer actual
+    const canvas = layerCanvasesRef.current?.[layerId];
 
+    if (canvas && layerId != null) {
+      const ctx = canvas.getContext('2d');
 
+      // Esperar un poco tras soltar el mouse para asegurar que la pintura terminó
+      setTimeout(() => {
+        checkIfCanvasIsPaintedViaBlob(ctx, layerId, currentFrame, setFramesResume);
+      }, 50);
+    }
+  }
+}, [isPressed]);
+
+/*
 const drawOnLayer = useCallback((layerId, drawFn, shouldBatch = false) => {
   let targetCanvas;
   let targetLayerId = layerId;
@@ -4049,6 +4042,68 @@ const drawOnLayer = useCallback((layerId, drawFn, shouldBatch = false) => {
   createTempLighterCanvas,
   mergeTempLighterCanvas,
   compositeRender
+]);
+*/
+
+const drawOnLayer = useCallback((layerId, drawFn, shouldBatch = false) => {
+  let targetCanvas;
+
+  // --- Determinar canvas destino ---
+  if (activeLighter) {
+    const needsNewTemp =
+      !tempLighterCanvas ||
+      tempLighterLayerId !== layerId ||
+      tempLighterFrameId !== currentFrame;
+
+    if (needsNewTemp) {
+      if (tempLighterCanvas) mergeTempLighterCanvas();
+      targetCanvas = createTempLighterCanvas(layerId, currentFrame);
+    } else {
+      targetCanvas = tempLighterCanvas;
+    }
+  } else {
+    if (tempLighterCanvas) mergeTempLighterCanvas();
+
+    targetCanvas =
+      layerCanvasesRef.current[layerId] ??
+      (layerCanvasesRef.current[layerId] = getOrCreateCanvas(
+        layerId,
+        currentFrame,
+        true
+      ));
+  }
+
+  // --- Cachear contexto 2D ---
+  if (!targetCanvas._ctx) {
+    targetCanvas._ctx = targetCanvas.getContext("2d", { willReadFrequently: false });
+  }
+
+  // --- Ejecutar función de dibujo ---
+  drawFn(targetCanvas._ctx);
+
+  // --- Actualizar estado si es necesario ---
+  if (!activeLighter) {
+    if (lastModifiedLayer.current !== layerId) {
+      lastModifiedLayer.current = layerId;
+      setLastModifiedLayerState(layerId);
+    }
+  }
+
+  // --- Renderizar con batch ---
+  if (!shouldBatch) {
+    requestAnimationFrame(compositeRender);
+  }
+}, [
+  activeLighter,
+  tempLighterCanvas,
+  tempLighterLayerId,
+  tempLighterFrameId,
+  currentFrame,
+  getOrCreateCanvas,
+  createTempLighterCanvas,
+  mergeTempLighterCanvas,
+  compositeRender,
+  setLastModifiedLayerState
 ]);
 
 // ===== FUNCIÓN PARA MANEJAR CAMBIO DE ACTIVELIGHTER =====
@@ -4296,7 +4351,341 @@ const paintPixelsImmediate = useCallback((layerId, frameNumber, pixels, rgba) =>
     }
   }, []);
   
+
+
+/**
+ * Hook para gestión de workers de imagen
+ * Maneja la creación, reutilización y limpieza de workers
+ */
+const useImageWorkers = () => {
+  const workersRef = useRef(new Map());
+  const workerCountRef = useRef(0);
   
+  const createWorker = useCallback(() => {
+    const workerCode = `
+      // Worker para procesamiento de ImageData con OffscreenCanvas
+      self.onmessage = function(e) {
+        const { type, requestId, canvas, x, y, width, height, imageData } = e.data;
+        
+        try {
+          switch(type) {
+            case 'getImageData':
+              if (canvas) {
+                // Usar OffscreenCanvas transferido
+                const ctx = canvas.getContext('2d');
+                const result = ctx.getImageData(x, y, width, height);
+                
+                self.postMessage({
+                  type: 'success',
+                  requestId,
+                  imageData: result
+                });
+              } else if (imageData) {
+                // Fallback: trabajar con ImageData directamente
+                self.postMessage({
+                  type: 'success',
+                  requestId,
+                  imageData: imageData
+                });
+              }
+              break;
+              
+            case 'processImageData':
+              // Aquí puedes agregar procesamiento adicional
+              if (imageData) {
+                // Ejemplo: aplicar filtro simple
+                const processed = new ImageData(
+                  new Uint8ClampedArray(imageData.data),
+                  imageData.width,
+                  imageData.height
+                );
+                
+                self.postMessage({
+                  type: 'success',
+                  requestId,
+                  imageData: processed
+                });
+              }
+              break;
+              
+            default:
+              throw new Error('Unknown operation type: ' + type);
+          }
+        } catch (error) {
+          self.postMessage({
+            type: 'error',
+            requestId,
+            error: error.message
+          });
+        }
+      };
+    `;
+    
+    const blob = new Blob([workerCode], { type: 'application/javascript' });
+    const worker = new Worker(URL.createObjectURL(blob));
+    
+    // Limpiar blob URL cuando el worker termine
+    worker.addEventListener('error', () => {
+      URL.revokeObjectURL(blob);
+    });
+    
+    return { worker, blobUrl: blob };
+  }, []);
+  
+  const getWorker = useCallback(() => {
+    const workerId = `worker_${workerCountRef.current++}`;
+    const { worker, blobUrl } = createWorker();
+    
+    workersRef.current.set(workerId, { worker, blobUrl });
+    
+    return {
+      workerId,
+      worker,
+      cleanup: () => {
+        const workerData = workersRef.current.get(workerId);
+        if (workerData) {
+          workerData.worker.terminate();
+          URL.revokeObjectURL(workerData.blobUrl);
+          workersRef.current.delete(workerId);
+        }
+      }
+    };
+  }, [createWorker]);
+  
+  const cleanupAllWorkers = useCallback(() => {
+    workersRef.current.forEach(({ worker, blobUrl }) => {
+      worker.terminate();
+      URL.revokeObjectURL(blobUrl);
+    });
+    workersRef.current.clear();
+  }, []);
+  
+  return { getWorker, cleanupAllWorkers };
+};
+
+/**
+ * Utilidad para verificar si OffscreenCanvas está disponible
+ */
+const useOffscreenCanvasSupport = () => {
+  const isSupported = typeof OffscreenCanvas !== 'undefined' && 'transferControlToOffscreen' in HTMLCanvasElement.prototype;
+  
+  return {
+    isSupported,
+    canUseWorkers: typeof Worker !== 'undefined'
+  };
+};
+
+/**
+ * Función principal: getLayerData híbrida con soporte OffscreenCanvas
+ * @param {Object} layerCanvasesRef - Ref que contiene los canvas de las layers
+ * @returns {Function} getLayerData function
+ */
+const useHybridLayerData = (layerCanvasesRef) => {
+  const { getWorker } = useImageWorkers();
+  const { isSupported: isOffscreenSupported, canUseWorkers } = useOffscreenCanvasSupport();
+  
+  /**
+   * Get image data from a specific layer within a defined region
+   * @param {string} layerId - ID of the layer to get data from
+   * @param {number} x - X coordinate of the top-left corner of the region
+   * @param {number} y - Y coordinate of the top-left corner of the region
+   * @param {number} width - Width of the region
+   * @param {number} height - Height of the region
+   * @param {boolean} useWorker - Whether to use web worker for processing
+   * @param {boolean} forceOffscreen - Force use of OffscreenCanvas even for small operations
+   * @returns {Promise<ImageData>} Promise resolving to the image data from the specified region
+   */
+  const getLayerData = useCallback((layerId, x, y, width, height, useWorker = false, forceOffscreen = false) => {
+    return new Promise((resolve) => {
+      const canvas = layerCanvasesRef.current[layerId];
+      if (!canvas) {
+        resolve(null);
+        return;
+      }
+      
+      // Bounds checking
+      const boundedX = Math.max(0, Math.min(x, canvas.width - 1));
+      const boundedY = Math.max(0, Math.min(y, canvas.height - 1));
+      const boundedWidth = Math.max(1, Math.min(width, canvas.width - boundedX));
+      const boundedHeight = Math.max(1, Math.min(height, canvas.height - boundedY));
+      
+      // Decidir si usar worker basado en el tamaño de la operación
+      const area = boundedWidth * boundedHeight;
+      const shouldUseWorker = useWorker || forceOffscreen || area > 250000; // > 500x500 px
+      
+      // Método tradicional (sin worker)
+      if (!shouldUseWorker || !canUseWorkers) {
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        try {
+          const imageData = ctx.getImageData(boundedX, boundedY, boundedWidth, boundedHeight);
+          resolve(imageData);
+        } catch (e) {
+          console.error('Error getting layer data:', e);
+          resolve(null);
+        }
+        return;
+      }
+      
+      // Método con worker
+      const { worker, cleanup } = getWorker();
+      const requestId = Math.random().toString(36).substr(2, 9);
+      
+      const handleWorkerMessage = (e) => {
+        if (e.data.requestId === requestId) {
+          worker.removeEventListener('message', handleWorkerMessage);
+          
+          if (e.data.type === 'success') {
+            resolve(e.data.imageData);
+          } else {
+            console.error('Worker error:', e.data.error);
+            // Fallback al método tradicional
+            fallbackToMainThread();
+          }
+          
+          cleanup();
+        }
+      };
+      
+      const handleWorkerError = (error) => {
+        console.error('Worker failed:', error);
+        worker.removeEventListener('error', handleWorkerError);
+        fallbackToMainThread();
+        cleanup();
+      };
+      
+      const fallbackToMainThread = () => {
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        try {
+          const imageData = ctx.getImageData(boundedX, boundedY, boundedWidth, boundedHeight);
+          resolve(imageData);
+        } catch (e) {
+          console.error('Fallback error:', e);
+          resolve(null);
+        }
+      };
+      
+      worker.addEventListener('message', handleWorkerMessage);
+      worker.addEventListener('error', handleWorkerError);
+      
+      // Intentar usar OffscreenCanvas si está disponible
+      if (isOffscreenSupported && forceOffscreen) {
+        try {
+          // Crear OffscreenCanvas temporal
+          const offscreen = new OffscreenCanvas(canvas.width, canvas.height);
+          const offscreenCtx = offscreen.getContext('2d');
+          
+          // Copiar contenido del canvas principal
+          const mainCtx = canvas.getContext('2d', { willReadFrequently: true });
+          const fullImageData = mainCtx.getImageData(0, 0, canvas.width, canvas.height);
+          offscreenCtx.putImageData(fullImageData, 0, 0);
+          
+          worker.postMessage({
+            type: 'getImageData',
+            requestId,
+            canvas: offscreen,
+            x: boundedX,
+            y: boundedY,
+            width: boundedWidth,
+            height: boundedHeight
+          }, [offscreen]);
+          
+        } catch (error) {
+          console.warn('OffscreenCanvas failed, using fallback:', error);
+          fallbackToMainThread();
+          cleanup();
+        }
+      } else {
+        // Usar worker sin OffscreenCanvas - solo pasar ImageData
+        try {
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          const imageData = ctx.getImageData(boundedX, boundedY, boundedWidth, boundedHeight);
+          
+          worker.postMessage({
+            type: 'processImageData',
+            requestId,
+            imageData
+          });
+          
+        } catch (error) {
+          console.error('Failed to get ImageData:', error);
+          fallbackToMainThread();
+          cleanup();
+        }
+      }
+    });
+  }, [getWorker, isOffscreenSupported, canUseWorkers]);
+  
+  return { getLayerData };
+};
+
+/**
+ * Función inteligente que decide automáticamente cuándo usar worker
+ * @param {Object} layerCanvasesRef - Ref que contiene los canvas de las layers
+ * @returns {Function} getLayerData function with automatic optimization
+ */
+const useSmartLayerData = (layerCanvasesRef) => {
+  const { getLayerData: hybridGetLayerData } = useHybridLayerData(layerCanvasesRef);
+  
+  const getLayerData = useCallback((layerId, x, y, width, height) => {
+    const area = width * height;
+    
+    // Lógica automática para decidir cuándo usar worker
+    const useWorker = area > 250000; // Área > 500x500 píxeles
+    const forceOffscreen = area > 1000000; // Área > 1000x1000 píxeles
+    
+    return hybridGetLayerData(layerId, x, y, width, height, useWorker, forceOffscreen);
+  }, [hybridGetLayerData]);
+  
+  return { getLayerData };
+};
+
+/**
+ * Hook principal para usar en tu componente
+ * Reemplaza directamente tu función getLayerData actual
+ */
+const useLayerDataManager = (layerCanvasesRef, options = {}) => {
+  const { 
+    autoOptimize = true, 
+    workerThreshold = 250000,
+    offscreenThreshold = 1000000 
+  } = options;
+  
+  const { getLayerData: hybridGetLayerData } = useHybridLayerData(layerCanvasesRef);
+  const { getLayerData: smartGetLayerData } = useSmartLayerData(layerCanvasesRef);
+  
+  if (autoOptimize) {
+    return { getLayerData: smartGetLayerData };
+  }
+  
+  return { getLayerData: hybridGetLayerData };
+};
+
+// EJEMPLO DE USO EN TU COMPONENTE:
+/*
+const MyComponent = () => {
+  const layerCanvasesRef = useRef({});
+  
+  // Opción 1: Automático (recomendado)
+  const { getLayerData } = useLayerDataManager(layerCanvasesRef);
+  
+  // Opción 2: Control manual
+  // const { getLayerData } = useLayerDataManager(layerCanvasesRef, { autoOptimize: false });
+  
+  const handleGetData = async () => {
+    // Uso simple - automáticamente optimizado
+    const data = await getLayerData('layer1', 0, 0, 100, 100);
+    
+    // Uso manual (si autoOptimize = false)
+    // const data = await getLayerData('layer1', 0, 0, 100, 100, true, false);
+  };
+  
+  return (
+    // Tu JSX aquí
+  );
+};
+*/
+
+
 // Add this to your useLayerManager hook right before the return statement
 
 /**
@@ -4308,30 +4697,281 @@ const paintPixelsImmediate = useCallback((layerId, frameNumber, pixels, rgba) =>
  * @param {number} height - Height of the region
  * @returns {Promise<ImageData>} - Promise resolving to the image data from the specified region
  */
-const getLayerData = useCallback((layerId, x, y, width, height) => {
-  return new Promise((resolve) => {
-    const canvas = layerCanvasesRef.current[layerId];
-    if (!canvas) {
-      resolve(null);
-      return;
+const { getLayerData } = useLayerDataManager(layerCanvasesRef);
+
+// Cache para contexto WebGL
+let webglContext = null;
+let webglProgram = null;
+let webglCanvas = null;
+
+// Inicializar WebGL (solo una vez)
+const initWebGL = () => {
+  if (webglContext) return webglContext;
+  
+  webglCanvas = document.createElement('canvas');
+  webglContext = webglCanvas.getContext('webgl2') || webglCanvas.getContext('webgl');
+  
+  if (!webglContext) {
+    console.warn('WebGL no disponible, usando Canvas 2D');
+    return null;
+  }
+  
+  // Shader vertex simple
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    attribute vec2 a_texCoord;
+    varying vec2 v_texCoord;
+    
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+      v_texCoord = a_texCoord;
     }
+  `;
+  
+  // Shader fragment para composición con alpha blending
+  const fragmentShaderSource = `
+    precision mediump float;
+    uniform sampler2D u_texture;
+    uniform float u_opacity;
+    varying vec2 v_texCoord;
     
-    // Make sure coordinates are within bounds
-    const boundedX = Math.max(0, Math.min(x, canvas.width - 1));
-    const boundedY = Math.max(0, Math.min(y, canvas.height - 1));
-    const boundedWidth = Math.max(1, Math.min(width, canvas.width - boundedX));
-    const boundedHeight = Math.max(1, Math.min(height, canvas.height - boundedY));
-    
-    const ctx = canvas.getContext('2d');
+    void main() {
+      vec4 color = texture2D(u_texture, v_texCoord);
+      gl_FragColor = vec4(color.rgb, color.a * u_opacity);
+    }
+  `;
+  
+  // Compilar shaders
+  const vertexShader = compileShader(webglContext, webglContext.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = compileShader(webglContext, webglContext.FRAGMENT_SHADER, fragmentShaderSource);
+  
+  // Crear programa
+  webglProgram = webglContext.createProgram();
+  webglContext.attachShader(webglProgram, vertexShader);
+  webglContext.attachShader(webglProgram, fragmentShader);
+  webglContext.linkProgram(webglProgram);
+  
+  if (!webglContext.getProgramParameter(webglProgram, webglContext.LINK_STATUS)) {
+    console.error('Error linking WebGL program');
+    return null;
+  }
+  
+  // Configurar geometría (quad completo)
+  const positions = new Float32Array([
+    -1, -1,  0, 0,
+     1, -1,  1, 0,
+    -1,  1,  0, 1,
+     1,  1,  1, 1,
+  ]);
+  
+  const buffer = webglContext.createBuffer();
+  webglContext.bindBuffer(webglContext.ARRAY_BUFFER, buffer);
+  webglContext.bufferData(webglContext.ARRAY_BUFFER, positions, webglContext.STATIC_DRAW);
+  
+  return webglContext;
+};
+
+// Función auxiliar para compilar shaders
+const compileShader = (gl, type, source) => {
+  const shader = gl.createShader(type);
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.error('Error compiling shader:', gl.getShaderInfoLog(shader));
+    gl.deleteShader(shader);
+    return null;
+  }
+  
+  return shader;
+};
+
+// ===== FUNCIÓN OPTIMIZADA CON DETECCIÓN AUTOMÁTICA =====
+const getCompositeLayerData = useCallback((x, y, regionWidth, regionHeight, includeHiddenLayers = false) => {
+  return new Promise((resolve) => {
     try {
-      const imageData = ctx.getImageData(boundedX, boundedY, boundedWidth, boundedHeight);
-      resolve(imageData);
-    } catch (e) {
-      console.error('Error getting layer data:', e);
+      // Asegurar que las coordenadas estén dentro de los límites
+      const boundedX = Math.max(0, Math.min(x, width - 1));
+      const boundedY = Math.max(0, Math.min(y, height - 1));
+      const boundedWidth = Math.max(1, Math.min(regionWidth, width - boundedX));
+      const boundedHeight = Math.max(1, Math.min(regionHeight, height - boundedY));
+      
+      // Obtener capas jerárquicas
+      const hierarchicalLayers = getHierarchicalLayers();
+      const sortedMainLayers = hierarchicalLayers.sort((a, b) => a.zIndex - b.zIndex);
+      
+      // Filtrar capas visibles
+      const visibleLayers = [];
+      for (const mainLayer of sortedMainLayers) {
+        const isMainLayerVisible = includeHiddenLayers || 
+                                 (mainLayer.visible && 
+                                  (mainLayer.visible[currentFrame] !== false));
+        
+        if (isMainLayerVisible && layerCanvasesRef.current[mainLayer.id]) {
+          visibleLayers.push({
+            canvas: layerCanvasesRef.current[mainLayer.id],
+            opacity: mainLayer.opacity ?? 1.0
+          });
+        }
+        
+        // Agregar capas de grupo
+        for (const groupLayer of mainLayer.groupLayers) {
+          const isGroupLayerVisible = includeHiddenLayers || 
+                                    (groupLayer.visible && 
+                                     (groupLayer.visible[currentFrame] !== false));
+          
+          if (isGroupLayerVisible && layerCanvasesRef.current[groupLayer.id]) {
+            visibleLayers.push({
+              canvas: layerCanvasesRef.current[groupLayer.id],
+              opacity: groupLayer.opacity ?? 1.0
+            });
+          }
+        }
+      }
+      
+      // ===== LÓGICA DE DECISIÓN AUTOMÁTICA =====
+      const totalPixels = boundedWidth * boundedHeight;
+      const layerCount = visibleLayers.length;
+      const complexity = totalPixels * layerCount;
+      
+      // Umbrales para usar WebGL
+      const WEBGL_THRESHOLD = 10000; // píxeles * capas
+      const useWebGL = complexity > WEBGL_THRESHOLD && initWebGL();
+      
+      if (useWebGL) {
+        // ===== RENDERIZADO CON WEBGL =====
+        resolveWithWebGL();
+      } else {
+        // ===== RENDERIZADO CON CANVAS 2D (OPTIMIZADO) =====
+        resolveWithCanvas2D();
+      }
+      
+      // Función WebGL
+      function resolveWithWebGL() {
+        try {
+          const gl = webglContext;
+          
+          // Configurar canvas
+          webglCanvas.width = boundedWidth;
+          webglCanvas.height = boundedHeight;
+          gl.viewport(0, 0, boundedWidth, boundedHeight);
+          
+          // Configurar blending para composición alpha
+          gl.enable(gl.BLEND);
+          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+          
+          // Limpiar
+          gl.clearColor(0, 0, 0, 0);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          
+          // Usar programa
+          gl.useProgram(webglProgram);
+          
+          // Configurar atributos
+          const positionLocation = gl.getAttribLocation(webglProgram, 'a_position');
+          const texCoordLocation = gl.getAttribLocation(webglProgram, 'a_texCoord');
+          const textureLocation = gl.getUniformLocation(webglProgram, 'u_texture');
+          const opacityLocation = gl.getUniformLocation(webglProgram, 'u_opacity');
+          
+          gl.enableVertexAttribArray(positionLocation);
+          gl.enableVertexAttribArray(texCoordLocation);
+          
+          // Configurar buffer
+          gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 16, 0);
+          gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 16, 8);
+          
+          // Renderizar cada capa
+          visibleLayers.forEach(layer => {
+            // Crear textura desde canvas
+            const texture = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            
+            // Subir solo la región necesaria
+            const regionCanvas = document.createElement('canvas');
+            regionCanvas.width = boundedWidth;
+            regionCanvas.height = boundedHeight;
+            const regionCtx = regionCanvas.getContext('2d');
+            regionCtx.drawImage(
+              layer.canvas,
+              boundedX, boundedY, boundedWidth, boundedHeight,
+              0, 0, boundedWidth, boundedHeight
+            );
+            
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, regionCanvas);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            
+            // Configurar uniforms
+            gl.uniform1i(textureLocation, 0);
+            gl.uniform1f(opacityLocation, layer.opacity);
+            
+            // Dibujar
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+            
+            // Limpiar textura
+            gl.deleteTexture(texture);
+          });
+          
+          // Leer píxeles con readPixels (MUY RÁPIDO)
+          const pixels = new Uint8Array(boundedWidth * boundedHeight * 4);
+          gl.readPixels(0, 0, boundedWidth, boundedHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+          
+          // Crear ImageData
+          const imageData = new ImageData(new Uint8ClampedArray(pixels), boundedWidth, boundedHeight);
+          
+          console.log(`🚀 WebGL utilizado para región ${boundedWidth}x${boundedHeight} con ${layerCount} capas`);
+          resolve(imageData);
+          
+        } catch (error) {
+          console.warn('Error en WebGL, fallback a Canvas 2D:', error);
+          resolveWithCanvas2D();
+        }
+      }
+      
+      // Función Canvas 2D (versión optimizada)
+      function resolveWithCanvas2D() {
+        // Crear canvas temporal más pequeño
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = boundedWidth;
+        tempCanvas.height = boundedHeight;
+        const tempCtx = tempCanvas.getContext('2d', { 
+          alpha: true,
+          willReadFrequently: true 
+        });
+        tempCtx.imageSmoothingEnabled = false;
+        
+        // Renderizar capas (sin cambios en la lógica)
+        visibleLayers.forEach(layer => {
+          if (layer.opacity !== 1.0) {
+            tempCtx.globalAlpha = layer.opacity;
+          }
+          
+          tempCtx.drawImage(
+            layer.canvas,
+            boundedX, boundedY, boundedWidth, boundedHeight,
+            0, 0, boundedWidth, boundedHeight
+          );
+          
+          if (layer.opacity !== 1.0) {
+            tempCtx.globalAlpha = 1.0;
+          }
+        });
+        
+        // Obtener ImageData
+        const imageData = tempCtx.getImageData(0, 0, boundedWidth, boundedHeight);
+        
+        console.log(`🎨 Canvas 2D utilizado para región ${boundedWidth}x${boundedHeight} con ${layerCount} capas`);
+        resolve(imageData);
+      }
+      
+    } catch (error) {
+      console.error('Error getting composite layer data:', error);
       resolve(null);
     }
   });
-}, []);
+}, [width, height, currentFrame, getHierarchicalLayers]);
 
 // Dentro del hook useLayerManager, en la sección de retorno
 const getLayerPixelData = useCallback((frameNumber, layerId) => {
@@ -4466,10 +5106,92 @@ const getPointerCoordsFromCanvas = useCallback((canvasX, canvasY) => {
  * @param {number} tolerance - Tolerancia de color (0-255, por defecto 0 para color exacto)
  * @returns {boolean} - True si se realizó el relleno correctamente, false si hubo algún error
  */
- const { floodFill, cancelFloodFill, isProcessing } = useOptimizedFloodFill(
-  layerCanvasesRef, 
-  compositeRender
-);
+ const floodFill = useCallback((layerId, startX, startY, fillColor, tolerance = 0) => {
+  const canvas = layerCanvasesRef.current[layerId];
+  if (!canvas) return false;
+  
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return false;
+  
+  // Verificar que las coordenadas estén dentro del canvas
+  if (startX < 0 || startX >= canvas.width || startY < 0 || startY >= canvas.height) {
+    return false;
+  }
+  
+  // Normalizar el color de relleno a objeto RGBA
+  const fillRGBA = normalizeToRGBA(fillColor);
+  if (!fillRGBA) return false;
+  
+  // Obtener los datos de imagen del canvas completo
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  
+  // Obtener el color del píxel inicial
+  const startIndex = (startY * canvas.width + startX) * 4;
+  const targetColor = {
+    r: data[startIndex],
+    g: data[startIndex + 1], 
+    b: data[startIndex + 2],
+    a: data[startIndex + 3]
+  };
+  
+  // Si el color inicial es igual al color de relleno, no hacer nada
+  if (colorsEqual(targetColor, fillRGBA, 0)) {
+    return true;
+  }
+  
+  // Pila para almacenar los píxeles a procesar
+  const pixelStack = [{x: startX, y: startY}];
+  const processedPixels = new Set();
+  
+  while (pixelStack.length > 0) {
+    const {x, y} = pixelStack.pop();
+    
+    // Crear clave única para este píxel
+    const pixelKey = `${x},${y}`;
+    if (processedPixels.has(pixelKey)) continue;
+    
+    // Verificar límites
+    if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) continue;
+    
+    // Obtener el color del píxel actual
+    const currentIndex = (y * canvas.width + x) * 4;
+    const currentColor = {
+      r: data[currentIndex],
+      g: data[currentIndex + 1],
+      b: data[currentIndex + 2], 
+      a: data[currentIndex + 3]
+    };
+    
+    // Verificar si el color actual coincide con el color objetivo (dentro de la tolerancia)
+    if (!colorsEqual(currentColor, targetColor, tolerance)) {
+      continue;
+    }
+    
+    // Marcar este píxel como procesado
+    processedPixels.add(pixelKey);
+    
+    // Cambiar el color del píxel actual
+    data[currentIndex] = fillRGBA.r;
+    data[currentIndex + 1] = fillRGBA.g;
+    data[currentIndex + 2] = fillRGBA.b;
+    data[currentIndex + 3] = fillRGBA.a;
+    
+    // Añadir píxeles adyacentes a la pila (4-conectividad)
+    pixelStack.push({x: x + 1, y: y});     // Derecha
+    pixelStack.push({x: x - 1, y: y});     // Izquierda  
+    pixelStack.push({x: x, y: y + 1});     // Abajo
+    pixelStack.push({x: x, y: y - 1});     // Arriba
+  }
+  
+  // Aplicar los cambios al canvas
+  ctx.putImageData(imageData, 0, 0);
+  
+  // Re-renderizar la vista compuesta
+  compositeRender();
+  
+  return true;
+}, [compositeRender]);
 
 //Funcion para obtener los pixeles que coinciden con ese color: 
 const getMatchingPixels = useCallback((layerId, startX, startY, tolerance = 0) => {
@@ -5928,7 +6650,7 @@ const importLayersAndFrames = useCallback((importData) => {
         const canvas = document.createElement('canvas');
         canvas.width = importData.metadata.width;
         canvas.height = importData.metadata.height;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
         ctx.imageSmoothingEnabled = false;
         
         // Restaurar píxeles del canvas
@@ -6776,6 +7498,7 @@ return {
   
   // Add the new function here
   getLayerData,
+  getCompositeLayerData,
   erasePixels,
   getCanvasCoordsFromPointer,
   getPointerCoordsFromCanvas,
@@ -6857,6 +7580,16 @@ onionSkinEnabled,
 onionSkinSettings,
 showOnionSkinForLayer,
 clearOnionSkinLayerFilter,
+//el verdadero onion skin:
+onionFramesConfig, // Recibir la configuración actual del estado principal
+  setOnionFramesConfig, // Función para actualizar la configuración
+  updateFrameConfig,
+  addPreviousFrame,
+  addNextFrame,
+  removeFrame,
+  toggleOnionFrames,
+  applyOnionFramesPreset,
+  clearTintCache,
 
     //funciones para gestion de tiempo de los frames:
     setFrameDuration,

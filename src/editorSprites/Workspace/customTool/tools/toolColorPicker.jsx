@@ -4,7 +4,11 @@ import './toolColorPicker.css'
 import { usePointer } from '../../hooks/hooks';
 import { LuX } from "react-icons/lu";
 
+
 const ToolColorPicker = ({ color = { r: 255, g: 0, b: 0, a: 1 }, onChange, hexColor, setHexColor, closeFn }) => {
+
+
+
   const [currentColor, setCurrentColor] = useState(color);
   
   const colorAreaRef = useRef(null);

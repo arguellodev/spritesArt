@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu } from 'electron';
+import { app, BrowserWindow, Menu, globalShortcut } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -16,6 +16,8 @@ app.commandLine.appendSwitch('--force-gpu-mem-available-mb', '2048');
 
 // Para aplicaciones con mucho contenido gráfico
 app.commandLine.appendSwitch('--max-old-space-size', '8192');
+
+let mainWindow; // Variable global para acceder a la ventana
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -46,6 +48,9 @@ function createWindow() {
     resizable: true,
     fullscreenable: true,
   });
+
+  // Asignar a variable global
+  mainWindow = win;
 
   // Optimizar la carga inicial
   win.once('ready-to-show', () => {
@@ -102,16 +107,33 @@ function createWindow() {
   return win;
 }
 
+// Función para alternar pantalla completa
+function toggleFullScreen() {
+  if (mainWindow) {
+    const isFullScreen = mainWindow.isFullScreen();
+    mainWindow.setFullScreen(!isFullScreen);
+  }
+}
+
 // Configurar el manejo de memoria de la app
 app.whenReady().then(() => {
   // Configuraciones adicionales cuando la app está lista
   app.setAppUserModelId('com.pixcalli.studio');
   
   createWindow();
+  
+  // Registrar el shortcut global para F11
+  globalShortcut.register('F11', () => {
+    toggleFullScreen();
+  });
+  
+  console.log('F11 shortcut registrado para pantalla completa');
 });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    // Desregistrar todos los shortcuts globales antes de salir
+    globalShortcut.unregisterAll();
     app.quit();
   }
 });
@@ -120,6 +142,11 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
+});
+
+// Limpiar shortcuts cuando la app se va a cerrar
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
 
 // Manejar advertencias de memoria

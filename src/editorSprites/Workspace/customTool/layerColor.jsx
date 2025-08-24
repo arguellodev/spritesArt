@@ -1,12 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { LuPencil, LuTrash2, LuPlus, LuCheck, LuX, LuPalette, LuRefreshCw } from "react-icons/lu";
 import ToolColorPicker from "./tools/toolColorPicker";
 import { PiMouseLeftClickFill } from "react-icons/pi";
 import { PiMouseRightClickFill } from "react-icons/pi";
 import CustomSelect from "./customSelect";
+import SimpleEyedropper from "./simpleEyeDropper";
+// Al inicio del componente, después de los otros imports
+
 import './layerColor.css'
 
-const LayerColor = ({ tool, toolParameters, setToolParameters, getLayerPixelData, currentFrame=1, activeLayerId, paintPixelsRGBA, isPressed }) => {
+
+const LayerColor = ({ tool, toolParameters, setToolParameters, getLayerPixelData, currentFrame=1, activeLayerId, paintPixelsRGBA, isPressed, eyeDropperColor }) => {
+
+
+//Gotero:
+// Función para el eyedropper usando electron-color-picker
+
+
   // Estados para los colores principales
   const [foregroundColor, setForegroundColor] = useState({ r: 0, g: 0, b: 0, a: 1 });
   const [backgroundColor, setBackgroundColor] = useState({ r: 255, g: 255, b: 255, a: 1 });
@@ -295,6 +305,18 @@ const addToRecentColors = (color) => {
     }
   };
 
+  useEffect(() => {
+   
+  if(isPressed === "right"){
+    applyPaletteColorToSecondary(eyeDropperColor)
+  }
+  else if(isPressed === 'left'){
+    applyPaletteColorToPrimary(eyeDropperColor)
+  }
+  }, [eyeDropperColor, isShapeTool]); // 🔥 Removí addToRecentColors de las dependencias para evitar loops
+
+ 
+  
   // Inicializar con la paleta por defecto
   useEffect(() => {
     if (actualPalette.length === 0) {
@@ -1020,7 +1042,10 @@ const addToRecentColors = (color) => {
     onContextMenu={preventContextMenu}
     >
       <div className="layer-color-header">
-        <h3 className="layer-color-title">Colors</h3>
+        <h3 className="layer-color-title">Colores</h3>
+        
+
+    
         <div className="header-controls">
           
         </div>
@@ -1211,9 +1236,7 @@ const addToRecentColors = (color) => {
       {/* Paleta de colores */}
       <div className="color-palette-container">
         <div className="color-palette-header">
-          <h4 className="color-palette-title">
-            {isIndexedMode ? 'Indexed Palette' : 'Color Palette'}
-          </h4>
+          
           <div className="palette-controls">
             {/* CustomSelect para cambiar paletas (solo en modo normal) */}
             {!isIndexedMode && (

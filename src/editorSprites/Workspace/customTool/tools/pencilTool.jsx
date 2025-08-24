@@ -671,7 +671,7 @@ const PencilTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
 
             {/* Toggle para dithering */}
             <div className="config-item">
-                <label className="tool-label">Perfect curves</label>
+                <label className="tool-label">Pixel Perfect</label>
                 <div className="toggle-switch">
                   <input 
                     type="checkbox" 

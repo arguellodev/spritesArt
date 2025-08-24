@@ -230,9 +230,7 @@ const NavbarLateral = ({
           ref={navbarRef}
         >
           <div className="navbar-container">
-          <div className="navbar-logo">
-              <img src="./pixcalli-serpiente.svg"></img>
-            </div>
+          
 
 
             <div className={`navbar-menu ${twoColumns ? "two-columns" : ""}`}>

@@ -4,6 +4,11 @@ import { flushSync } from "react-dom";
 import PlayingAnimation from "./playingAnimation";
 import { jsAlgorithm } from "../rotesprite";
 import reactiveCursor from "./cursorIcons";
+import AnimationExporter from "../export/animationExporter";
+import SimpleEyedropper from "../customTool/simpleEyeDropper";
+import FramesTimeline from "./timeline";
+import ThreeJSModal from "./ThreeJsDemo";
+import SimpleObjModal from "./Threeloader";
 import {
   LuEye,
   LuEyeOff,
@@ -59,12 +64,19 @@ import TopToolbar from "./topToolbar";
 import AIgenerator from "../AIgenerator.jsx/AIgenerator";
 import NavbarLateral from "../../navbarLateral/Navbar";
 import { PiIntersectDuotone } from "react-icons/pi";
-import { BsPentagon } from "react-icons/bs";
+import { BsEyedropper, BsPentagon } from "react-icons/bs";
+
+import Enhanced3DFlattener from "./ThreeJsDemo";
+
+
+
 
 // Definición de las herramientas disponibles
 const TOOLS = {
   paint: "pencil",
+  paint2: "pencil2",
   pencilPerfect: "pencilPerfect",
+  eyeDropper: "eyeDropper",
   erase: "eraser",
   select: "select",
   lassoSelect: "lassoSelect",
@@ -109,73 +121,41 @@ function CanvasTracker({
 
   const navItemsLateral = [
     {
-      dropdown: [
-        {
-          label: "Pincel",
-          icon: <LuBrush />,
-          onClick: () => setTool("pencil"),
-          toolValue: "pencil"
-        },
-       
-        { 
-          label: "Perfil", 
-          icon: "👤", 
-          onClick: () => console.log("Perfil"),
-          toolValue: null
-        },
-        {
-          label: "Preferencias",
-          icon: "🔧",
-          onClick: () => console.log("Preferencias"),
-          toolValue: null
-        },
-        {
-          label: "Cerrar sesión",
-          icon: "🚪",
-          onClick: () => console.log("Cerrar sesión"),
-          toolValue: null
-        },
-      ],
+      label: "Selector",
+      icon: <LuMousePointer2 />,
+      onClick: () => setTool("select"),
+      toolValue: "select"
     },
     {
-      dropdown: [
-        {
-          label: "Selector",
-          icon: <LuMousePointer2 />,
-          onClick: () => setTool("select"),
-          toolValue: "select"
-        },
-        { 
-          label: "Perfil", 
-          icon: "👤", 
-          onClick: () => console.log("Perfil"),
-          toolValue: null
-        },
-        {
-          label: "Preferencias",
-          icon: "🔧",
-          onClick: () => console.log("Preferencias"),
-          toolValue: null
-        },
-        {
-          label: "Cerrar sesión",
-          icon: "🚪",
-          onClick: () => console.log("Cerrar sesión"),
-          toolValue: null
-        },
-      ],
+      label: "Lazo",
+      icon: <LuLassoSelect />,
+      onClick: () => setTool("lassoSelect"),
+      toolValue: "lassoSelect"
     },
-    {
-      label: "Pencil Perfect",
-      icon: <LuBrush />,
-      onClick: () => setTool("pencilPerfect"),
-      toolValue: "pencilPerfect"
-    },
+   
     {
       label: "Selector por color",
       icon: <LuMousePointerClick />,
       onClick: () => setTool("selectByColor"),
       toolValue: "selectByColor"
+    },
+    {
+      label: "Pincel",
+      icon: <LuBrush />,
+      onClick: () => setTool("pencil"),
+      toolValue: "pencil"
+    },
+    {
+      label: "Pincel2",
+      icon: <LuBrush />,
+      onClick: () => setTool("pencil2"),
+      toolValue: "pencil2"
+    },
+    {
+      label: "Rellenar",
+      icon: <LuPaintBucket />,
+      onClick: () => setTool("fill"),
+      toolValue: "fill"
     },
     {
       label: "Borrador",
@@ -184,74 +164,22 @@ function CanvasTracker({
       toolValue: "eraser"
     },
     {
-      label: "Difuminador",
-      icon: <MdBlurOn />,
-      onClick: () => setTool("blurFinger"),
-      toolValue: "blurFinger"
+      label: "Gotero",
+      icon: <BsEyedropper/>, // Usar el componente que ya tienes importado
+      onClick: () => setTool("eyeDropper"),
+      toolValue: "eyeDropper"
     },
     {
-      label: "Mezclador",
-      icon: <PiIntersectDuotone />,
-      onClick: () => setTool("smudge"),
-      toolValue: "smudge"
+      label: "Linea",
+      icon: <TfiLayoutLineSolid />,
+      onClick: () => setTool("line"),
+      toolValue: "line"
     },
     {
-      label: "Clarificar",
-      icon: <MdOutlineDeblur/>,
-      onClick: () => setTool("deblur"),
-      toolValue: "deblur"
-    },
-    {
-      label: "Mover",
-      icon: <LuHand />,
-      onClick: () => setTool("move"),
-      toolValue: "move"
-    },
-    {
-      dropdown: [
-        {
-          label: "Rellenar",
-          icon: <LuPaintBucket />,
-          onClick: () => setTool("fill"),
-          toolValue: "fill"
-        },
-        {
-          label: "Gradiente",
-          icon: <MdGradient />,
-          onClick: () => setTool("gradientFill"),
-          toolValue: "gradientFill"
-        },
-      ],
-    },
-    {
-      label: "Lazo",
-      icon: <LuLassoSelect />,
-      onClick: () => setTool("lassoSelect"),
-      toolValue: "lassoSelect"
-    },
-    {
-      label: "Text",
-      icon: <LuType />,
-      onClick: () => setTool("text"),
-      toolValue: "text"
-    },
-    {
-      label: "Creador de formas",
-      icon: <FaDrawPolygon />,
-      onClick: () => setTool("polygonPencil"),
-      toolValue: "polygonPencil"
-    },
-    {
-      label: "Luminosidad",
-      icon: <LuSun />,
-      onClick: () => setTool("light"),
-      toolValue: "light"
-    },
-    {
-      label: "Oscurecer",
-      icon: <LuMoon />,
-      onClick: () => setTool("dark"),
-      toolValue: "dark"
+      label: "Curva",
+      icon: <FaBezierCurve />,
+      onClick: () => setTool("curve"),
+      toolValue: "curve"
     },
     {
       label: "Cuadrado",
@@ -283,18 +211,59 @@ function CanvasTracker({
       onClick: () => setTool("polygon"),
       toolValue: "polygon"
     },
+    
     {
-      label: "Linea",
-      icon: <TfiLayoutLineSolid />,
-      onClick: () => setTool("line"),
-      toolValue: "line"
+      label: "Difuminador",
+      icon: <MdBlurOn />,
+      onClick: () => setTool("blurFinger"),
+      toolValue: "blurFinger"
     },
     {
-      label: "Curva",
-      icon: <FaBezierCurve />,
-      onClick: () => setTool("curve"),
-      toolValue: "curve"
+      label: "Mezclador",
+      icon: <PiIntersectDuotone />,
+      onClick: () => setTool("smudge"),
+      toolValue: "smudge"
     },
+    {
+      label: "Clarificar",
+      icon: <MdOutlineDeblur/>,
+      onClick: () => setTool("deblur"),
+      toolValue: "deblur"
+    },
+    {
+      label: "Mover",
+      icon: <LuHand />,
+      onClick: () => setTool("move"),
+      toolValue: "move"
+    },
+   
+  
+    {
+      label: "Text",
+      icon: <LuType />,
+      onClick: () => setTool("text"),
+      toolValue: "text"
+    },
+    {
+      label: "Creador de formas",
+      icon: <FaDrawPolygon />,
+      onClick: () => setTool("polygonPencil"),
+      toolValue: "polygonPencil"
+    },
+    {
+      label: "Luminosidad",
+      icon: <LuSun />,
+      onClick: () => setTool("light"),
+      toolValue: "light"
+    },
+    {
+      label: "Oscurecer",
+      icon: <LuMoon />,
+      onClick: () => setTool("dark"),
+      toolValue: "dark"
+    },
+    
+    
   ];
 
   const [navConfigLateral, setNavLateralConfig] = useState({
@@ -337,6 +306,9 @@ const [rotationAngle, setRotationAngle] = useState(0);
 const webglRendererRef = useRef(null);
 const textureRef = useRef(null);
 
+//PARA EXPORTAR:
+
+const [showExporter, setShowExporter] = useState(false);
 
   // Refs para inicio de herramientas
   const squareStartRef = useRef(null);
@@ -348,7 +320,7 @@ const textureRef = useRef(null);
   
 //pencil perfect
 
-const [perfectCurves, setPerfectCurves] = useState(false);
+
 
   // Estados principales
 
@@ -358,6 +330,7 @@ const [perfectCurves, setPerfectCurves] = useState(false);
   const [color, setColor] = useState({ r: 0, g: 0, b: 0, a: 1 });
   const [activeGrid, setActiveGrid] = useState(true);
   const [rotationAngleSelection, setRotationAngleSelection] = useState(0);
+  const [threeJsVisualizer, setThreeJsVisualizer] = useState(false);
 
   // Estados para herramientas específicas
   const [curveState, setCurveState] = useState("idle");
@@ -371,6 +344,9 @@ const [perfectCurves, setPerfectCurves] = useState(false);
   const lineButton = useRef(null);
   const curveButton = useRef(null);
   const [copiedPixels, setCopiedPixels] = useState(null);
+  //estado para eyedropper
+
+  const [eyeDropperColor, setEyeDropperColor] = useState('#ffffff');
 
   // Configuración del canvas
   const [totalWidth, setTotalWidth] = useState(initialWidth);
@@ -450,6 +426,7 @@ const [perfectCurves, setPerfectCurves] = useState(false);
     viewportToCanvasCoords,
     drawPixelLine,
     getLayerData,
+    getCompositeLayerData,
     erasePixels,
     floodFill,
     gradientFloodFill,
@@ -557,6 +534,17 @@ const [perfectCurves, setPerfectCurves] = useState(false);
     //gestion del data url:
     createLayerAndPaintDataUrlCentered,
 
+    //el verdadero onion skin:
+    onionFramesConfig, // Recibir la configuración actual del estado principal
+  setOnionFramesConfig, // Función para actualizar la configuración
+  updateFrameConfig,
+  addPreviousFrame,
+  addNextFrame,
+  removeFrame,
+  toggleOnionFrames,
+  applyOnionFramesPreset,
+  clearTintCache,
+
     //gestión del aislamiento de pixeles:
    
   } = useLayerManager({
@@ -604,7 +592,7 @@ const canPaintAtPixel = useCallback((x, y) => {
 
 
 
-
+const pencilPerfectButtonRef = useRef(null);
   //Funcion de guardado:
 
 
@@ -718,13 +706,14 @@ const [isDraggingCorners, setIsDraggingCorners] = useState(false);
  
 
   //===============================Logica de canvas de espejo ====================================================//
+
   function adjustToPerfectCurves(coordinates) {
     // Validar que el array no esté vacío
-    if (!coordinates || coordinates.length === 0) {
-      return [];
+    if (!coordinates || coordinates.length <= 1) {
+      return coordinates ? [...coordinates] : [];
     }
   
-    // Eliminar coordenadas repetidas consecutivas
+    // PASO 1: Eliminar coordenadas repetidas (duplicados consecutivos)
     const uniqueCoords = [];
     for (let i = 0; i < coordinates.length; i++) {
       if (i === 0 || 
@@ -734,167 +723,418 @@ const [isDraggingCorners, setIsDraggingCorners] = useState(false);
       }
     }
   
-    if (uniqueCoords.length < 3) {
+    if (uniqueCoords.length <= 2) {
       return uniqueCoords;
     }
   
-    // Detectar segmentos que necesitan suavizado
-    const segments = detectCurveSegments(uniqueCoords);
-    
-    // Aplicar suavizado por segmentos
-    let result = [];
-    for (let segment of segments) {
-      if (segment.type === 'curve') {
-        const smoothed = applyCatmullRomSpline(segment.points);
-        result = result.concat(smoothed);
-      } else {
-        result = result.concat(segment.points);
-      }
-    }
-  
-    return removeDuplicatePoints(result);
-  }
-  
-  function detectCurveSegments(points) {
-    const segments = [];
-    let currentSegment = { type: 'line', points: [points[0]] };
-    
-    for (let i = 1; i < points.length - 1; i++) {
-      const prev = points[i - 1];
-      const current = points[i];
-      const next = points[i + 1];
-      
-      // Calcular el ángulo de curvatura
-      const curvature = calculateCurvature(prev, current, next);
-      
-      // Si la curvatura es significativa, es parte de una curva
-      if (Math.abs(curvature) > 0.1) {
-        if (currentSegment.type === 'line') {
-          // Finalizar segmento de línea y empezar curva
-          if (currentSegment.points.length > 1) {
-            segments.push(currentSegment);
-          }
-          currentSegment = { type: 'curve', points: [prev, current] };
-        }
-        currentSegment.points.push(next);
-      } else {
-        if (currentSegment.type === 'curve') {
-          // Finalizar segmento de curva y empezar línea
-          segments.push(currentSegment);
-          currentSegment = { type: 'line', points: [current] };
-        }
-        currentSegment.points.push(next);
-      }
-    }
-    
-    // Agregar el último segmento
-    if (currentSegment.points.length > 1) {
-      segments.push(currentSegment);
-    }
-    
-    return segments;
-  }
-  
-  function calculateCurvature(p1, p2, p3) {
-    // Calcular vectores
-    const v1 = { x: p2.x - p1.x, y: p2.y - p1.y };
-    const v2 = { x: p3.x - p2.x, y: p3.y - p2.y };
-    
-    // Producto cruzado para determinar curvatura
-    const cross = v1.x * v2.y - v1.y * v2.x;
-    const mag1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y);
-    const mag2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
-    
-    if (mag1 === 0 || mag2 === 0) return 0;
-    
-    return cross / (mag1 * mag2);
-  }
-  
-  function applyCatmullRomSpline(points) {
-    if (points.length < 4) {
-      return points;
-    }
-    
-    const result = [points[0]];
-    
-    // Para cada segmento entre puntos de control
-    for (let i = 0; i < points.length - 3; i++) {
-      const p0 = points[i];
-      const p1 = points[i + 1];
-      const p2 = points[i + 2];
-      const p3 = points[i + 3];
-      
-      // Generar puntos interpolados usando Catmull-Rom
-      const steps = Math.max(
-        Math.abs(p2.x - p1.x),
-        Math.abs(p2.y - p1.y),
-        3
-      );
-      
-      for (let t = 0; t <= 1; t += 1 / steps) {
-        if (t === 0 && i > 0) continue; // Evitar duplicados
-        
-        const point = catmullRomInterpolate(p0, p1, p2, p3, t);
-        result.push({
-          x: Math.round(point.x),
-          y: Math.round(point.y)
-        });
-      }
-    }
-    
-    // Agregar los últimos puntos
-    result.push(points[points.length - 2]);
-    result.push(points[points.length - 1]);
-    
-    return result;
-  }
-  
-  function catmullRomInterpolate(p0, p1, p2, p3, t) {
-    const t2 = t * t;
-    const t3 = t2 * t;
-    
-    // Coeficientes de Catmull-Rom
-    const c0 = -0.5 * t3 + t2 - 0.5 * t;
-    const c1 = 1.5 * t3 - 2.5 * t2 + 1;
-    const c2 = -1.5 * t3 + 2 * t2 + 0.5 * t;
-    const c3 = 0.5 * t3 - 0.5 * t2;
-    
-    return {
-      x: c0 * p0.x + c1 * p1.x + c2 * p2.x + c3 * p3.x,
-      y: c0 * p0.y + c1 * p1.y + c2 * p2.y + c3 * p3.y
-    };
-  }
-  
-  function removeDuplicatePoints(points) {
+    // PASO 2: Eliminar SOLO escalones innecesarios
     const result = [];
-    for (let i = 0; i < points.length; i++) {
-      if (i === 0 || 
-          points[i].x !== points[i-1].x || 
-          points[i].y !== points[i-1].y) {
-        result.push(points[i]);
+    let c = 0;
+  
+    while (c < uniqueCoords.length) {
+      let shouldSkip = false;
+  
+      // Verificar si es un escalón innecesario (solo esquinas L)
+      if (c > 0 && c + 1 < uniqueCoords.length) {
+        const prev = uniqueCoords[c - 1];
+        const current = uniqueCoords[c];
+        const next = uniqueCoords[c + 1];
+  
+        shouldSkip = isStairStepPoint(prev, current, next);
       }
+  
+      if (shouldSkip) {
+        c++;
+        continue;
+      }
+  
+      // Agregar el punto actual
+      result.push({x: uniqueCoords[c].x, y: uniqueCoords[c].y});
+      c++;
     }
+  
     return result;
   }
   
-  // Ejemplo de uso con una curva irregular:
-  const coordinates = [
-    {x: 10, y: 20},
-    {x: 15, y: 18},
-    {x: 20, y: 15},
-    {x: 25, y: 12},
-    {x: 30, y: 10},
-    {x: 35, y: 12},
-    {x: 40, y: 15},
-    {x: 45, y: 20},
-    {x: 50, y: 25}
+  function isStairStepPoint(prev, current, next) {
+    // SOLO detectar escalones en esquinas L
+    // Un punto es escalón si:
+    // 1. Está alineado horizontal O verticalmente con el anterior
+    // 2. Está alineado horizontal O verticalmente con el siguiente  
+    // 3. El anterior y siguiente NO están en la misma línea
+    // 4. Forma exactamente una esquina de 90 grados
+    
+    const prevAlignedH = (prev.x === current.x); // alineado horizontalmente con anterior
+    const prevAlignedV = (prev.y === current.y); // alineado verticalmente con anterior
+    const nextAlignedH = (next.x === current.x); // alineado horizontalmente con siguiente
+    const nextAlignedV = (next.y === current.y); // alineado verticalmente con siguiente
+    
+    // Debe estar alineado con ambos puntos (anterior y siguiente)
+    const alignedWithPrev = prevAlignedH || prevAlignedV;
+    const alignedWithNext = nextAlignedH || nextAlignedV;
+    
+    if (!alignedWithPrev || !alignedWithNext) {
+      return false; // No es un escalón si no está perfectamente alineado
+    }
+    
+    // No deben estar todos en la misma línea (ni horizontal ni vertical)
+    const allSameX = (prev.x === current.x && current.x === next.x);
+    const allSameY = (prev.y === current.y && current.y === next.y);
+    
+    if (allSameX || allSameY) {
+      return false; // Es una línea recta, no tocar
+    }
+    
+    // Verificar que sea exactamente una esquina L (90 grados)
+    // Caso 1: Horizontal -> Vertical (prev-current horizontal, current-next vertical)
+    const isLCorner1 = (prevAlignedV && nextAlignedH);
+    // Caso 2: Vertical -> Horizontal (prev-current vertical, current-next horizontal)  
+    const isLCorner2 = (prevAlignedH && nextAlignedV);
+    
+    return isLCorner1 || isLCorner2;
+  }
+  
+  // Función auxiliar para mostrar exactamente qué se está eliminando
+  function debugStairSteps(coordinates) {
+    console.log("=== ANÁLISIS DE ESCALONES ===");
+    
+    const unique = [];
+    for (let i = 0; i < coordinates.length; i++) {
+      if (i === 0 || 
+          coordinates[i].x !== coordinates[i-1].x || 
+          coordinates[i].y !== coordinates[i-1].y) {
+        unique.push({...coordinates[i], index: i});
+      }
+    }
+    
+    console.log("Puntos únicos:", unique.length);
+    
+    for (let i = 1; i < unique.length - 1; i++) {
+      const prev = unique[i - 1];
+      const current = unique[i];
+      const next = unique[i + 1];
+      
+      if (isStairStepPoint(prev, current, next)) {
+        console.log(`Escalón detectado en (${current.x},${current.y}) - será eliminado`);
+      }
+    }
+    
+    const result = adjustToPerfectCurves(coordinates);
+    console.log("Resultado:", result.length, "puntos");
+    console.log("Escalones eliminados:", unique.length - result.length);
+    
+    return result;
+  }
+
+//Obtener rápido el nombre de una capa: 
+const getActiveLayerName = useCallback(() => {
+  const activeLayer = layers.find(layer => layer.id === activeLayerId);
+  return activeLayer?.name || 'Capa sin nombre';
+}, [layers, activeLayerId]);
+
+
+//Lógica para el gotero: 
+// 3. FUNCIÓN PRINCIPAL: Obtener color del pixel clickeado
+const getPixelColorAt = useCallback(async (x, y) => {
+  if (!activeLayerId) {
+    console.warn('No hay capa activa para obtener color');
+    return null;
+  }
+
+  try {
+    // Asegurar que las coordenadas estén dentro del canvas
+    const clampedX = Math.max(0, Math.min(totalWidth - 1, Math.round(x)));
+    const clampedY = Math.max(0, Math.min(totalHeight - 1, Math.round(y)));
+
+    // Obtener datos del pixel en la posición específica
+    const pixelData = await getCompositeLayerData(clampedX, clampedY, 1, 1);
+    if (!pixelData || !pixelData.data) {
+      console.warn('No se pudieron obtener los datos del pixel');
+      return null;
+    }
+
+    const data = pixelData.data;
+    
+    // Extraer los valores RGBA
+    const color = {
+      r: data[0],
+      g: data[1], 
+      b: data[2],
+      a: data[3] / 255 // Convertir alpha de 0-255 a 0-1
+    };
+
+    console.log(`Color obtenido en (${clampedX}, ${clampedY}):`, color);
+    setEyeDropperColor(color);
+    return color;
+
+  } catch (error) {
+    console.error('Error obteniendo color del pixel:', error);
+    return null;
+  }
+}, [activeLayerId, getLayerData, totalWidth, totalHeight, setEyeDropperColor]);
+
+// 4. FUNCIÓN: Aplicar color obtenido
+const applyEyeDropperColor = useCallback((color, buttonPressed) => {
+  if (!color) return;
+
+  // Normalizar el color para asegurar que esté en el formato correcto
+  const normalizedColor = {
+    r: Math.round(Math.max(0, Math.min(255, color.r))),
+    g: Math.round(Math.max(0, Math.min(255, color.g))),
+    b: Math.round(Math.max(0, Math.min(255, color.b))),
+    a: Math.max(0, Math.min(1, color.a))
+  };
+
+  // GUARDAR EN LA VARIABLE eyeDropperColor
+  setEyeDropperColor(normalizedColor);
+  console.log('Color capturado con EyeDropper:', normalizedColor);
+
+  // Opcional: También aplicar según el botón presionado si quieres mantener esa funcionalidad
+  if (buttonPressed === "left" || buttonPressed === true) {
+    // Click izquierdo: establecer como color principal (foreground)
+    setToolParameters(prev => ({
+      ...prev,
+      foregroundColor: normalizedColor
+    }));
+    console.log('Color también establecido como foreground');
+  } else if (buttonPressed === "right") {
+    // Click derecho: establecer como color de fondo (background)
+    setToolParameters(prev => ({
+      ...prev,
+      backgroundColor: normalizedColor
+    }));
+    console.log('Color también establecido como background');
+  }
+
+  // Opcional: Cambiar automáticamente a la herramienta de pincel después de usar el gotero
+  // setTool(TOOLS.paint);
+}, [setEyeDropperColor, setToolParameters]);
+
+  
+  // Ejemplos específicos de escalones
+  const stairPattern = [
+    {x: 0, y: 0},
+    {x: 1, y: 0},   // horizontal
+    {x: 1, y: 1},   // escalón - DEBE eliminarse
+    {x: 2, y: 1},   // horizontal
+    {x: 2, y: 2},   // escalón - DEBE eliminarse
+    {x: 3, y: 2},   // horizontal
+    {x: 3, y: 3}    // fin
   ];
   
-  const smoothed = adjustToPerfectCurves(coordinates);
-  console.log("Coordenadas originales:", coordinates);
-  console.log("Coordenadas suavizadas:", smoothed);
-  console.log("Puntos generados:", smoothed.length);
+  const diagonalCurve = [
+    {x: 0, y: 0},
+    {x: 1, y: 1},   // diagonal - NO debe eliminarse
+    {x: 2, y: 2},   // diagonal - NO debe eliminarse
+    {x: 3, y: 3},   // diagonal - NO debe eliminarse
+    {x: 4, y: 4}
+  ];
+  
+  const mixedPattern = [
+    {x: 0, y: 0},
+    {x: 2, y: 0},   // línea horizontal - conservar
+    {x: 2, y: 1},   // escalón - eliminar
+    {x: 4, y: 1},   // horizontal
+    {x: 5, y: 2},   // diagonal - conservar
+    {x: 6, y: 3},   // diagonal - conservar
+    {x: 6, y: 5}    // vertical - conservar
+  ];
+  
+
+  //
+
+
+//version 2:
+
+
+  
   // Función para dibujar preview de curva
+  const drawQuadraticCurve = useCallback(
+    (ctx, start, end, control, width, color) => {
+      ctx.save();
+      ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
+  
+      const distance = Math.max(
+        Math.abs(end.x - start.x) + Math.abs(end.y - start.y),
+        Math.abs(control.x - start.x) + Math.abs(control.y - start.y),
+        Math.abs(control.x - end.x) + Math.abs(control.y - end.y)
+      );
+  
+      const steps = Math.max(distance * 3, 50);
+      const points = [];
+  
+      // Calcular puntos originales de la curva cuadrática
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const x = Math.round(
+          (1 - t) * (1 - t) * start.x +
+            2 * (1 - t) * t * control.x +
+            t * t * end.x
+        );
+        const y = Math.round(
+          (1 - t) * (1 - t) * start.y +
+            2 * (1 - t) * t * control.y +
+            t * t * end.y
+        );
+        points.push({ x, y });
+      }
+  
+      // Función auxiliar para detectar escalones
+      function isStairStepPoint(prev, current, next) {
+        // Detectar si forma un escalón en L (horizontal-vertical o vertical-horizontal)
+        const isHorizontalThenVertical = 
+          (prev.y === current.y && current.x === next.x) ||
+          (prev.x === current.x && current.y === next.y);
+        
+        return isHorizontalThenVertical;
+      }
+  
+      // Tu función de mejora
+      function adjustToPerfectCurves(coordinates) {
+        // Validar que el array no esté vacío
+        if (!coordinates || coordinates.length <= 1) {
+          return coordinates ? [...coordinates] : [];
+        }
+      
+        // PASO 1: Eliminar coordenadas repetidas (duplicados consecutivos)
+        const uniqueCoords = [];
+        for (let i = 0; i < coordinates.length; i++) {
+          if (i === 0 || 
+              coordinates[i].x !== coordinates[i-1].x || 
+              coordinates[i].y !== coordinates[i-1].y) {
+            uniqueCoords.push({x: coordinates[i].x, y: coordinates[i].y});
+          }
+        }
+      
+        if (uniqueCoords.length <= 2) {
+          return uniqueCoords;
+        }
+      
+        // PASO 2: Eliminar SOLO escalones innecesarios
+        const result = [];
+        let c = 0;
+      
+        while (c < uniqueCoords.length) {
+          let shouldSkip = false;
+      
+          // Verificar si es un escalón innecesario (solo esquinas L)
+          if (c > 0 && c + 1 < uniqueCoords.length) {
+            const prev = uniqueCoords[c - 1];
+            const current = uniqueCoords[c];
+            const next = uniqueCoords[c + 1];
+      
+            shouldSkip = isStairStepPoint(prev, current, next);
+          }
+      
+          if (shouldSkip) {
+            c++;
+            continue;
+          }
+      
+          // Agregar el punto actual
+          result.push({x: uniqueCoords[c].x, y: uniqueCoords[c].y});
+          c++;
+        }
+      
+        return result;
+      }
+  
+      // APLICAR LA FUNCIÓN DE MEJORA A LOS PUNTOS
+      const adjustedPoints = adjustToPerfectCurves(points);
+  
+      // Función para dibujar líneas pixel-perfect
+      const drawPixelPerfectLine = (x0, y0, x1, y1, width) => {
+        const dx = Math.abs(x1 - x0);
+        const dy = -Math.abs(y1 - y0);
+        const sx = x0 < x1 ? 1 : -1;
+        const sy = y0 < y1 ? 1 : -1;
+        let err = dx + dy;
+        let x = x0,
+          y = y0;
+  
+        const offset = Math.floor(width / 2);
+        const drawnPixels = new Set();
+  
+        while (true) {
+          for (let dy = 0; dy < width; dy++) {
+            for (let dx = 0; dx < width; dx++) {
+              const px = x + dx - offset;
+              const py = y + dy - offset;
+              const key = `${px},${py}`;
+  
+              if (
+                !drawnPixels.has(key) &&
+                px >= 0 &&
+                px < ctx.canvas.width &&
+                py >= 0 &&
+                py < ctx.canvas.height
+              ) {
+                ctx.fillRect(px, py, 1, 1);
+                drawnPixels.add(key);
+              }
+            }
+          }
+  
+          if (x === x1 && y === y1) break;
+          const e2 = 2 * err;
+          if (e2 >= dy) {
+            err += dy;
+            x += sx;
+          }
+          if (e2 <= dx) {
+            err += dx;
+            y += sy;
+          }
+        }
+      };
+  
+      // Dibujar líneas usando los puntos ajustados
+      for (let i = 0; i < adjustedPoints.length - 1; i++) {
+        const current = adjustedPoints[i];
+        const next = adjustedPoints[i + 1];
+  
+        if (current.x !== next.x || current.y !== next.y) {
+          drawPixelPerfectLine(current.x, current.y, next.x, next.y, width);
+        }
+      }
+  
+      // Dibujar puntos de inicio y fin
+      const offset = Math.floor(width / 2);
+  
+      for (let dy = 0; dy < width; dy++) {
+        for (let dx = 0; dx < width; dx++) {
+          const px = start.x + dx - offset;
+          const py = start.y + dy - offset;
+          if (
+            px >= 0 &&
+            px < ctx.canvas.width &&
+            py >= 0 &&
+            py < ctx.canvas.height
+          ) {
+            ctx.fillRect(px, py, 1, 1);
+          }
+        }
+      }
+  
+      for (let dy = 0; dy < width; dy++) {
+        for (let dx = 0; dx < width; dx++) {
+          const px = end.x + dx - offset;
+          const py = end.y + dy - offset;
+          if (
+            px >= 0 &&
+            px < ctx.canvas.width &&
+            py >= 0 &&
+            py < ctx.canvas.height
+          ) {
+            ctx.fillRect(px, py, 1, 1);
+          }
+        }
+      }
+  
+      ctx.restore();
+    },
+    [toolParameters]
+  );
   const drawPreviewCurve = (start, end, control, width) => {
     const distance = Math.max(
       Math.abs(end.x - start.x) + Math.abs(end.y - start.y),
@@ -1348,6 +1588,47 @@ const [isDraggingCorners, setIsDraggingCorners] = useState(false);
     ctx.font = "12px monospace";
     ctx.fillText(`${rectWidth}x${rectHeight}`, screenX + 5, screenY + 15);
   };
+  const handlePixelDataFromThreeJS = useCallback((pixelData) => {
+    if (!activeLayerId) {
+      console.error('❌ No hay capa activa seleccionada');
+      return;
+    }
+  
+    if (!pixelData || pixelData.length === 0) {
+      console.warn('⚠️ No hay datos de píxeles para aplicar');
+      return;
+    }
+  
+    try {
+      // ✅ DETERMINAR RESOLUCIÓN BASADA EN LOS DATOS RECIBIDOS
+      // Buscar la coordenada Y máxima para inferir el tamaño
+      const maxY = Math.max(...pixelData.map(p => p.y));
+      const maxX = Math.max(...pixelData.map(p => p.x));
+      const canvasSize = Math.max(maxX, maxY) + 1; // +1 porque las coordenadas empiezan en 0
+      
+      // Aplicar píxeles usando drawOnLayer con FLIP Y
+      drawOnLayer(activeLayerId, (ctx) => {
+        ctx.globalCompositeOperation = "source-over";
+        
+        pixelData.forEach(pixel => {
+          if (pixel && pixel.color) {
+            // ✅ FLIP Y: Invertir la coordenada Y basado en el tamaño del canvas
+            const flippedY = canvasSize - pixel.y - 1;
+            
+            ctx.fillStyle = `rgba(${pixel.color.r}, ${pixel.color.g}, ${pixel.color.b}, ${pixel.color.a / 255})`;
+            ctx.fillRect(pixel.x, flippedY, 1, 1); // ✅ Usar flippedY
+          }
+        });
+      });
+      
+      console.log(`🎉 ${pixelData.length} píxeles aplicados exitosamente con efectos (orientación corregida)`);
+      alert(`✅ Modelo 3D convertido: ${pixelData.length} píxeles aplicados`);
+      
+    } catch (error) {
+      console.error('❌ Error al aplicar píxeles:', error);
+      alert('❌ Error al aplicar los píxeles al editor');
+    }
+  }, [activeLayerId, drawOnLayer]);
 
   //Funciones para manejar el triangulo:
   // 2. Función para dibujar un triángulo
@@ -2644,7 +2925,7 @@ const [isDraggingCorners, setIsDraggingCorners] = useState(false);
       floodFill(activeLayerId, coords.x, coords.y, color);
       getMatchingPixels(activeLayerId, coords.x, coords.y);
     },
-    [layers, activeLayerId, toolParameters, zoom]
+    [layers, activeLayerId, toolParameters, zoom, viewportOffset]
   );
 
   const rellenarGradiente = useCallback(
@@ -2970,6 +3251,9 @@ const putImageDataOptimized = useCallback((imageData, x = 0, y = 0) => {
   }
 }, []);
 
+
+
+
 // 4. ACTUALIZAR LA FUNCIÓN initializeImageDataCache EXISTENTE
 const initializeImageDataCacheOptimized = (ctx) => {
   const canvas = ctx.canvas;
@@ -3251,11 +3535,87 @@ const applyCurveSmoothing = useCallback((points, perfectionLevel) => {
 }, []);
 // Asegurarse de que perfection esté en toolParameters (en tu CustomTool component)
 // toolParameters.perfection = 0 a 1 (0 = sin suavizado, 1 = máximo suavizado)
+const resetCanvasToolState = useCallback(() => {
+  console.log("🧹 Reseteando estado de herramientas del canvas");
+  
+  // Limpiar todas las referencias globales
+  lastPixelRef.current = null;
+  cachedImageDataRef.current = null;
+  
+  // Limpiar referencias de curva
+  curveStartRef.current = null;
+  curveEndRef.current = null;
+  curveControlRef.current = null;
+  curveButton.current = null;
+  setCurveState("idle");
+  setIsSettingControl(false);
+  
+  // Limpiar referencias de línea
+  lineStartRef.current = null;
+  lineButton.current = null;
+  
+  // Limpiar otras herramientas
+  squareStartRef.current = null;
+  triangleStartRef.current = null;
+  circleStartRef.current = null;
+  ellipseStartRef.current = null;
+  polygonStartRef.current = null;
+  
+  // Limpiar pattern offset
+  initialPatternOffset.current = null;
+  
+  // Limpiar perfect pencil
+  pencilPerfectPathRef.current = [];
+  pencilPerfectButtonRef.current = null;
+  
+  // Invalidar cache
+  cacheValidRef.current = false;
+}, [
+  setCurveState, 
+  setIsSettingControl
+]);
 
+// 2. USEEFFECT SEPARADO PARA LIMPIEZA AL CAMBIAR HERRAMIENTA
+useEffect(() => {
+  // Ejecutar limpieza cada vez que cambie la herramienta
+  resetCanvasToolState();
+}, [tool, resetCanvasToolState]);
   // Efecto principal para manejar el dibujo
   useEffect(() => {
 
- 
+    if (tool === TOOLS.eyeDropper) {
+      
+      if (isPressed && lastPixelRef.current === null) {
+        // Se acaba de presionar - obtener color inmediatamente
+        console.log("🎨 EyeDropper: Iniciando obtención de color");
+        const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
+        const canvasCoords = viewportToCanvasCoords(
+          viewportPixelCoords.x,
+          viewportPixelCoords.y
+        );
+  
+        // Ejecutar la obtención de color de forma asíncrona
+        getPixelColorAt(canvasCoords.x, canvasCoords.y)
+          .then(color => {
+            if (color) {
+              applyEyeDropperColor(color, isPressed);
+            } else {
+              console.warn('No se pudo obtener el color del pixel');
+            }
+          })
+          .catch(error => {
+            console.error('Error en EyeDropper:', error);
+          });
+  
+        // Marcar que ya se ejecutó
+        lastPixelRef.current = viewportPixelCoords;
+      } else if (!isPressed && lastPixelRef.current !== null) {
+        // Se acaba de soltar - limpiar
+        console.log("🎨 EyeDropper: Limpiando");
+        lastPixelRef.current = null;
+      }
+      return; // Salir temprano para no procesar otras herramientas
+    }
  
 
 
@@ -4040,8 +4400,7 @@ const applyCurveSmoothing = useCallback((points, perfectionLevel) => {
       return;
     }
 
-    if(tool === TOOLS.pencilPerfect){
-  
+    if (tool === TOOLS.paint && !isShiftPressed && toolParameters.perfectCurves) {
       const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
       const canvasCoords = viewportToCanvasCoords(
         viewportPixelCoords.x,
@@ -4052,8 +4411,11 @@ const applyCurveSmoothing = useCallback((points, perfectionLevel) => {
         console.log("se esta presionando el cursor en pincel perfect");
         // Mientras está presionado, recolectar coordenadas
         if (!lastPixelRef.current) {
-          // Primer punto - inicializar el path
+          // Primer punto - inicializar el path Y guardar qué botón fue presionado
           pencilPerfectPathRef.current = [canvasCoords];
+          // NUEVO: Guardar qué botón fue presionado (asumiendo que tienes esta info disponible)
+          // Reemplaza 'buttonPressed' con la variable real que contiene esta información
+          pencilPerfectButtonRef.current = isPressed; // 'left' o 'right'
         } else {
           // Agregar punto al path
           pencilPerfectPathRef.current.push(canvasCoords);
@@ -4066,17 +4428,15 @@ const applyCurveSmoothing = useCallback((points, perfectionLevel) => {
         console.log("se solto el cursor en pincel perfect");
         // Se soltó el cursor - ejecutar el dibujo si hay un path
         if (lastPixelRef.current && pencilPerfectPathRef.current.length > 0) {
+          // CORREGIDO: Usar la referencia del botón guardada al inicio del trazo
           const selectedColor =
-            lastPixelRef.current === "left" // Usar el último botón presionado
+            pencilPerfectButtonRef.current === "left"
               ? toolParameters.foregroundColor
-              : lastPixelRef.current === "right"
+              : pencilPerfectButtonRef.current === "right"
               ? toolParameters.backgroundColor
               : toolParameters.foregroundColor; // fallback a foreground
     
           // Obtener el path completo recolectado
-         
-          //const pathCoordinates = pencilPerfectPathRef.current;
-
           const pathCoordinates = adjustToPerfectCurves(pencilPerfectPathRef.current);
     
           drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
@@ -4246,6 +4606,7 @@ const applyCurveSmoothing = useCallback((points, perfectionLevel) => {
                   console.log("se actualizo el cache:");
                   // Inicializar ImageData cache
                   initializeImageDataCacheOptimized(ctx);
+                 
                   shouldInitializeCache = false;
                 }
               }
@@ -4474,10 +4835,12 @@ const applyCurveSmoothing = useCallback((points, perfectionLevel) => {
               ctx.globalAlpha = 1;
             } else {
               // MODO MANUAL ULTRA-OPTIMIZADO CON CACHE
+             
               if (shouldInitializeCache) {
                 console.log("se actualizo el cache:");
                 // Inicializar ImageData cache
                 initializeImageDataCacheOptimized(ctx);
+               
                 shouldInitializeCache = false;
               }
               
@@ -4628,10 +4991,12 @@ const applyCurveSmoothing = useCallback((points, perfectionLevel) => {
           // Limpiar después de dibujar
           pencilPerfectPathRef.current = [];
           lastPixelRef.current = null;
+          pencilPerfectButtonRef.current = null; // NUEVO: Limpiar también la referencia del botón
         }
         return;
       }
     }
+
    if (!isPressed || !activeLayerId || drawMode === "move") {
       lastPixelRef.current = null;
       return;
@@ -4677,8 +5042,59 @@ const applyCurveSmoothing = useCallback((points, perfectionLevel) => {
     // Declarar initialPatternOffset FUERA del useEffect, al nivel del componente
 
     // Dentro del bloque if (tool === TOOLS.paint) en el useEffect:
+    if (tool === TOOLS.paint2) {
+      drawOnLayer(activeLayerId, (ctx) => {
+        const canvas = ctx.canvas;
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+  
+        const width = toolParameters.width;
+        const half = Math.floor(width / 2);
+  
+        const drawDot = (x, y) => {
+          const offset = Math.floor(width / 2);
+          for (let dy = 0; dy < width; dy++) {
+            for (let dx = 0; dx < width; dx++) {
+              const px = x + dx - offset;
+              const py = y + dy - offset;
+        
+              if (px < 0 || px >= canvas.width || py < 0 || py >= canvas.height) continue;
+        
+              const index = (py * canvas.width + px) * 4;
+              data[index] = color.r;
+              data[index + 1] = color.g;
+              data[index + 2] = color.b;
+              data[index + 3] = color.a * 255;
+            }
+          }
+        };
+  
+        if (!lastPixelRef.current) {
+          drawDot(canvasCoords.x, canvasCoords.y);
+        } else {
+          // Bresenham's line
+          const last = viewportToCanvasCoords(lastPixelRef.current.x, lastPixelRef.current.y);
+          let x0 = last.x, y0 = last.y, x1 = canvasCoords.x, y1 = canvasCoords.y;
+          let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+          let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy;
+          let x = x0, y = y0;
+  
+          while (true) {
+            drawDot(x, y);
+            if (x === x1 && y === y1) break;
+            let e2 = 2 * err;
+            if (e2 >= dy) { err += dy; x += sx; }
+            if (e2 <= dx) { err += dx; y += sy; }
+          }
+        }
+  
+        ctx.putImageData(imageData, 0, 0);
+      });
+    }
 
-  if (tool === TOOLS.paint && !isShiftPressed) {
+
+
+  if (tool === TOOLS.paint && !isShiftPressed && !toolParameters.perfectCurves) {
    
  
   // Determinar el color basado en el botón presionado
@@ -6604,34 +7020,81 @@ const applyCurveSmoothing = useCallback((points, perfectionLevel) => {
       }));
     }
     
- 
-
+    
     if (tool === TOOLS.erase) {
       drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
-        ctx.globalCompositeOperation = "destination-out";
-        ctx.fillStyle = "rgba(0,0,0,1)";
-
-        if (!lastPixelRef.current) {
-          drawBrush(ctx, canvasCoords, toolParameters.width);
-        } else {
-          const lastCanvasCoords = viewportToCanvasCoords(
-            lastPixelRef.current.x,
-            lastPixelRef.current.y
-          );
-
-          drawPixelLine(
-            ctx,
-            lastCanvasCoords.x,
-            lastCanvasCoords.y,
-            canvasCoords.x,
-            canvasCoords.y,
-            toolParameters.width
-          );
+        // GUARDAR estado original COMPLETO
+        const originalState = {
+          globalCompositeOperation: ctx.globalCompositeOperation,
+          fillStyle: ctx.fillStyle,
+          strokeStyle: ctx.strokeStyle,
+          lineWidth: ctx.lineWidth,
+          globalAlpha: ctx.globalAlpha,
+          lineCap: ctx.lineCap,
+          lineJoin: ctx.lineJoin,
+          shadowColor: ctx.shadowColor,
+          shadowBlur: ctx.shadowBlur,
+          shadowOffsetX: ctx.shadowOffsetX,
+          shadowOffsetY: ctx.shadowOffsetY
+        };
+        
+        try {
+          // Aplicar configuraciones de goma
+          ctx.globalCompositeOperation = "destination-out";
+          ctx.fillStyle = "rgba(0,0,0,1)";
+    
+          if (!lastPixelRef.current) {
+            drawBrush(ctx, canvasCoords, toolParameters.width);
+          } else {
+            const lastCanvasCoords = viewportToCanvasCoords(
+              lastPixelRef.current.x,
+              lastPixelRef.current.y
+            );
+    
+            drawPixelLine(
+              ctx,
+              lastCanvasCoords.x,
+              lastCanvasCoords.y,
+              canvasCoords.x,
+              canvasCoords.y,
+              toolParameters.width
+            );
+          }
+        } finally {
+          // RESTAURAR estado original SIEMPRE (incluso si hay error)
+          Object.assign(ctx, originalState);
+   
+          // FORZAR limpieza adicional
+          ctx.save();
+          ctx.restore();
         }
       }));
     }
-
+  
     lastPixelRef.current = viewportPixelCoords;
+    return () => {
+      // Limpiar referencias cuando cambie la herramienta
+      if (tool !== TOOLS.curve) {
+        setCurveState("idle");
+        setIsSettingControl(false);
+        curveStartRef.current = null;
+        curveEndRef.current = null;
+        curveControlRef.current = null;
+        curveButton.current = null;
+      }
+      
+      // Limpiar referencias de otras herramientas
+      if (tool !== TOOLS.line) {
+        lineStartRef.current = null;
+        lineButton.current = null;
+      }
+      
+      // Si no es una herramienta de pintura, limpiar cache
+      if (![TOOLS.paint, TOOLS.dark, TOOLS.light].includes(tool)) {
+        cachedImageDataRef.current = null;
+        initialPatternOffset.current = null;
+      }
+    };
   }, [
     isPressed,
     relativeToTarget,
@@ -6646,6 +7109,9 @@ const applyCurveSmoothing = useCallback((points, perfectionLevel) => {
     curveState,
     mirrorState,
     isSpacePressed,
+    getPixelColorAt,
+    applyEyeDropperColor
+  
   ]);
 
 
@@ -7240,7 +7706,7 @@ useEffect(() => {
         }
 
         ctx.restore();
-      } else if ((tool === TOOLS.pencilPerfect) && !isShiftPressed) {
+      } else if ((tool === TOOLS.paint) && !isShiftPressed && toolParameters.perfectCurves) {
        
         console.log("el toolparametes de curvas es,", toolParameters.perfectCurves);
         // Determinar el color basado en el botón presionado
@@ -7252,7 +7718,7 @@ useEffect(() => {
             : toolParameters.foregroundColor; // fallback a foreground
       
         ctx.globalCompositeOperation = "source-over";
-        ctx.fillStyle = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, 0.7)`;
+        ctx.fillStyle = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, ${0.5})`;
        
         // Configuración básica
         const width = toolParameters?.width || 1;
@@ -7383,7 +7849,45 @@ useEffect(() => {
         else if (!isPressed) {
           drawPreviewWithMirrors(canvasCoords.x, canvasCoords.y);
         }
-      } else if (tool === TOOLS.erase) {
+      } 
+      
+      else if (tool === TOOLS.eyeDropper) {
+        // Preview simple para gotero
+        ctx.save();
+        
+        const screenX = (canvasCoords.x - viewportOffset.x) * zoom;
+        const screenY = (canvasCoords.y - viewportOffset.y) * zoom;
+        const size = 12; // Tamaño fijo para el preview
+        
+        // Círculo con cruz para indicar área de muestreo
+        ctx.strokeStyle = isPressed ? "rgba(255, 100, 0, 0.9)" : "rgba(0, 0, 0, 0.7)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, size, 0, 2 * Math.PI);
+        ctx.stroke();
+        
+        // Cruz central
+        ctx.beginPath();
+        ctx.moveTo(screenX - 6, screenY);
+        ctx.lineTo(screenX + 6, screenY);
+        ctx.moveTo(screenX, screenY - 6);
+        ctx.lineTo(screenX, screenY + 6);
+        ctx.stroke();
+        
+        // Mostrar color capturado si existe
+        if (eyeDropperColor && eyeDropperColor !== '#ffffff') {
+          let colorObj = typeof eyeDropperColor === 'string' 
+            ? hexToRgb(eyeDropperColor) 
+            : eyeDropperColor;
+            
+          ctx.fillStyle = `rgba(${colorObj.r}, ${colorObj.g}, ${colorObj.b}, ${colorObj.a || 1})`;
+          ctx.fillRect(screenX + 15, screenY - 4, 8, 8);
+          ctx.strokeRect(screenX + 15, screenY - 4, 8, 8);
+        }
+        
+        ctx.restore();
+      }
+      else if (tool === TOOLS.erase) {
         ctx.globalCompositeOperation = "source-over";
         ctx.fillStyle = "rgba(255, 0, 0, 0.3)";
       } else if ((tool === TOOLS.line || (isShiftPressed && tool=== TOOLS.paint)) && isPressed && lineStartRef.current) {
@@ -8410,47 +8914,77 @@ const [cumulativeRotationAngle, setCumulativeRotationAngle] = useState(0); // Á
 
 
   // Auto-crop de la selección
-  const autoCropSelection = useCallback(async () => {
-    if (!activeLayerId || !selectionCoords || selectionCoords.length < 1)
+  const autoCropSelection = useCallback(async (shouldAutoCrop = true) => {
+    if (!activeLayerId || !selectionCoords || selectionCoords.length < 2)
       return;
     console.log("autoCropSelection - selectionCoords:", selectionCoords);
-
-    // Calcular los bounds de TODOS los puntos de selección
-    let minX = Infinity,
-      minY = Infinity;
-    let maxX = -Infinity,
-      maxY = -Infinity;
-
-    selectionCoords.forEach((coord) => {
-      minX = Math.min(minX, coord.x);
-      minY = Math.min(minY, coord.y);
-      maxX = Math.max(maxX, coord.x);
-      maxY = Math.max(maxY, coord.y);
-    });
-
+    console.log("autoCropSelection - shouldAutoCrop:", shouldAutoCrop);
+  
+    // CAMBIO PRINCIPAL: Solo usar el primer y último punto para el rectángulo final
+    const startPoint = selectionCoords[0];
+    const endPoint = selectionCoords[selectionCoords.length - 1];
+  
+    const minX = Math.min(startPoint.x, endPoint.x);
+    const maxX = Math.max(startPoint.x, endPoint.x);
+    const minY = Math.min(startPoint.y, endPoint.y);
+    const maxY = Math.max(startPoint.y, endPoint.y);
+  
     const x = minX;
     const y = minY;
     const width = maxX - minX + 1;
     const height = maxY - minY + 1;
     const totalPixels = width * height;
-
+  
     console.log(
-      `Calculated bounds: x=${x}, y=${y}, width=${width}, height=${height}, totalPixels=${totalPixels}`
+      `Calculated bounds from start/end points: x=${x}, y=${y}, width=${width}, height=${height}, totalPixels=${totalPixels}`
     );
-
-    // Si el área es muy grande, usar estrategia optimizada
-    if (totalPixels > 1000000) {
-      // 1 millón de píxeles
-      console.log("Área muy grande, usando estrategia optimizada");
-
-      // Usar directamente las coordenadas de selección para calcular bounds
+  
+    // Si shouldAutoCrop es false, usar directamente los bounds originales
+    if (!shouldAutoCrop) {
+      console.log("Auto-crop disabled, using original selection bounds");
       const croppedBounds = {
         x: minX,
         y: minY,
         width: width,
         height: height,
       };
+      setCroppedSelectionBounds(croppedBounds);
+      setSelectionCoords([]);
+      
+      // Verificar si algún pixel del área seleccionada pertenece a un grupo
+      let groupFound = false;
+      let groupData = null;
 
+      for (let py = croppedBounds.y; py < croppedBounds.y + croppedBounds.height; py++) {
+        for (let px = croppedBounds.x; px < croppedBounds.x + croppedBounds.width; px++) {
+          const groupInfo = getPixelGroupAt(px, py, activeLayerId);
+          if (groupInfo) {
+            groupFound = true;
+            groupData = groupInfo;
+            break;
+          }
+        }
+        if (groupFound) break;
+      }
+
+      if (groupFound) {
+        console.log(`Pixel con grupo encontrado: ${JSON.stringify(groupData, null, 2)}`);
+      } else {
+        console.log("Ningún pixel dentro del área seleccionada pertenece a un grupo");
+      }
+      
+      return;
+    }
+
+    // Resto del código permanece igual para cuando shouldAutoCrop es true...
+    if (totalPixels > 1000000) {
+      console.log("Área muy grande, usando estrategia optimizada");
+      const croppedBounds = {
+        x: minX,
+        y: minY,
+        width: width,
+        height: height,
+      };
       setCroppedSelectionBounds(croppedBounds);
       setSelectionCoords([]);
       return;
@@ -9351,13 +9885,9 @@ const [cumulativeRotationAngle, setCumulativeRotationAngle] = useState(0); // Á
   ]);
   //  ============================ Logica de canvas de seleccion =================================================//
 
-  //// funcion especial para rotar:
-  /* 
-1. Se debe partir desde que se tiene una rotacion activa:  
 
-*/
 
-  //-----------------------------Funciones de accion para la selección---------------------------------------//
+// Funciones especificas de seleccion ==============================//
 
   const deleteSelection = () => {
     const canvas = selectionCanvasRef.current;
@@ -9370,7 +9900,7 @@ const [cumulativeRotationAngle, setCumulativeRotationAngle] = useState(0); // Á
     setSelectionCoords([]);
     setSelectedPixels([]);
     setOriginalPixelColors([]);
-
+    setRotationAngleSelection(0);
     setCroppedSelectionBounds(null);
     setDragOffset({ x: 0, y: 0 });
     setSelectionActive(false);
@@ -9528,22 +10058,6 @@ const cutSelection = useCallback(() => {
   console.log("Selección cortada - copiada al portapapeles y eliminada");
 }, [selectedPixels, copySelection, deleteSelection]);
 
-// 4. Función de debugging para rastrear el estado del portapapeles
-const debugClipboard = useCallback(() => {
-  console.log("=== ESTADO DEL PORTAPAPELES ===");
-  if (copiedPixels) {
-    console.log("Píxeles en portapapeles:", copiedPixels.pixels?.length || 0);
-    console.log("Timestamp de copia:", new Date(copiedPixels.timestamp || 0).toLocaleTimeString());
-    console.log("Offset:", copiedPixels.offset);
-    console.log("Bounds:", copiedPixels.bounds);
-    if (copiedPixels.pixels?.length > 0) {
-      console.log("Primer pixel:", copiedPixels.pixels[0]);
-    }
-  } else {
-    console.log("Portapapeles vacío");
-  }
-  console.log("=== FIN ESTADO PORTAPAPELES ===");
-}, [copiedPixels]);
   const pastePixels = useCallback(() => {
     // Limpiar selección actual si existe
     setPixelsAlreadyErased(true);
@@ -9640,6 +10154,7 @@ const debugClipboard = useCallback(() => {
     setIsolatedPixels(isolatedSelectedPixels);
 
   },[selectedPixels]);
+
   const groupSelection = useCallback(() => {
     if (!selectedPixels?.length) {
       alert("Selecciona píxeles primero");
@@ -9692,6 +10207,9 @@ const debugClipboard = useCallback(() => {
 
     // 3. Resetear los estados relacionados con la selección
   }, [selectedGroup, deletePixelGroup]);
+
+// Funciones especificas de seleccion ==============================//
+
 
   //Funciones de utilidad para layer manager:
   const handleSelectGroup = useCallback((pixels) => {
@@ -9781,58 +10299,89 @@ const debugClipboard = useCallback(() => {
   const colorSelection = useCallback(
     async (layerid, coords) => {
       setTool(TOOLS.select);
-
+  
       try {
         // 1. Limpiar selección anterior si existe
         if (selectionActive || selectedPixels.length > 0) {
           clearCurrentSelection();
         }
-
+  
         // 2. Obtener píxeles que coinciden con el color
         const pixelsByColor = getMatchingPixels(layerid, coords.x, coords.y);
-
+  
         if (!pixelsByColor || pixelsByColor.length === 0) {
           console.log("No se encontraron píxeles con ese color");
           return;
         }
-
-        // 3. NUEVA LÓGICA: En lugar de usar autoCropSelection,
-        // establecer directamente los píxeles seleccionados
-
-        // Calcular bounds reales de los píxeles encontrados
+  
+        // 3. Calcular bounds reales de los píxeles encontrados
         const xCoords = pixelsByColor.map((p) => p.x);
         const yCoords = pixelsByColor.map((p) => p.y);
         const minX = Math.min(...xCoords);
         const maxX = Math.max(...xCoords);
         const minY = Math.min(...yCoords);
         const maxY = Math.max(...yCoords);
-
-        // 4. Establecer directamente los píxeles y sus propiedades
-        setSelectedPixels(pixelsByColor);
-
-        // 5. Guardar colores originales
-        const originalColors = pixelsByColor.map((pixel) => pixel.color);
-        setOriginalPixelColors(originalColors);
-
-        // 6. Establecer bounds del área seleccionada
-        setCroppedSelectionBounds({
+  
+        const bounds = {
           x: minX,
           y: minY,
           width: maxX - minX + 1,
           height: maxY - minY + 1,
-        });
-
+        };
+  
+        // 4. Establecer píxeles seleccionados
+        setSelectedPixels(pixelsByColor);
+  
+        // 5. Guardar colores originales
+        const originalColors = pixelsByColor.map((pixel) => pixel.color);
+        setOriginalPixelColors(originalColors);
+  
+        // *** AGREGADO: Estados originales para RotSprite ***
+        // Crear copias profundas de los píxeles originales
+        const originalPixelsCopy = pixelsByColor.map((pixel) => ({
+          x: pixel.x,
+          y: pixel.y,
+          color: {
+            r: pixel.color.r,
+            g: pixel.color.g,
+            b: pixel.color.b,
+            a: pixel.color.a
+          }
+        }));
+  
+        // Crear copia profunda de los bounds originales
+        const originalBoundsCopy = {
+          x: bounds.x,
+          y: bounds.y,
+          width: bounds.width,
+          height: bounds.height
+        };
+  
+        // Guardar estados originales para RotSprite
+        setOriginalSelectedPixels(originalPixelsCopy);
+        setOriginalSelectionBounds(originalBoundsCopy);
+        
+        // Resetear ángulo de rotación acumulado
+        setCumulativeRotationAngle(0);
+        setRotationAngleSelection(0);
+        // *** FIN AGREGADO ***
+  
+        // 6. Establecer bounds del área seleccionada
+        setCroppedSelectionBounds(bounds);
+  
         // 7. Activar la selección
         setSelectionActive(true);
         setFinalizedSelection(true);
-
+  
         // 8. Resetear offset de arrastre
         setDragOffset({ x: 0, y: 0 });
-
-        // 9. Limpiar coordenadas de selección ya que no las necesitamos
+  
+        // 9. Limpiar coordenadas de selección
         setSelectionCoords([]);
-
+  
         console.log(`Seleccionados ${pixelsByColor.length} píxeles por color`);
+        console.log('Estado original guardado para RotSprite');
+        
       } catch (error) {
         console.error("Error al seleccionar por color:", error);
         // Limpiar estados en caso de error
@@ -9841,6 +10390,9 @@ const debugClipboard = useCallback(() => {
         setSelectedPixels([]);
         setOriginalPixelColors([]);
         setSelectionCoords([]);
+        setOriginalSelectedPixels([]); // Limpiar también estados de RotSprite
+        setOriginalSelectionBounds(null);
+        setCumulativeRotationAngle(0);
       }
     },
     [
@@ -9857,6 +10409,11 @@ const debugClipboard = useCallback(() => {
       setFinalizedSelection,
       setDragOffset,
       setSelectionCoords,
+      // Nuevas dependencias para RotSprite
+      setOriginalSelectedPixels,
+      setOriginalSelectionBounds,
+      setCumulativeRotationAngle,
+      setRotationAngleSelection
     ]
   );
 
@@ -10025,6 +10582,18 @@ const debugClipboard = useCallback(() => {
         zoom={zoom}
         isPlaying={isPlaying}
         setIsPlaying={setIsPlaying}
+        eyeDropperColor={eyeDropperColor}
+//el verdadero onion skin:
+onionFramesConfig={onionFramesConfig}// Recibir la configuración actual del estado principal
+  setOnionFramesConfig={setOnionFramesConfig}
+  updateFrameConfig={updateFrameConfig}
+  addPreviousFrame={addPreviousFrame}
+  addNextFrame={addNextFrame}
+  removeFrame={removeFrame}
+  toggleOnionFrames={toggleOnionFrames}
+  applyOnionFramesPreset={applyOnionFramesPreset}
+  clearTintCache={clearTintCache}
+        
       />
     );
   }, [
@@ -10036,70 +10605,177 @@ const debugClipboard = useCallback(() => {
     framesResume,
     selectedPixels,
     dragOffset,
-    layers
-
+    layers,
+    eyeDropperColor,
+    initialHeight,
+    initialWidth,
+    onionFramesConfig
     // NO incluir position ni relativeToTarget aquí
   ]);
 
-  const MemoizedRightPanel = useMemo(() => {
+  const MemoizedFramesTimeline = useMemo(() => {
     return (
-      <div
-        className="right-panel"
-        style={{
-          padding: 10,
-        }}
-      >
-        /
-        {/*
-        Necesito solucionar problemas de optimizacion aqui:
-        true && (
-          <ViewportNavigator
-            totalWidth={totalWidth}
-            totalHeight={totalHeight}
-            viewportWidth={viewportWidth}
-            viewportHeight={viewportHeight}
-            viewportOffset={viewportOffset}
-            zoom={zoom}
-            onViewportMove={moveViewport}
-            onZoomChange={handleZoomChange} // Nueva prop necesaria
-            compositeCanvasRef={compositeCanvasRef}
-            getFullCanvas={getFullCanvas}
-          />
-        )*/}
-        <LayerColor
-          tool={tool}
-          toolParameters={toolParameters}
-          setToolParameters={setToolParameters}
-          //funcion para obtener informacion de pixeles pintados:
-          getLayerPixelData={getLayerPixelData}
-          paintPixelsRGBA={paintPixelsRGBA}
-          //otras props necesarias,
-          currentFrame={currentFrame}
-          activeLayerId={activeLayerId}
-          isPressed={isPressed}
-        />
-        <PlayAnimation frames={frames} />
-      </div>
+      <FramesTimeline 
+        updateLayerZIndex={updateLayerZIndex}
+        moveLayerToPosition={moveLayerToPosition}
+        moveGroupToLayer={moveGroupToLayer}
+        moveGroupToPosition={moveGroupToPosition}
+        layers={layers}
+        addLayer={addLayer}
+        deleteLayer={deleteLayer}
+        moveLayerUp={moveLayerUp}
+        moveLayerDown={moveLayerDown}
+        toggleLayerVisibility={toggleLayerVisibility}
+        renameLayer={renameLayer}
+        clearLayer={clearLayer}
+        activeLayerId={activeLayerId}
+        setActiveLayerId={setActiveLayerId}
+        pixelGroups={pixelGroups}
+        selectedGroup={selectedGroup}
+        selectedPixels={selectedPixels}
+        createPixelGroup={createPixelGroup}
+        deletePixelGroup={deletePixelGroup}
+        getLayerGroups={getLayerGroups}
+        selectPixelGroup={selectPixelGroup}
+        clearSelectedGroup={clearSelectedGroup}
+        renamePixelGroup={renamePixelGroup}
+        toggleGroupVisibility={toggleGroupVisibility}
+        setSelectedPixels={setSelectedPixels}
+        handleSelectGroup={handleSelectGroup}
+        dragOffset={dragOffset}
+        setSelectionCoords={setSelectionCoords}
+        setSelectionActive={setSelectionActive}
+        setCroppedSelectionBounds={setCroppedSelectionBounds}
+        autoCropSelection={autoCropSelection}
+        setOriginalPixelColors={setOriginalPixelColors}
+        setDragOffset={setDragOffset}
+        setTool={setTool}
+        clearCurrentSelection={clearCurrentSelection}
+        getHierarchicalLayers={getHierarchicalLayers}
+        getMainLayers={getMainLayers}
+        getGroupLayersForParent={getGroupLayersForParent}
+        selectionActive={selectionActive}
+        selectAllCanvas={selectAllCanvas}
+        duplicateLayer={duplicateLayer}
+        // Props para animacion:
+        frames={frames}
+        currentFrame={currentFrame}
+        frameCount={frameCount}
+        createFrame={createFrame}
+        setActiveFrame={setActiveFrame}
+        deleteFrame={deleteFrame}
+        duplicateFrame={duplicateFrame}
+        saveCurrentFrameState={saveCurrentFrameState}
+        getFramesInfo={getFramesInfo}
+        renameFrame={renameFrame}
+        syncWithCurrentFrame={renameFrame}
+        toggleLayerVisibilityInFrame={toggleLayerVisibilityInFrame}
+        getLayerVisibility={getLayerVisibility}
+        // Onion skin:
+        toggleOnionSkin={toggleOnionSkin}
+        setOnionSkinConfig={setOnionSkinConfig}
+        setOnionSkinFrameConfig={setOnionSkinConfig}
+        getOnionSkinFrameConfig={getOnionSkinFrameConfig}
+        getOnionSkinPresets={getOnionSkinFrameConfig}
+        applyOnionSkinPreset={applyOnionSkinPreset}
+        getOnionSkinInfo={getOnionSkinFrameConfig}
+        onionSkinEnabled={onionSkinEnabled}
+        showOnionSkinForLayer={showOnionSkinForLayer}
+        clearOnionSkinLayerFilter={clearOnionSkinLayerFilter}
+        onionSkinSettings={onionSkinSettings}
+        // Gestion de tiempo de los frames:
+        setFrameDuration={setFrameDuration}
+        getFrameDuration={getFrameDuration}
+        getFrameRate={getFrameRate}
+        setDefaultFrameRate={setDefaultFrameRate}
+        defaultFrameDuration={defaultFrameDuration}
+        // Gestion de opacidad de los frames:
+        setFrameOpacity={setFrameOpacity}
+        getFrameOpacity={getFrameOpacity}
+        framesResume={framesResume}
+        setFramesResume={setFramesResume}
+        externalCanvasRef={previewAnimationRef}
+        viewportOffset={viewportOffset}
+        viewportWidth={viewportWidth}
+        viewportHeight={viewportHeight}
+        zoom={zoom}
+        isPlaying={isPlaying}
+        setIsPlaying={setIsPlaying}
+        eyeDropperColor={eyeDropperColor}
+
+        //
+      />
     );
   }, [
-    // Solo dependencias estables
+    // Solo framesResume como dependencia
+    frozenProps,
+    isPlaying,
+      viewportOffset,
+      zoom,
+      framesResume,
+      selectedPixels,
+      dragOffset,
+      layers,
+      eyeDropperColor,
+      initialHeight,
+      initialWidth
+  
    
-    viewportOffset,
-    totalWidth,
-    totalHeight,
-    viewportWidth,
-    viewportHeight,
-    zoom,
-    tool,
-    toolParameters,
-    framesResume,
-
-    // NO incluir datos de mouse
   ]);
+
+  const MemoizedViewportNavigator = useMemo(()=>{
+
+    return(
+      <ViewportNavigator
+      totalWidth={totalWidth}
+      totalHeight={totalHeight}
+      viewportWidth={viewportWidth}
+      viewportHeight={viewportHeight}
+      viewportOffset={viewportOffset}
+      zoom={zoom}
+      onViewportMove={moveViewport}
+      onZoomChange={handleZoomChange} // Nueva prop necesaria
+      compositeCanvasRef={compositeCanvasRef}
+      getFullCanvas={getFullCanvas}
+    />
+    )
+
+  },[viewportOffset, zoom])
+
+  const MemoizedLayerColor = useMemo(()=>{
+    return(
+
+      <LayerColor
+      tool={tool}
+      toolParameters={toolParameters}
+      setToolParameters={setToolParameters}
+      //funcion para obtener informacion de pixeles pintados:
+      getLayerPixelData={getLayerPixelData}
+      paintPixelsRGBA={paintPixelsRGBA}
+      //otras props necesarias,
+      currentFrame={currentFrame}
+      activeLayerId={activeLayerId}
+      isPressed={isPressed}
+      eyeDropperColor={eyeDropperColor}
+    />
+    )
+  },[tool, toolParameters, currentFrame, activeLayerId, isPressed])
+
+  const MemoizedPlayAnimation = useMemo(()=>{
+    return(
+      <PlayAnimation frames={frames} />
+    )
+   
+  },[frames])
+
+ 
  
 
   //autoguardado
   /*
+  const [contadorFrames,setContadorFrames] = useState(0);
+
+  
   useEffect(()=>{
    setContadorFrames(contadorFrames+1);
     const esDivisibleEntre3 = contadorFrames % 3 === 0; 
@@ -10109,9 +10785,9 @@ const debugClipboard = useCallback(() => {
       handleExport();
     }
 
-  },[framesResume])*/
-  /*Cursor reactivo */
-
+  },[framesResume,isPressed]);*/
+  
+  /*Cursor reactivo 
   useEffect(()=>{
     if(isSpacePressed){
       workspaceRef.current.style.cursor = "grab";
@@ -10126,7 +10802,8 @@ const debugClipboard = useCallback(() => {
       
 
     
-  },[tool,drawMode,isDragging, isSpacePressed,toolParameters])
+  },[tool,drawMode,isDragging, isSpacePressed,toolParameters])*/
+
 /*
 
   useEffect(() => {
@@ -10313,7 +10990,6 @@ useEffect(() => {
 
 //====== Algoritmo de RotSprite ==================//
 
-// 2. ESTADOS ADICIONALES: Agregar estos estados después de los estados existentes
 const [showRotationInput, setShowRotationInput] = useState(false);
 
 const [isRotating, setIsRotating] = useState(false);
@@ -10570,6 +11246,7 @@ const handleRotSprite = useCallback(async (angle,applyBounds) => {
 ]);
 
 
+
 // 2. Función para calcular el ángulo basado en la posición del mouse
 const calculateRotationAngle = useCallback((mouseX, mouseY, centerX, centerY) => {
   const deltaX = mouseX - centerX;
@@ -10635,7 +11312,7 @@ const getRotationHandlerPosition = useCallback(() => {
 
 // 7. Componente del círculo de rotación (agregar esto en el JSX)
 const RotationCircleComponent = () => {
-  if (!croppedSelectionBounds || !selectionActive) return null;
+  if (!croppedSelectionBounds || !selectionActive || selectedPixels.length < 2) return null;
 
   // Crear el ref localmente
   const localRotationHandlerRef = useRef(null);
@@ -10801,6 +11478,16 @@ handleRotSprite(rotationAngleSelection, true);
   return (
     <div className="complete-canvas-tracker">
        <TopToolbar companyName="Argánion">
+     
+       
+        <div className="worspace-actual-layername">
+          <p className="layer-name-label">
+            Capa actual:
+          </p>
+          <p className="actual-layername">{getActiveLayerName()}</p>
+          
+
+        </div>
         <div className="tools" style={{ display: "flex", gap: "8px" }}>
           <div
             className={true ? "grid-control active" : "grid-control"}
@@ -10828,14 +11515,24 @@ handleRotSprite(rotationAngleSelection, true);
             <LuBrainCircuit />
           </div>
           <div
-            className={activeGrid ? "grid-control active" : "grid-control"}
+            className={true ? "grid-control active" : "grid-control"}
             onClick={() => {
-              setActiveGrid(!activeGrid);
+              setThreeJsVisualizer(!threeJsVisualizer);
             }}
           >
-            <p>Grid</p>
-            <LuGrid2X2 />
+            <p>Visualizador 3D</p>
+            <LuBrainCircuit />
           </div>
+          <div
+            className={true ? "grid-control active" : "grid-control"}
+            onClick={() => {
+              setShowExporter(!showExporter);
+            }}
+          >
+            <p>Exportar</p>
+            E
+          </div>
+          
           <div
             className={true ? "grid-control active" : "grid-control"}
             onClick={() => {
@@ -10845,15 +11542,7 @@ handleRotSprite(rotationAngleSelection, true);
             <p>Guardar</p>
             <LuSave />
           </div>
-          <div
-            className={true ? "grid-control active" : "grid-control"}
-            onClick={() => {
-              pastePixels();
-            }}
-          >
-            <p>Pegar</p>
-            <p>P</p>
-          </div>
+          
           {isolatedPixels&&
           <div
             className={true ? "grid-control active" : "grid-control"}
@@ -10899,15 +11588,34 @@ handleRotSprite(rotationAngleSelection, true);
       twoColumns={navConfigLateral.twoColumns}
     />
     
-        {
+        
           <div style={{ display: activeAI ? "block" : "none" }}>
             <AIgenerator
               createLayerAndPaintDataUrlCentered={
                 createLayerAndPaintDataUrlCentered
               }
             />
+            
+
           </div>
-        }
+          <div style={{display: threeJsVisualizer ? 'block' : 'none'}} >
+          <Enhanced3DFlattener   onPixelDataReady={handlePixelDataFromThreeJS} paintPixelsRGBA={paintPixelsRGBA} activeLayerId={activeLayerId}/>
+          </div>
+          
+
+      
+          <AnimationExporter
+  isOpen={showExporter}
+  onClose={() => setShowExporter(false)}
+  frames={frames}
+  framesResume={framesResume}
+  getFullCanvas={getFullCanvas}
+  width={initialWidth}
+  height={initialHeight}
+/>
+          
+          
+        
 
         {/* Canvas Area */}
         <div
@@ -10925,7 +11633,22 @@ handleRotSprite(rotationAngleSelection, true);
             }}
           >
             
-            <CustomTool tool={tool} setToolParameters={setToolParameters} myBrushes={myBrushes}/>
+            <CustomTool
+  setToolParameters={setToolParameters}
+  tool={tool}
+  toolParameters={toolParameters}
+  myBrushes={myBrushes}
+  copySelection={copySelection}
+  cutSelection={cutSelection}
+  pastePixels={pastePixels}
+  duplicateSelection={duplicateSelection}
+  handleRotation={handleRotation}
+  fillSelection={fillSelection}
+  isolateSelection={isolateSelection}
+  groupSelection={groupSelection}
+  ungroupSelection={ungroupSelection}
+  deleteSelection={deleteSelection}
+/>
 
             {/* Coordinates info */}
           </div>
@@ -10996,7 +11719,9 @@ handleRotSprite(rotationAngleSelection, true);
     `,
                 }}
               >
-                <div
+
+
+                  <div
                 ref={rotationHandlerRef}>
                 <RotationCircleComponent 
   // Pasar las funciones y estados que necesita
@@ -11009,8 +11734,10 @@ handleRotSprite(rotationAngleSelection, true);
   // ... otras props necesarias
 />
                 </div>
+                
+                
             
-                {croppedSelectionBounds && selectionActive && !isPressed && !isRotationHandlerContainerPressed &&(
+                {croppedSelectionBounds && selectionActive && !isPressed && !isRotationHandlerContainerPressed && selectedPixels.length>0 &&(
                   <>
                   <div
                     ref={selectionActionsRef}
@@ -11122,15 +11849,7 @@ handleRotSprite(rotationAngleSelection, true);
                         <span className="icon">I</span>
                         <p className="action-text">Aislar pixeles </p>
                       </button>
-                      <button
-  className="action-button"
-  onClick={() => setShowRotationInput(true)}
-  disabled={!selectedPixels.length}
->
-  <span className="icon">🔄</span>
-  <p className="action-text">RotSprite</p>
-</button>
-
+           
                     </div>
                   </div>
   
@@ -11258,8 +11977,8 @@ handleRotSprite(rotationAngleSelection, true);
             </div>
           </div>
 
-          { 
-            <div
+          { true &&
+            <div className="layer-animation"
               onContextMenu={(e) => e.preventDefault()}
               ref={animationLayerRef}
               style={{
@@ -11272,13 +11991,27 @@ handleRotSprite(rotationAngleSelection, true);
             >
 
 
-
+              
               {MemoizedLayerAnimation}
+              {MemoizedFramesTimeline}
             </div>
           }
         </div>
 
-        {MemoizedRightPanel}
+       {true && <div
+        className="right-panel"
+        style={{
+          padding: 10,
+        }}
+      >
+ 
+        {MemoizedLayerColor}
+        {MemoizedPlayAnimation}
+      
+       
+      </div>
+
+      }
         {false && (
           <SaveProject
             frames={frames}

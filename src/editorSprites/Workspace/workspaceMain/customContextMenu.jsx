@@ -18,41 +18,43 @@ const CustomContextMenu = ({
 
   console.log("se renderizo");
   // Calcular posición del menú para evitar que se salga de la pantalla
-  const calculateMenuPosition = useCallback(() => {
-    
-    if (!isVisible || !menuRef.current || !position) return;
-    
-    const menu = menuRef.current;
-    const rect = menu.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    
-    let { x, y } = position;
-    
-    // Determinar si abrir hacia la izquierda o derecha
-    const shouldOpenLeft = x + rect.width > viewportWidth - 20;
-    
-    if (shouldOpenLeft) {
-      x = Math.max(10, x - rect.width);
-      menu.classList.add('position-left');
-      menu.classList.remove('position-right');
-    } else {
-      x = Math.min(x, viewportWidth - rect.width - 10);
-      menu.classList.add('position-right');
-      menu.classList.remove('position-left');
-    }
-    
-    // Ajustar verticalmente
-    if (y + rect.height > viewportHeight - 20) {
-      y = Math.max(10, viewportHeight - rect.height - 10);
-    }
-    
-    // Asegurar límites mínimos
-    x = Math.max(10, x);
-    y = Math.max(10, y);
-    
-    setMenuPosition({ x, y });
-  }, [isVisible, position]);
+// Calcular posición del menú para evitar que se salga de la pantalla
+const calculateMenuPosition = useCallback(() => {
+  
+  if (!isVisible || !menuRef.current || !position) return;
+  
+  const menu = menuRef.current;
+  const rect = menu.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const MARGIN = 30; // Margen consistente de 20px
+  
+  let { x, y } = position;
+  
+  // Determinar si abrir hacia la izquierda o derecha
+  const shouldOpenLeft = x + rect.width > viewportWidth - MARGIN;
+  
+  if (shouldOpenLeft) {
+    x = Math.max(MARGIN, x - rect.width);
+    menu.classList.add('position-left');
+    menu.classList.remove('position-right');
+  } else {
+    x = Math.min(x, viewportWidth - rect.width - MARGIN);
+    menu.classList.add('position-right');
+    menu.classList.remove('position-left');
+  }
+  
+  // Ajustar verticalmente
+  if (y + rect.height > viewportHeight - MARGIN) {
+    y = Math.max(MARGIN, viewportHeight - rect.height - MARGIN);
+  }
+  
+  // Asegurar límites mínimos (ya usando MARGIN)
+  x = Math.max(MARGIN, x);
+  y = Math.max(MARGIN, y);
+  
+  setMenuPosition({ x, y });
+}, [isVisible, position]);
 
   // Calcular posición inicial y cuando cambia el input activo
   useEffect(() => {

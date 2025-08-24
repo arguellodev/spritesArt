@@ -1,333 +1,445 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { LuPlus, LuMinus, LuEye, LuEyeOff, LuRotateCcw, LuPalette, LuSettings } from 'react-icons/lu';
+
 import './configOnionSkin.css';
 
 const ConfigOnionSkin = ({ 
   isOpen, 
-  onClose, 
-  onSave, 
-  currentSettings,
-  presets = {
-    classic: {
-      previousFrames: 2,
-      nextFrames: 2,
-      defaultOpacity: 0.3,
-      defaultHue: 0,
-      frameSettings: {
-        '-2': { hue: 240, opacity: 0.2, lightness: 50 },
-        '-1': { hue: 180, opacity: 0.4, lightness: 50 },
-        '1': { hue: 60, opacity: 0.4, lightness: 50 },
-        '2': { hue: 30, opacity: 0.2, lightness: 50 }
-      }
-    },
-    minimal: {
-      previousFrames: 1,
-      nextFrames: 1,
-      defaultOpacity: 0.5,
-      defaultHue: 0,
-      frameSettings: {
-        '-1': { hue: 240, opacity: 0.3, lightness: 50 },
-        '1': { hue: 0, opacity: 0.3, lightness: 50 }
-      }
-    },
-    extended: {
-      previousFrames: 3,
-      nextFrames: 3,
-      defaultOpacity: 0.2,
-      defaultHue: 0,
-      frameSettings: {
-        '-3': { hue: 270, opacity: 0.15, lightness: 50 },
-        '-2': { hue: 240, opacity: 0.25, lightness: 50 },
-        '-1': { hue: 180, opacity: 0.35, lightness: 50 },
-        '1': { hue: 60, opacity: 0.35, lightness: 50 },
-        '2': { hue: 30, opacity: 0.25, lightness: 50 },
-        '3': { hue: 0, opacity: 0.15, lightness: 50 }
-      }
-    }
-  }
+  onClose,
+  onionFramesConfig,
+  setOnionFramesConfig,
+  updateFrameConfig,
+  addPreviousFrame,
+  addNextFrame,
+  removeFrame,
+  toggleOnionFrames,
+  applyOnionFramesPreset,
+  clearTintCache
 }) => {
-  // Usar configuración 'minimal' por defecto
-  const defaultSettings = currentSettings || presets.minimal;
-  
-  const [settings, setSettings] = useState(defaultSettings);
-  const [selectedPreset, setSelectedPreset] = useState(currentSettings ? 'custom' : 'minimal');
-  const [selectedFrame, setSelectedFrame] = useState(null);
-  const [activeTab, setActiveTab] = useState('general');
+  const [activeTab, setActiveTab] = useState('frames');
+  const [selectedFrameType, setSelectedFrameType] = useState('previous');
+  const [selectedFrameIndex, setSelectedFrameIndex] = useState(0);
+  const [draggedFrame, setDraggedFrame] = useState(null);
 
   const didMountRef = useRef(false);
 
   useEffect(() => {
-    if (didMountRef.current) {
-      if (onSave && settings) {
-        onSave(settings);
-      }
-    } else {
-      didMountRef.current = true;
-    }
-  }, [settings]);
-  
+    didMountRef.current = true;
+  }, []);
 
   useEffect(() => {
-    const frames = generateFrameOffsets();
-    if (frames.length > 0 && !selectedFrame) {
-      setSelectedFrame(frames[0]);
+    if (!isOpen && clearTintCache) {
+      clearTintCache();
     }
-  }, [settings.previousFrames, settings.nextFrames]);
+  }, [isOpen, clearTintCache]);
 
-  // Aplicar cambios en tiempo real
-  useEffect(() => {
-    if (onSave && settings) {
-      onSave(settings);
+  const handleFrameConfigChange = (type, index, key, value) => {
+    if (updateFrameConfig) {
+      updateFrameConfig(type, index, { [key]: value });
     }
-  }, [settings]);
-
-  const handleSettingsChange = (key, value) => {
-    setSettings(prev => ({
-      ...prev,
-      [key]: value
-    }));
-    setSelectedPreset('custom');
   };
 
-  const handleFrameSettingChange = (frameOffset, key, value) => {
-    setSettings(prev => ({
-      ...prev,
-      frameSettings: {
-        ...prev.frameSettings,
-        [frameOffset]: {
-          ...prev.frameSettings[frameOffset],
-          [key]: value
-        }
+  const handleAddFrame = () => {
+    if (selectedFrameType === 'previous' && addPreviousFrame) {
+      addPreviousFrame();
+    } else if (selectedFrameType === 'next' && addNextFrame) {
+      addNextFrame();
+    }
+  };
+
+  const handleRemoveFrame = (index) => {
+    if (removeFrame) {
+      const frameArray = selectedFrameType === 'previous' ? 'previousFrames' : 'nextFrames';
+      removeFrame(frameArray, index);
+      
+      const maxIndex = onionFramesConfig[frameArray].length - 2;
+      if (selectedFrameIndex > maxIndex && maxIndex >= 0) {
+        setSelectedFrameIndex(maxIndex);
+      } else if (maxIndex < 0) {
+        setSelectedFrameIndex(0);
       }
-    }));
-    setSelectedPreset('custom');
-  };
-
-  const handlePresetChange = (presetName) => {
-    if (presetName === 'custom') return;
-    
-    const preset = presets[presetName];
-    if (preset) {
-      setSettings(preset);
-      setSelectedPreset(presetName);
     }
   };
 
-  const handleSave = () => {
-    // Los cambios ya se aplican en tiempo real, solo cerramos el modal
-    onClose();
-  };
-
-  const generateFrameOffsets = () => {
-    const offsets = [];
-    for (let i = -settings.previousFrames; i <= settings.nextFrames; i++) {
-      if (i !== 0) offsets.push(i);
+  const handlePresetApply = (presetName) => {
+    if (applyOnionFramesPreset) {
+      applyOnionFramesPreset(presetName);
     }
-    return offsets;
   };
 
-  const getFrameConfig = (offset) => {
-    return settings.frameSettings[offset] || {
-      opacity: settings.defaultOpacity,
-      hue: settings.defaultHue,
-      lightness: 50
-    };
+  const toggleFrameEnabled = (type, index) => {
+    const frameArray = onionFramesConfig[type];
+    const frame = frameArray[index];
+    if (frame) {
+      handleFrameConfigChange(type, index, 'enabled', !frame.enabled);
+    }
   };
 
-  if (!isOpen) return null;
+  const duplicateFrame = (type, index) => {
+    const frameArray = onionFramesConfig[type];
+    const frame = frameArray[index];
+    if (frame) {
+      const newFrame = { 
+        ...frame, 
+        offset: frame.offset + 1,
+        enabled: false 
+      };
+      
+      if (type === 'previous' && addPreviousFrame) {
+        setOnionFramesConfig(prev => ({
+          ...prev,
+          previousFrames: [...prev.previousFrames, newFrame]
+        }));
+      } else if (type === 'next' && addNextFrame) {
+        setOnionFramesConfig(prev => ({
+          ...prev,
+          nextFrames: [...prev.nextFrames, newFrame]
+        }));
+      }
+    }
+  };
 
-  const frameOffsets = generateFrameOffsets();
-  const selectedFrameConfig = selectedFrame ? getFrameConfig(selectedFrame) : null;
+  const getFrameArrayName = () => {
+    return selectedFrameType === 'previous' ? 'previousFrames' : 'nextFrames';
+  };
+
+  const presets = [
+    { name: 'classic', label: 'Clásico', icon: '🎨' },
+    { name: 'warm', label: 'Cálido', icon: '🔥' },
+    { name: 'subtle', label: 'Sutil', icon: '👁️' },
+    { name: 'neon', label: 'Neón', icon: '⚡' }
+  ];
+
+  if (!isOpen || !onionFramesConfig) return null;
+
+  const frameArrayName = getFrameArrayName();
+  const currentFrameArray = onionFramesConfig[frameArrayName];
+  const selectedFrame = currentFrameArray[selectedFrameIndex] || null;
 
   return (
-    <div className="config-onion-skin-overlay">
-      <div className="config-onion-skin-modal">
-        <div className="config-header">
-          <h2>Configuración Onion Skin</h2>
-          <button className="close-btn" onClick={onClose}>×</button>
-        </div>
-
-        <div className="config-tabs">
-          <button
-            className={`tab-btn ${activeTab === 'general' ? 'active' : ''}`}
-            onClick={() => setActiveTab('general')}
-          >
-            General
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'frames' ? 'active' : ''}`}
-            onClick={() => setActiveTab('frames')}
-          >
-            Frames
-          </button>
-        </div>
-
-        <div className="config-content-compact">
-          {activeTab === 'general' && (
-            <div className="tab-content">
-              <div className="config-section-compact">
-                <h3>Presets</h3>
-                <div className="preset-buttons-compact">
-                  {Object.keys(presets).map(presetName => (
-                    <button
-                      key={presetName}
-                      className={`preset-btn-compact ${selectedPreset === presetName ? 'active' : ''}`}
-                      onClick={() => handlePresetChange(presetName)}
-                    >
-                      {presetName.charAt(0).toUpperCase() + presetName.slice(1)}
-                    </button>
-                  ))}
-                  <button className={`preset-btn-compact ${selectedPreset === 'custom' ? 'active' : ''}`}>
-                    Custom
-                  </button>
+    <div className="onion-config__overlay">
+      <div className="onion-config__modal">
+        
+        {/* Header */}
+        <div className="onion-config__header">
+          <div className="onion-config__header-left">
+            <LuPalette className="onion-config__header-icon" />
+            <h2 className="onion-config__title">Onion Skin</h2>
+            <div className="onion-config__status-indicator">
+              {onionFramesConfig.enabled ? (
+                <div className="onion-config__status onion-config__status--enabled">
+                  <div className="onion-config__status-dot"></div>
+                  Activo
                 </div>
-              </div>
-
-              <div className="config-section-compact">
-                <h3>Configuración General</h3>
-                
-                <div className="config-row-compact">
-                  <div className="config-input-group">
-                    <label>Frames Anteriores: {settings.previousFrames}</label>
-                    <select
-                      value={settings.previousFrames}
-                      onChange={(e) => handleSettingsChange('previousFrames', parseInt(e.target.value))}
-                      className="config-select"
-                    >
-                      {[0,1,2,3,4,5].map(n => (
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div className="config-input-group">
-                    <label>Frames Siguientes: {settings.nextFrames}</label>
-                    <select
-                      value={settings.nextFrames}
-                      onChange={(e) => handleSettingsChange('nextFrames', parseInt(e.target.value))}
-                      className="config-select"
-                    >
-                      {[0,1,2,3,4,5].map(n => (
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="slider-group">
-                  <label>Opacidad por Defecto: {Math.round(settings.defaultOpacity * 100)}%</label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    value={settings.defaultOpacity}
-                    onChange={(e) => handleSettingsChange('defaultOpacity', parseFloat(e.target.value))}
-                    className="config-slider"
-                  />
-                </div>
-
-                <div className="slider-group">
-                  <label>Matiz por Defecto: {settings.defaultHue}°</label>
-                  <div className="slider-with-preview">
-                    <input
-                      type="range"
-                      min="0"
-                      max="360"
-                      value={settings.defaultHue}
-                      onChange={(e) => handleSettingsChange('defaultHue', parseInt(e.target.value))}
-                      className="config-slider"
-                    />
-                    <div 
-                      className="color-preview-small"
-                      style={{ backgroundColor: `hsl(${settings.defaultHue}, 70%, 50%)` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'frames' && (
-            <div className="tab-content">
-              <div className="config-section-compact">
-                <h3>Seleccionar Frame</h3>
-                <div className="frame-selector">
-                  {frameOffsets.map(offset => (
-                    <button
-                      key={offset}
-                      className={`frame-selector-btn ${selectedFrame === offset ? 'active' : ''}`}
-                      onClick={() => setSelectedFrame(offset)}
-                    >
-                      <div className="frame-number">
-                        {offset > 0 ? `+${offset}` : offset}
-                      </div>
-                      <div className="frame-type">
-                        {offset > 0 ? 'Sig' : 'Ant'}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {selectedFrame && selectedFrameConfig && (
-                <div className="config-section-compact">
-                  <h3>Frame {selectedFrame > 0 ? `+${selectedFrame}` : selectedFrame}</h3>
-                  
-                  <div className="slider-group">
-                    <label>Opacidad: {Math.round(selectedFrameConfig.opacity * 100)}%</label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.1"
-                      value={selectedFrameConfig.opacity}
-                      onChange={(e) => handleFrameSettingChange(selectedFrame, 'opacity', parseFloat(e.target.value))}
-                      className="config-slider"
-                    />
-                  </div>
-
-                  <div className="slider-group">
-                    <label>Matiz: {selectedFrameConfig.hue}°</label>
-                    <div className="slider-with-preview">
-                      <input
-                        type="range"
-                        min="0"
-                        max="360"
-                        value={selectedFrameConfig.hue}
-                        onChange={(e) => handleFrameSettingChange(selectedFrame, 'hue', parseInt(e.target.value))}
-                        className="config-slider"
-                      />
-                      <div 
-                        className="color-preview-small"
-                        style={{ backgroundColor: `hsl(${selectedFrameConfig.hue}, 70%, 50%)` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="slider-group">
-                    <label>Brillo: {selectedFrameConfig.lightness}%</label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={selectedFrameConfig.lightness}
-                      onChange={(e) => handleFrameSettingChange(selectedFrame, 'lightness', parseInt(e.target.value))}
-                      className="config-slider"
-                    />
-                  </div>
+              ) : (
+                <div className="onion-config__status onion-config__status--disabled">
+                  <div className="onion-config__status-dot"></div>
+                  Inactivo
                 </div>
               )}
             </div>
-          )}
+          </div>
+          <button className="onion-config__close-btn" onClick={onClose}>×</button>
         </div>
 
-        <div className="config-footer">
-          <button className="cancel-btn" onClick={onClose}>
-            Cancelar
+        {/* Quick Toggle */}
+        <div className="onion-config__quick-controls">
+          <div className="onion-config__master-toggle">
+            <label className="onion-config__toggle-switch">
+              <input
+                type="checkbox"
+                checked={onionFramesConfig.enabled}
+                onChange={toggleOnionFrames}
+                className="onion-config__toggle-input"
+              />
+              <span className="onion-config__toggle-slider"></span>
+            </label>
+            <span className="onion-config__toggle-text">
+              {onionFramesConfig.enabled ? 'Desactivar' : 'Activar'} Onion Skin
+            </span>
+          </div>
+          
+          <div className="onion-config__frame-stats">
+            <div className="onion-config__stat">
+              <span className="onion-config__stat-number">{onionFramesConfig.previousFrames.filter(f => f.enabled).length}</span>
+              <span className="onion-config__stat-label">Anteriores</span>
+            </div>
+            <div className="onion-config__stat">
+              <span className="onion-config__stat-number">{onionFramesConfig.nextFrames.filter(f => f.enabled).length}</span>
+              <span className="onion-config__stat-label">Siguientes</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="onion-config__tabs">
+          <button
+            className={`onion-config__tab-btn ${activeTab === 'frames' ? 'onion-config__tab-btn--active' : ''}`}
+            onClick={() => setActiveTab('frames')}
+          >
+            <LuSettings size={16} />
+            Frames
           </button>
-          <button className="save-btn" onClick={handleSave}>
-            Cerrar
+          <button
+            className={`onion-config__tab-btn ${activeTab === 'presets' ? 'onion-config__tab-btn--active' : ''}`}
+            onClick={() => setActiveTab('presets')}
+          >
+            <LuPalette size={16} />
+            Presets
           </button>
+        </div>
+
+        {/* Content */}
+        <div className="onion-config__content">
+          {activeTab === 'frames' && (
+            <div className="onion-config__frames-tab">
+              
+              {/* Frame Type Selector */}
+              <div className="onion-config__frame-type-selector">
+                <button
+                  className={`onion-config__type-btn ${selectedFrameType === 'previous' ? 'onion-config__type-btn--active' : ''}`}
+                  onClick={() => {
+                    setSelectedFrameType('previous');
+                    setSelectedFrameIndex(0);
+                  }}
+                >
+                  <span className="onion-config__type-arrow">←</span>
+                  <div className="onion-config__type-info">
+                    <span className="onion-config__type-label">Anteriores</span>
+                    <span className="onion-config__type-count">{onionFramesConfig.previousFrames.length}</span>
+                  </div>
+                </button>
+                <button
+                  className={`onion-config__type-btn ${selectedFrameType === 'next' ? 'onion-config__type-btn--active' : ''}`}
+                  onClick={() => {
+                    setSelectedFrameType('next');
+                    setSelectedFrameIndex(0);
+                  }}
+                >
+                  <span className="onion-config__type-arrow">→</span>
+                  <div className="onion-config__type-info">
+                    <span className="onion-config__type-label">Siguientes</span>
+                    <span className="onion-config__type-count">{onionFramesConfig.nextFrames.length}</span>
+                  </div>
+                </button>
+              </div>
+
+              {/* Frame List */}
+              <div className="onion-config__frame-list-container">
+                <div className="onion-config__section-header">
+                  <h3 className="onion-config__section-title">Frames {selectedFrameType === 'previous' ? 'Anteriores' : 'Siguientes'}</h3>
+                  <button className="onion-config__add-frame-btn" onClick={handleAddFrame}>
+                    <LuPlus size={14} />
+                    Agregar
+                  </button>
+                </div>
+
+                <div className="onion-config__frame-list">
+                  {currentFrameArray.length === 0 ? (
+                    <div className="onion-config__empty-state">
+                      <div className="onion-config__empty-icon">📝</div>
+                      <p className="onion-config__empty-text">No hay frames configurados</p>
+                      <button className="onion-config__empty-add-btn" onClick={handleAddFrame}>
+                        <LuPlus size={16} />
+                        Agregar primer frame
+                      </button>
+                    </div>
+                  ) : (
+                    currentFrameArray.map((frame, index) => (
+                      <div
+                        key={index}
+                        className={`onion-config__frame-item ${selectedFrameIndex === index ? 'onion-config__frame-item--selected' : ''}`}
+                        onClick={() => setSelectedFrameIndex(index)}
+                      >
+                        <div className="onion-config__frame-header">
+                          <div className="onion-config__frame-info">
+                            <span className="onion-config__frame-offset">
+                              {selectedFrameType === 'previous' ? `-${frame.offset}` : `+${frame.offset}`}
+                            </span>
+                            <div 
+                              className="onion-config__frame-color-preview"
+                              style={{ 
+                                backgroundColor: `hsl(${frame.hue}, ${frame.saturation}%, ${frame.brightness}%)`,
+                                opacity: frame.opacity
+                              }}
+                            />
+                          </div>
+                          
+                          <div className="onion-config__frame-actions">
+                            <button
+                              className={`onion-config__frame-toggle ${frame.enabled ? 'onion-config__frame-toggle--enabled' : 'onion-config__frame-toggle--disabled'}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleFrameEnabled(frameArrayName, index);
+                              }}
+                              title={frame.enabled ? 'Desactivar' : 'Activar'}
+                            >
+                              {frame.enabled ? <LuEye size={14} /> : <LuEyeOff size={14} />}
+                            </button>
+                            
+                            <button
+                              className="onion-config__frame-remove"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveFrame(index);
+                              }}
+                              title="Eliminar frame"
+                            >
+                              <LuMinus size={14} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {selectedFrameIndex === index && (
+                          <div className="onion-config__frame-controls">
+                            <div className="onion-config__control-group">
+                              <label className="onion-config__control-label">Opacidad: {Math.round(frame.opacity * 100)}%</label>
+                              <input
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.05"
+                                value={frame.opacity}
+                                onChange={(e) => handleFrameConfigChange(frameArrayName, index, 'opacity', parseFloat(e.target.value))}
+                                className="onion-config__slider onion-config__slider--opacity"
+                              />
+                            </div>
+
+                            <div className="onion-config__color-controls">
+                              <div className="onion-config__control-group">
+                                <label className="onion-config__control-label">Matiz: {frame.hue}°</label>
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max="360"
+                                  value={frame.hue}
+                                  onChange={(e) => handleFrameConfigChange(frameArrayName, index, 'hue', parseInt(e.target.value))}
+                                  className="onion-config__slider onion-config__slider--hue"
+                                  style={{
+                                    background: `linear-gradient(to right, 
+                                      hsl(0, 70%, 50%), hsl(60, 70%, 50%), hsl(120, 70%, 50%), 
+                                      hsl(180, 70%, 50%), hsl(240, 70%, 50%), hsl(300, 70%, 50%), hsl(360, 70%, 50%))`
+                                  }}
+                                />
+                              </div>
+
+                              <div className="onion-config__control-row">
+                                <div className="onion-config__control-group">
+                                  <label className="onion-config__control-label">Saturación: {frame.saturation}%</label>
+                                  <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    value={frame.saturation}
+                                    onChange={(e) => handleFrameConfigChange(frameArrayName, index, 'saturation', parseInt(e.target.value))}
+                                    className="onion-config__slider"
+                                  />
+                                </div>
+
+                                <div className="onion-config__control-group">
+                                  <label className="onion-config__control-label">Brillo: {frame.brightness}%</label>
+                                  <input
+                                    type="range"
+                                    min="0"
+                                    max="200"
+                                    value={frame.brightness}
+                                    onChange={(e) => handleFrameConfigChange(frameArrayName, index, 'brightness', parseInt(e.target.value))}
+                                    className="onion-config__slider"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="onion-config__frame-preview">
+                              <div 
+                                className="onion-config__preview-swatch"
+                                style={{ 
+                                  backgroundColor: `hsl(${frame.hue}, ${frame.saturation}%, ${frame.brightness}%)`,
+                                  opacity: frame.opacity
+                                }}
+                              />
+                              <span className="onion-config__preview-text">Vista previa</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'presets' && (
+            <div className="onion-config__presets-tab">
+              <div className="onion-config__section-header">
+                <div>
+                  <h3 className="onion-config__section-title">Configuraciones Predefinidas</h3>
+                  <span className="onion-config__section-subtitle">Aplica estilos rápidos a tus onion frames</span>
+                </div>
+              </div>
+
+              <div className="onion-config__presets-grid">
+                {presets.map((preset) => (
+                  <button
+                    key={preset.name}
+                    className="onion-config__preset-card"
+                    onClick={() => handlePresetApply(preset.name)}
+                  >
+                    <div className="onion-config__preset-icon">{preset.icon}</div>
+                    <span className="onion-config__preset-label">{preset.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="onion-config__current-config">
+                <h4 className="onion-config__current-config-title">Configuración Actual</h4>
+                <div className="onion-config__config-summary">
+                  <div className="onion-config__summary-section">
+                    <span className="onion-config__summary-title">Frames Anteriores:</span>
+                    <div className="onion-config__summary-frames">
+                      {onionFramesConfig.previousFrames.map((frame, index) => (
+                        <div key={index} className="onion-config__summary-frame">
+                          <span className="onion-config__summary-offset">-{frame.offset}</span>
+                          <div 
+                            className="onion-config__summary-color"
+                            style={{ 
+                              backgroundColor: `hsl(${frame.hue}, ${frame.saturation}%, ${frame.brightness}%)`,
+                              opacity: frame.enabled ? frame.opacity : 0.3
+                            }}
+                          />
+                          <span className={`onion-config__summary-status ${frame.enabled ? 'onion-config__summary-status--enabled' : 'onion-config__summary-status--disabled'}`}>
+                            {frame.enabled ? '●' : '○'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="onion-config__summary-section">
+                    <span className="onion-config__summary-title">Frames Siguientes:</span>
+                    <div className="onion-config__summary-frames">
+                      {onionFramesConfig.nextFrames.map((frame, index) => (
+                        <div key={index} className="onion-config__summary-frame">
+                          <span className="onion-config__summary-offset">+{frame.offset}</span>
+                          <div 
+                            className="onion-config__summary-color"
+                            style={{ 
+                              backgroundColor: `hsl(${frame.hue}, ${frame.saturation}%, ${frame.brightness}%)`,
+                              opacity: frame.enabled ? frame.opacity : 0.3
+                            }}
+                          />
+                          <span className={`onion-config__summary-status ${frame.enabled ? 'onion-config__summary-status--enabled' : 'onion-config__summary-status--disabled'}`}>
+                            {frame.enabled ? '●' : '○'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -14,9 +14,26 @@ import DarkTool from "./tools/darkTool";
 import LightTool from "./tools/lightTool";
 import BlurFingerTool from "./tools/blurFingerTool";
 import SmudgeTool from "./tools/smudgeTool";
+import SelectTool from "./tools/selectTool";
 import { BsChevronCompactDown, BsChevronCompactUp  } from "react-icons/bs";
 
-const CustomTool = ({ setToolParameters, tool, toolParameters, myBrushes }) => {
+const CustomTool = ({ 
+  setToolParameters, 
+  tool, 
+  toolParameters, 
+  myBrushes,
+  // Props específicas para las acciones de selección
+  copySelection,
+  cutSelection,
+  pastePixels,
+  duplicateSelection,
+  handleRotation,
+  fillSelection,
+  isolateSelection,
+  groupSelection,
+  ungroupSelection,
+  deleteSelection
+}) => {
     const [minimized, setMinimized] = useState(false);
     
     // Estados independientes para cada herramienta
@@ -34,7 +51,8 @@ const CustomTool = ({ setToolParameters, tool, toolParameters, myBrushes }) => {
         dark: null,
         light: null,
         blurFinger: null,
-        smudge: null
+        smudge: null,
+        select: null
     });
 
     useEffect(() => {
@@ -62,7 +80,8 @@ const CustomTool = ({ setToolParameters, tool, toolParameters, myBrushes }) => {
         dark: { name: "Oscurecedor", icon: "C", component: DarkTool },
         light: { name: "Iluminador", icon: "C", component: LightTool },
         blurFinger: { name: "Difuminador", icon: "C", component: BlurFingerTool },
-        smudge: { name: "Mezclador", icon: "C", component: SmudgeTool }
+        smudge: { name: "Mezclador", icon: "C", component: SmudgeTool },
+        select: { name: "Selección", icon: "S", component: SelectTool }
     };
 
     const currentTool = toolInfo[tool];
@@ -71,27 +90,59 @@ const CustomTool = ({ setToolParameters, tool, toolParameters, myBrushes }) => {
 
     const ToolComponent = currentTool.component;
 
+    // Función para crear las props específicas de cada herramienta
+    const getToolSpecificProps = () => {
+        const baseProps = {
+            toolParameters,
+            setToolParameters,
+            toolConfigs,
+            setToolConfigs
+        };
+
+        // Props específicas para PencilTool
+        if (tool === 'pencil') {
+            return {
+                ...baseProps,
+                myBrushes
+            };
+        }
+
+        // Props específicas para SelectTool
+        if (tool === 'select') {
+            return {
+                ...baseProps,
+                copySelection,
+                cutSelection,
+                pastePixels,
+                duplicateSelection,
+                handleRotation,
+                fillSelection,
+                isolateSelection,
+                groupSelection,
+                ungroupSelection,
+                deleteSelection
+            };
+        }
+
+        // Para el resto de herramientas, solo props base
+        return baseProps;
+    };
+
     return (
         <div className="customTool-section">
             {/*<div className="tool-header" onClick={toggleMinimize} style={{ cursor: "pointer" }}>
             <span className="tool-icon">{currentTool.icon}</span>
                 <p className="tool-name">{currentTool.name}</p>
-                
+                                 
                 <span className="minimize-toggle">{minimized ? <BsChevronCompactDown/> : <BsChevronCompactUp/>}</span>
             </div>*/}
             <div className="current-tool">
                {currentTool.icon}
-               
+                                
                 <p>{currentTool.name}</p>
             </div>
             <div className={`tool-content ${minimized ? 'hidden' : ''}`}>
-                <ToolComponent
-                    toolParameters={toolParameters}
-                    setToolParameters={setToolParameters}
-                    toolConfigs={toolConfigs}
-                    setToolConfigs={setToolConfigs}
-                    myBrushes = {myBrushes}
-                />
+                <ToolComponent {...getToolSpecificProps()} />
             </div>
         </div>
     );

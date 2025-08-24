@@ -169,7 +169,7 @@ const useWebGLPaintBuffer = (canvasRef, canvasWidth, canvasHeight, zoom, viewpor
       console.error('WebGL initialization failed:', error);
       return false;
     }
-  }, [canvasRef, canvasWidth, canvasHeight, createShader, createProgram]);
+  }, [canvasRef, canvasWidth, , createShader, createProgram]);
 
   const paintPixel = useCallback((canvasX, canvasY, color) => {
     if (!isInitializedRef.current || !glRef.current || !bufferDataRef.current) {

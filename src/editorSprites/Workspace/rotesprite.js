@@ -104,8 +104,8 @@ const loadImage = (src) =>
       }
     }
   `
-  
- export const jsAlgorithm = async (canvas, imageUrl, DEGREE) => {
+  /* eslint-disable react-hooks/rules-of-hooks */
+const jsAlgorithm = async function(canvas, imageUrl, DEGREE) {
     const SCALE = 8
     const gl = canvas.getContext('webgl', {antialias: false})
     if (!gl) {
@@ -337,3 +337,4 @@ const loadImage = (src) =>
     return program
   }
   
+  export { jsAlgorithm }
