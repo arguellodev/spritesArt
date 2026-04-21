@@ -1,0 +1,105 @@
+"use no memo";
+
+import LayerAnimation from "../../../layerAnimation";
+
+// Builder que produce el árbol JSX para `<LayerAnimation/>` con todas sus props
+// explícitas. El padre envuelve la llamada en `useMemo` con la dependency list
+// adecuada; hacerlo aquí mantendría el patrón de `frozenProps` fuera del padre
+// y rompería la semántica de congelado durante el arrastre.
+export function renderLayerAnimation(props) {
+  return (
+    <LayerAnimation
+      updateLayerZIndex={props.updateLayerZIndex}
+      moveLayerToPosition={props.moveLayerToPosition}
+      moveGroupToLayer={props.moveGroupToLayer}
+      moveGroupToPosition={props.moveGroupToPosition}
+      layers={props.layers}
+      addLayer={props.addLayer}
+      deleteLayer={props.deleteLayer}
+      moveLayerUp={props.moveLayerUp}
+      moveLayerDown={props.moveLayerDown}
+      toggleLayerVisibility={props.toggleLayerVisibility}
+      renameLayer={props.renameLayer}
+      clearLayer={props.clearLayer}
+      activeLayerId={props.activeLayerId}
+      setActiveLayerId={props.setActiveLayerId}
+      pixelGroups={props.pixelGroups}
+      selectedGroup={props.selectedGroup}
+      selectedPixels={props.selectedPixels}
+      createPixelGroup={props.createPixelGroup}
+      deletePixelGroup={props.deletePixelGroup}
+      getLayerGroups={props.getLayerGroups}
+      selectPixelGroup={props.selectPixelGroup}
+      clearSelectedGroup={props.clearSelectedGroup}
+      renamePixelGroup={props.renamePixelGroup}
+      toggleGroupVisibility={props.toggleGroupVisibility}
+      setSelectedPixels={props.setSelectedPixels}
+      handleSelectGroup={props.handleSelectGroup}
+      dragOffset={props.dragOffset}
+      setSelectionCoords={props.setSelectionCoords}
+      setSelectionActive={props.setSelectionActive}
+      setCroppedSelectionBounds={props.setCroppedSelectionBounds}
+      autoCropSelection={props.autoCropSelection}
+      setOriginalPixelColors={props.setOriginalPixelColors}
+      setDragOffset={props.setDragOffset}
+      setTool={props.setTool}
+      clearCurrentSelection={props.clearCurrentSelection}
+      getHierarchicalLayers={props.getHierarchicalLayers}
+      getMainLayers={props.getMainLayers}
+      getGroupLayersForParent={props.getGroupLayersForParent}
+      selectionActive={props.selectionActive}
+      selectAllCanvas={props.selectAllCanvas}
+      duplicateLayer={props.duplicateLayer}
+      frames={props.frames}
+      currentFrame={props.currentFrame}
+      frameCount={props.frameCount}
+      createFrame={props.createFrame}
+      setActiveFrame={props.setActiveFrame}
+      deleteFrame={props.deleteFrame}
+      duplicateFrame={props.duplicateFrame}
+      saveCurrentFrameState={props.saveCurrentFrameState}
+      getFramesInfo={props.getFramesInfo}
+      renameFrame={props.renameFrame}
+      syncWithCurrentFrame={props.renameFrame}
+      toggleLayerVisibilityInFrame={props.toggleLayerVisibilityInFrame}
+      getLayerVisibility={props.getLayerVisibility}
+      toggleOnionSkin={props.toggleOnionSkin}
+      setOnionSkinConfig={props.setOnionSkinConfig}
+      setOnionSkinFrameConfig={props.setOnionSkinConfig}
+      getOnionSkinFrameConfig={props.getOnionSkinFrameConfig}
+      getOnionSkinPresets={props.getOnionSkinFrameConfig}
+      applyOnionSkinPreset={props.applyOnionSkinPreset}
+      getOnionSkinInfo={props.getOnionSkinFrameConfig}
+      onionSkinEnabled={props.onionSkinEnabled}
+      showOnionSkinForLayer={props.showOnionSkinForLayer}
+      clearOnionSkinLayerFilter={props.clearOnionSkinLayerFilter}
+      onionSkinSettings={props.onionSkinSettings}
+      setFrameDuration={props.setFrameDuration}
+      getFrameDuration={props.getFrameDuration}
+      getFrameRate={props.getFrameRate}
+      setDefaultFrameRate={props.setDefaultFrameRate}
+      defaultFrameDuration={props.defaultFrameDuration}
+      setFrameOpacity={props.setFrameOpacity}
+      getFrameOpacity={props.getFrameOpacity}
+      framesResume={props.framesResume}
+      setFramesResume={props.setFramesResume}
+      externalCanvasRef={props.externalCanvasRef}
+      viewportOffset={props.viewportOffset}
+      viewportWidth={props.viewportWidth}
+      viewportHeight={props.viewportHeight}
+      zoom={props.zoom}
+      isPlaying={props.isPlaying}
+      setIsPlaying={props.setIsPlaying}
+      eyeDropperColor={props.eyeDropperColor}
+      onionFramesConfig={props.onionFramesConfig}
+      setOnionFramesConfig={props.setOnionFramesConfig}
+      updateFrameConfig={props.updateFrameConfig}
+      addPreviousFrame={props.addPreviousFrame}
+      addNextFrame={props.addNextFrame}
+      removeFrame={props.removeFrame}
+      toggleOnionFrames={props.toggleOnionFrames}
+      applyOnionFramesPreset={props.applyOnionFramesPreset}
+      clearTintCache={props.clearTintCache}
+    />
+  );
+}

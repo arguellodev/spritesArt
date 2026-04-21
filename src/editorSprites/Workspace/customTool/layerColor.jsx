@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { LuPencil, LuTrash2, LuPlus, LuCheck, LuX, LuPalette, LuRefreshCw } from "react-icons/lu";
 import ToolColorPicker from "./tools/toolColorPicker";
 import { PiMouseLeftClickFill } from "react-icons/pi";
@@ -263,7 +264,7 @@ const LayerColor = ({ tool, toolParameters, setToolParameters, getLayerPixelData
   };
 
   // Herramientas que necesitan configuración de formas
-  const shapeTools = ['circle', 'ellipse', 'square', 'rectangle', 'polygon', 'triangle'];
+  const shapeTools = ['circle', 'ellipse', 'square', 'rectangle', 'polygon', 'triangle', 'polygonPencil'];
   const isShapeTool = shapeTools.includes(tool);
 
   // NUEVO: Función para añadir color a recientes
@@ -686,9 +687,15 @@ const addToRecentColors = (color) => {
     setHexBorder(rgbToHex(borderColor));
   }, [foregroundColor, backgroundColor, fillColor, borderColor]);
 
-  useEffect(()=>{
-    generateIndexedPalette()
-  },[isPressed ]);
+  // Regenerar la paleta indexada solo al soltar el mouse y solo si el modo
+  // indexado está activo. Antes corría en cada cambio de isPressed (incluyendo
+  // pointerdown), forzando un getImageData de toda la capa + 1M objetos en
+  // canvas grandes — causa de lag al primer click.
+  useEffect(() => {
+    if (isPressed) return;
+    if (!isIndexedMode) return;
+    generateIndexedPalette();
+  }, [isPressed]);
 
   useEffect(()=>{
     if(toolParameters.isGradientMode){
@@ -720,6 +727,61 @@ const addToRecentColors = (color) => {
     setShowPalettePicker(false);
     setShowIndexedColorPicker(false);
     setShowGradientPicker(false);
+  };
+
+  // Portal para sacar el color-picker del overflow clip del RightPanel.
+  // El picker usa `position: absolute; right: 100%; top: 0` anclado al
+  // container. Renderizamos un wrapper fixed en las mismas coordenadas del
+  // container (top-left) dentro de document.body; el picker conserva su
+  // posición relativa al wrapper y escapa del `overflow: hidden/auto` del
+  // panel derecho.
+  const containerRef = useRef(null);
+  const [anchorRect, setAnchorRect] = useState(null);
+  const anyPickerOpen =
+    showPrimaryPicker || showSecondaryPicker || showPalettePicker ||
+    showGradientPicker || showIndexedColorPicker;
+
+  useLayoutEffect(() => {
+    if (!anyPickerOpen || !containerRef.current) return;
+    const r = containerRef.current.getBoundingClientRect();
+    setAnchorRect({ top: r.top, left: r.left });
+  }, [anyPickerOpen]);
+
+  useEffect(() => {
+    if (!anyPickerOpen) return;
+    const update = () => {
+      if (!containerRef.current) return;
+      const r = containerRef.current.getBoundingClientRect();
+      setAnchorRect((prev) => {
+        if (prev && prev.top === r.top && prev.left === r.left) return prev;
+        return { top: r.top, left: r.left };
+      });
+    };
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [anyPickerOpen]);
+
+  const portalPicker = (picker) => {
+    if (!anchorRect) return null;
+    return createPortal(
+      <div
+        style={{
+          position: "fixed",
+          top: anchorRect.top,
+          left: anchorRect.left,
+          width: 0,
+          height: 0,
+          zIndex: 10000,
+        }}
+      >
+        {picker}
+      </div>,
+      document.body
+    );
   };
 
   // Función para agregar un nuevo color a la paleta (solo en modo normal)
@@ -1038,7 +1100,8 @@ const addToRecentColors = (color) => {
   };
 
   return (
-    <div className="layer-color-container" 
+    <div className="layer-color-container"
+    ref={containerRef}
     onContextMenu={preventContextMenu}
     >
       <div className="layer-color-header">
@@ -1210,7 +1273,6 @@ const addToRecentColors = (color) => {
                       e.stopPropagation(); // 🔥 ESTO EVITA LA PROPAGACIÓN
                       e.preventDefault();   // 🔥 OPCIONAL: evita comportamiento por defecto
                       removeGradientStop(stop.id);
-                      console.log("Stop eliminado:", stop.id);
                     }}
                     onMouseDown={(e) => {
                       e.stopPropagation(); // 🔥 También detener en mouseDown
@@ -1422,7 +1484,7 @@ const addToRecentColors = (color) => {
       </div>
 
       {/* Color Pickers */}
-      {showPrimaryPicker && !isGradientMode && (
+      {showPrimaryPicker && !isGradientMode && portalPicker(
          <ToolColorPicker
           color={primaryColorData.color}
           onChange={primaryColorData.setColor}
@@ -1432,7 +1494,7 @@ const addToRecentColors = (color) => {
         />
       )}
 
-      {showSecondaryPicker && !isGradientMode && (
+      {showSecondaryPicker && !isGradientMode && portalPicker(
         <ToolColorPicker
           color={secondaryColorData.color}
           onChange={secondaryColorData.setColor}
@@ -1442,7 +1504,7 @@ const addToRecentColors = (color) => {
         />
       )}
 
-      {showPalettePicker && editingColorIndex !== null && !isIndexedMode && !isGradientMode && (
+      {showPalettePicker && editingColorIndex !== null && !isIndexedMode && !isGradientMode && portalPicker(
         <ToolColorPicker
           color={actualPalette[editingColorIndex]}
           onChange={updatePaletteColor}
@@ -1452,7 +1514,7 @@ const addToRecentColors = (color) => {
       )}
 
       {/* Color picker para gradiente */}
-      {showGradientPicker && selectedStopId !== null && isGradientMode && (
+      {showGradientPicker && selectedStopId !== null && isGradientMode && portalPicker(
         <ToolColorPicker
           color={getSelectedStopColor()}
           onChange={(newColor) => updateGradientStop(selectedStopId, { color: newColor })}
@@ -1462,7 +1524,7 @@ const addToRecentColors = (color) => {
         />
       )}
 
-      {showIndexedColorPicker && editingIndexedColor && !isGradientMode && (
+      {showIndexedColorPicker && editingIndexedColor && !isGradientMode && portalPicker(
         <div className="indexed-color-picker-container">
           <div className="indexed-color-picker-header">
             <h4>Editar Color Indexado</h4>

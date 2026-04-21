@@ -30,9 +30,8 @@ const FillTool = ({ setToolParameters, tool, toolParameters = {} }) => {
   // Tipos de dithering - manteniendo los originales que funcionaban
   const ditheringTypes = [
     "noise",
-    "ordered", 
+    "ordered",
     "checkerboard",
-    "hotizontal",
     "vertical",
     "horizontal",
     "diagonal",

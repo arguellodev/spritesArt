@@ -713,7 +713,7 @@ const renderCurrentFrameOnly = useCallback((ctx) => {
         viewportOffset.x, viewportOffset.y,
         viewportWidth, viewportHeight,
         0, 0,
-        viewportWidth * zoom, viewportHeight * zoom
+        Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
       );
       
       if (layerOpacity !== 1.0) {
@@ -738,7 +738,7 @@ const renderCurrentFrameOnly = useCallback((ctx) => {
           viewportOffset.x, viewportOffset.y,
           viewportWidth, viewportHeight,
           0, 0,
-          viewportWidth * zoom, viewportHeight * zoom
+          Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
         );
         
         if (groupOpacity !== 1.0) {
@@ -969,7 +969,7 @@ const renderCurrentFrameWithAdjacent = useCallback((ctx) => {
         viewportOffset.x, viewportOffset.y,
         viewportWidth, viewportHeight,
         0, 0,
-        viewportWidth * zoom, viewportHeight * zoom
+        Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
       );
       ctx.globalAlpha = 1.0;
     }
@@ -994,7 +994,7 @@ const renderCurrentFrameWithAdjacent = useCallback((ctx) => {
           viewportOffset.x, viewportOffset.y,
           viewportWidth, viewportHeight,
           0, 0,
-          viewportWidth * zoom, viewportHeight * zoom
+          Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
         );
         ctx.globalAlpha = 1.0;
       }
@@ -1031,7 +1031,7 @@ const renderCurrentFrameWithAdjacent = useCallback((ctx) => {
         viewportOffset.x, viewportOffset.y,
         viewportWidth, viewportHeight,
         0, 0,
-        viewportWidth * zoom, viewportHeight * zoom
+        Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
       );
       
       if (layerOpacity !== 1.0) {
@@ -1056,7 +1056,7 @@ const renderCurrentFrameWithAdjacent = useCallback((ctx) => {
           viewportOffset.x, viewportOffset.y,
           viewportWidth, viewportHeight,
           0, 0,
-          viewportWidth * zoom, viewportHeight * zoom
+          Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
         );
         
         if (groupOpacity !== 1.0) {
@@ -1432,7 +1432,7 @@ const renderCachedIsolationMask = useCallback((ctx) => {
     viewportOffset.x, viewportOffset.y,     // Origen en la máscara
     viewportWidth, viewportHeight,          // Tamaño a tomar de la máscara
     0, 0,                                   // Destino en el canvas composite
-    viewportWidth * zoom, viewportHeight * zoom  // Tamaño escalado
+    Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)  // Tamaño escalado
   );
   
   // ✅ RESTAURAR el estado del contexto INMEDIATAMENTE
@@ -1456,7 +1456,7 @@ const compositeRender = useCallback(() => {
   ctx.save();
   
   // Limpiar canvas
-  ctx.clearRect(0, 0, viewportWidth * zoom, viewportHeight * zoom);
+  ctx.clearRect(0, 0, Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom));
   
   // ✅ ASEGURAR estado limpio para renderizado base
   ctx.globalCompositeOperation = 'source-over';
@@ -1484,7 +1484,7 @@ const compositeRender = useCallback(() => {
       viewportOffset.x, viewportOffset.y,
       viewportWidth, viewportHeight,
       0, 0,
-      viewportWidth * zoom, viewportHeight * zoom
+      Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
     );
     
     ctx.restore();
@@ -1581,11 +1581,15 @@ const getLighterInfo = useCallback(() => {
 }, [activeLighter, tempLighterCanvas, tempLighterLayerId, tempLighterFrameId]);
 
 
- // Render the composite canvas whenever layers or viewport changes
+ // Viewport changes: render directo en el mismo frame que el CSS para evitar desync
  useEffect(() => {
-  // Render directo sin timeouts
+  compositeRender();
+}, [viewportOffset, compositeRender]);
+
+ // Layer changes: rAF para no bloquear el hilo principal
+ useEffect(() => {
   requestAnimationFrame(compositeRender);
-}, [layers, viewportOffset, compositeRender]);
+}, [layers, compositeRender]);
 
 
 
@@ -2501,8 +2505,8 @@ const getChangePreview = useCallback(() => {
   // Initialize the composite canvas
   useEffect(() => {
     if (compositeCanvasRef.current) {
-      compositeCanvasRef.current.width = viewportWidth * zoom;
-      compositeCanvasRef.current.height = viewportHeight * zoom;
+      compositeCanvasRef.current.width = Math.round(viewportWidth * zoom);
+      compositeCanvasRef.current.height = Math.round(viewportHeight * zoom);
       
       const ctx = compositeCanvasRef.current.getContext('2d');
       if (ctx) {

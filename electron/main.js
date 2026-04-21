@@ -1,9 +1,14 @@
-import { app, BrowserWindow, Menu, globalShortcut } from 'electron';
+import { app, BrowserWindow, Menu, globalShortcut, ipcMain } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const PRELOAD_PATH = path.join(__dirname, 'preload.cjs');
+
+// Registro de ventanas popped abiertas por panelId
+const panelWindows = new Map();
 
 // Configurar flags de hardware acceleration y otras optimizaciones
 app.commandLine.appendSwitch('--enable-features', 'VaapiVideoDecoder');
@@ -29,6 +34,7 @@ function createWindow() {
     backgroundColor: '#ffffff',
     show: false,
     webPreferences: {
+      preload: PRELOAD_PATH,
       contextIsolation: true,
       nodeIntegration: false,
       // Optimizaciones críticas para canvas
@@ -114,6 +120,91 @@ function toggleFullScreen() {
     mainWindow.setFullScreen(!isFullScreen);
   }
 }
+
+function createPanelWindow(panelId, opciones) {
+  const existente = panelWindows.get(panelId);
+  if (existente && !existente.isDestroyed()) {
+    existente.focus();
+    return existente.id;
+  }
+
+  const win = new BrowserWindow({
+    title: `PixCalli — ${panelId}`,
+    width: opciones.width || 340,
+    height: opciones.height || 520,
+    x: opciones.x,
+    y: opciones.y,
+    minWidth: 260,
+    minHeight: 200,
+    parent: mainWindow || undefined,
+    backgroundColor: '#1e1e1e',
+    show: false,
+    webPreferences: {
+      preload: PRELOAD_PATH,
+      contextIsolation: true,
+      nodeIntegration: false,
+      enableRemoteModule: false,
+      backgroundThrottling: false,
+      webgl: true,
+      spellcheck: false,
+    },
+  });
+
+  panelWindows.set(panelId, win);
+
+  win.once('ready-to-show', () => {
+    win.show();
+  });
+
+  win.on('closed', () => {
+    if (panelWindows.get(panelId) === win) {
+      panelWindows.delete(panelId);
+    }
+    // Notificar a las demás ventanas que esta popped se cerró
+    const payload = { type: 'panel/cerrado', panelId };
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.webContents.send('panel:evento', payload);
+    }
+  });
+
+  const devServer = process.env.VITE_DEV_SERVER;
+  const qs = `?panel=${encodeURIComponent(panelId)}`;
+  if (devServer) {
+    win.loadURL(`${devServer}${qs}`);
+    // En dev abrimos DevTools en popped para que se puedan ver los logs del
+    // bridge y diagnosticar problemas de sincronización.
+    win.webContents.openDevTools({ mode: 'detach' });
+  } else {
+    win.loadFile(path.join(__dirname, '../dist/index.html'), { search: qs.slice(1) });
+  }
+
+  return win.id;
+}
+
+// Crea/re-enfoca una ventana de panel popped
+ipcMain.handle('panel:abrir', (_event, panelId, opciones) => {
+  return createPanelWindow(panelId, opciones || {});
+});
+
+// Cierra la ventana popped asociada
+ipcMain.handle('panel:cerrar', (_event, panelId) => {
+  const win = panelWindows.get(panelId);
+  if (win && !win.isDestroyed()) {
+    win.close();
+    return true;
+  }
+  return false;
+});
+
+// Broadcast de eventos entre todas las ventanas (main + popped)
+ipcMain.on('panel:evento', (event, msg) => {
+  const origenId = event.sender.id;
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (w.isDestroyed()) continue;
+    if (w.webContents.id === origenId) continue;
+    w.webContents.send('panel:evento', msg);
+  }
+});
 
 // Configurar el manejo de memoria de la app
 app.whenReady().then(() => {

@@ -30,4 +30,12 @@ export default [
       ],
     },
   },
+  {
+    files: ['electron/**/*.{js,cjs,mjs}'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      globals: { ...globals.node, ...globals.browser },
+      sourceType: 'module',
+    },
+  },
 ]

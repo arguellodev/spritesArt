@@ -1,0 +1,184 @@
+/* Contenedor general */
+.pc-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary, #1e1e1e);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  overflow: hidden;
+  min-width: 220px;
+  min-height: 180px;
+  color: var(--text-primary, #eaeaea);
+  font-family: inherit;
+}
+
+.pc-panel-docked {
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+.pc-panel-flotante {
+  position: fixed;
+  pointer-events: auto;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+  /* z-index definido inline por PanelFrame (viene del Context). */
+}
+
+.pc-panel-popped {
+  border-style: dashed;
+  opacity: 0.85;
+}
+
+/* Titlebar */
+.pc-panel-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: var(--bg-tertiary, #2a2a2a);
+  border-bottom: 1px solid var(--border-color, #333);
+  user-select: none;
+  height: 28px;
+  box-sizing: border-box;
+}
+
+.pc-panel-drag {
+  cursor: move;
+  touch-action: none;
+}
+
+.pc-panel-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--text-primary, #eaeaea);
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.pc-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.pc-panel-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary, #eaeaea);
+  opacity: 0.7;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.pc-panel-btn:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  opacity: 1;
+}
+
+/* Body */
+.pc-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+}
+
+/* Grips de resize (solo en flotante) */
+.pc-panel-grip {
+  position: absolute;
+  background: transparent;
+  touch-action: none;
+}
+
+.pc-panel-grip-n {
+  top: 0;
+  left: 8px;
+  right: 8px;
+  height: 4px;
+  cursor: ns-resize;
+}
+.pc-panel-grip-s {
+  bottom: 0;
+  left: 8px;
+  right: 8px;
+  height: 4px;
+  cursor: ns-resize;
+}
+.pc-panel-grip-e {
+  top: 8px;
+  bottom: 8px;
+  right: 0;
+  width: 4px;
+  cursor: ew-resize;
+}
+.pc-panel-grip-w {
+  top: 8px;
+  bottom: 8px;
+  left: 0;
+  width: 4px;
+  cursor: ew-resize;
+}
+.pc-panel-grip-ne {
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  cursor: nesw-resize;
+}
+.pc-panel-grip-nw {
+  top: 0;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  cursor: nwse-resize;
+}
+.pc-panel-grip-se {
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+}
+.pc-panel-grip-sw {
+  bottom: 0;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  cursor: nesw-resize;
+}
+
+/* Dock colapsado con lista de paneles ocultos */
+.pc-dock-colapsado {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 4px;
+  align-items: center;
+}
+
+.pc-dock-colapsado-btn {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  background: var(--bg-tertiary, #2a2a2a);
+  color: var(--text-primary, #eaeaea);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 3px;
+  padding: 6px 2px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.pc-dock-colapsado-btn:hover {
+  opacity: 1;
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+}

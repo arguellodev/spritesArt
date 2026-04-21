@@ -72,8 +72,8 @@ const PlayAnimation = forwardRef(({
     
     // Si es canvas externo, usar las dimensiones del viewport escaladas
     if (externalCanvasRef) {
-      canvas.width = viewportWidth * zoom;
-      canvas.height = viewportHeight * zoom;
+      canvas.width = Math.round(viewportWidth * zoom);
+      canvas.height = Math.round(viewportHeight * zoom);
     } else {
       // Canvas interno: usar displaySize
       canvas.width = displaySize;
@@ -288,13 +288,13 @@ if (startTimeRef.current) {
         ctx.drawImage(
           sourceCanvas,                    // Canvas fuente completo
           viewportOffset.x,               // X de inicio en canvas fuente
-          viewportOffset.y,               // Y de inicio en canvas fuente  
+          viewportOffset.y,               // Y de inicio en canvas fuente
           viewportWidth,                  // Ancho a extraer
           viewportHeight,                 // Alto a extraer
           0,                             // X destino (siempre 0)
           0,                             // Y destino (siempre 0)
-          viewportWidth * zoom,          // Ancho final escalado
-          viewportHeight * zoom          // Alto final escalado
+          Math.round(viewportWidth * zoom),   // Ancho final escalado
+          Math.round(viewportHeight * zoom)   // Alto final escalado
         );
       } else {
         // ✨ MODO CANVAS INTERNO: Escalar completo al displaySize

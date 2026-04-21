@@ -7,7 +7,6 @@ const SmudgeTool = ({ setToolParameters, tool, toolParameters }) => {
   const [smudgeStrength, setSmudgeStrength] = useState(0.8);
   const [smudgeFlow, setSmudgeFlow] = useState(0.5);
   const [smudgeMode, setSmudgeMode] = useState('normal');
-  const [smudgeQuality, setSmudgeQuality] = useState('medium');
 
   // Función para manejar cambios en el grosor con botones
   const handleWidthChange = (increment) => {
@@ -112,11 +111,9 @@ const SmudgeTool = ({ setToolParameters, tool, toolParameters }) => {
         smudgeStrength: smudgeStrength,
         smudgeFlow: smudgeFlow,
         smudgeMode: smudgeMode,
-        smudgeQuality: smudgeQuality,
-        preserveOpacity: false // Siempre false para esta versión
       }));
     }
-  }, [width, smudgeStrength, smudgeFlow, smudgeMode, smudgeQuality, setToolParameters]);
+  }, [width, smudgeStrength, smudgeFlow, smudgeMode, setToolParameters]);
 
   return (
     <div className="polygon-tool-container">
@@ -242,22 +239,6 @@ const SmudgeTool = ({ setToolParameters, tool, toolParameters }) => {
               <option value="multiply">✖️ Multiply</option>
               <option value="screen">📺 Screen</option>
               <option value="overlay">🌈 Overlay</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Configuración de calidad */}
-        <div className="config-item">
-          <label className="tool-label">Quality</label>
-          <div className="input-container">
-            <select
-              value={smudgeQuality}
-              onChange={(e) => setSmudgeQuality(e.target.value)}
-              className="select-input"
-            >
-              <option value="low">⚡ Fast (Low Quality)</option>
-              <option value="medium">⚖️ Balanced (Medium)</option>
-              <option value="high">🎯 Smooth (High Quality)</option>
             </select>
           </div>
         </div>

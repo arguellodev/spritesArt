@@ -1,0 +1,245 @@
+/* RightPanel — sidebar fijo con colapsado por módulo y por todo el panel.
+ * Usa las CSS vars ya presentes en el editor (--bg-secondary, --bg-tertiary,
+ * --border-color, --text-primary, --bg-hover). Incluye fallbacks duros.
+ */
+
+.pc-right-panel {
+  display: flex;
+  flex-direction: column;
+  width: 300px;
+  flex: 0 0 auto;
+  height: 100%;
+  background: var(--bg-secondary, #1e1e1e);
+  border-left: 1px solid var(--border-color, #333);
+  color: var(--text-primary, #eaeaea);
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-sizing: border-box;
+  transition: width 180ms ease;
+  /* scrollbar sutil en WebKit + reserva de espacio estable para que
+   * nunca se solape con el contenido (antes el color picker se veía
+   * tapado por la barra de scroll). */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color, #333) transparent;
+  scrollbar-gutter: stable;
+}
+
+.pc-right-panel::-webkit-scrollbar {
+  width: 8px;
+}
+.pc-right-panel::-webkit-scrollbar-thumb {
+  background: var(--border-color, #333);
+  border-radius: 4px;
+}
+.pc-right-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ==== Header del panel ==== */
+.pc-rp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--bg-tertiary, #262626);
+  border-bottom: 1px solid var(--border-color, #333);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  backdrop-filter: blur(4px);
+}
+
+.pc-rp-header-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.7;
+  user-select: none;
+}
+
+/* ==== Botones genéricos ==== */
+.pc-rp-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary, #eaeaea);
+  opacity: 0.72;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 150ms ease, opacity 150ms ease, transform 150ms ease;
+}
+
+.pc-rp-toggle:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  opacity: 1;
+}
+
+.pc-rp-toggle:active {
+  transform: scale(0.94);
+}
+
+.pc-rp-toggle:focus-visible {
+  outline: 2px solid #4aa9ff;
+  outline-offset: 1px;
+  opacity: 1;
+}
+
+/* ==== Panel colapsado (tira vertical 40px) ==== */
+.pc-right-panel-collapsed {
+  width: 40px;
+  min-width: 40px;
+  padding: 8px 2px;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.pc-rp-toggle-expand {
+  width: 32px;
+  height: 32px;
+}
+
+.pc-rp-quick-icons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  align-items: center;
+}
+
+.pc-rp-quick-btn {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  padding: 12px 4px;
+  min-height: 72px;
+  width: 30px;
+  background: var(--bg-tertiary, #262626);
+  color: var(--text-primary, #eaeaea);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: background 150ms ease, opacity 150ms ease, border-color 150ms ease;
+}
+
+.pc-rp-quick-btn:hover {
+  opacity: 1;
+  background: var(--bg-hover, rgba(255, 255, 255, 0.10));
+  border-color: var(--text-primary, #666);
+}
+
+.pc-rp-quick-btn:focus-visible {
+  outline: 2px solid #4aa9ff;
+  outline-offset: 1px;
+  opacity: 1;
+}
+
+/* ==== Secciones colapsables ==== */
+.pc-rp-sections {
+  display: flex;
+  flex-direction: column;
+}
+
+.pc-rp-section {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border-color, #333);
+}
+
+.pc-rp-section:last-child {
+  border-bottom: none;
+}
+
+.pc-rp-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 32px;
+  padding: 0 12px;
+  border: none;
+  background: var(--bg-tertiary, #242424);
+  color: var(--text-primary, #eaeaea);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: background 150ms ease, opacity 150ms ease;
+  user-select: none;
+}
+
+.pc-rp-section-header:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+  opacity: 1;
+}
+
+.pc-rp-section-header:focus-visible {
+  outline: 2px solid #4aa9ff;
+  outline-offset: -2px;
+  opacity: 1;
+}
+
+.pc-rp-section-title {
+  flex: 1;
+  text-align: left;
+}
+
+.pc-rp-chevron {
+  transition: transform 180ms ease;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.pc-rp-chevron.is-open {
+  transform: rotate(180deg);
+  opacity: 1;
+}
+
+.pc-rp-section-body {
+  padding: 10px;
+  background: var(--bg-secondary, #1e1e1e);
+  animation: pc-rp-slide-in 180ms ease;
+  box-sizing: border-box;
+}
+
+@keyframes pc-rp-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-right-panel,
+  .pc-rp-toggle,
+  .pc-rp-chevron,
+  .pc-rp-quick-btn,
+  .pc-rp-section-header {
+    transition: none;
+  }
+  .pc-rp-section-body {
+    animation: none;
+  }
+}
+
+/* Compatibilidad con la regla heredada `.right-panel svg { stroke-width: 2px }` */
+.pc-right-panel svg {
+  stroke-width: 2px;
+}

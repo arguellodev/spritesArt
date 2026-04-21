@@ -6,8 +6,6 @@ const BlurFingerTool = ({ setToolParameters, tool, toolParameters }) => {
   const [width, setWidth] = useState(5);
   const [blurIntensity, setBlurIntensity] = useState(0.5);
   const [blurRadius, setBlurRadius] = useState(1);
-  const [preserveOpacity, setPreserveOpacity] = useState(true);
-  const [blurMode, setBlurMode] = useState('gaussian');
 
   // Función para manejar cambios en el grosor con botones
   const handleWidthChange = (increment) => {
@@ -111,11 +109,9 @@ const BlurFingerTool = ({ setToolParameters, tool, toolParameters }) => {
         width: width,
         blurIntensity: blurIntensity,
         blurRadius: blurRadius,
-        preserveOpacity: preserveOpacity,
-        blurMode: blurMode
       }));
     }
-  }, [width, blurIntensity, blurRadius, preserveOpacity, blurMode, setToolParameters]);
+  }, [width, blurIntensity, blurRadius, setToolParameters]);
 
   return (
     <div className="polygon-tool-container">
@@ -222,44 +218,6 @@ const BlurFingerTool = ({ setToolParameters, tool, toolParameters }) => {
             </div>
           </div>
         </div>
-
-        {/* Configuración para preservar opacidad */}
-        <div className="config-item">
-          <label className="tool-label">Preserve Opacity</label>
-          <div className="input-container">
-            <label className="checkbox-container">
-              <input
-                type="checkbox"
-                checked={preserveOpacity}
-                onChange={(e) => setPreserveOpacity(e.target.checked)}
-                className="checkbox-input"
-              />
-              <span className="checkbox-checkmark"></span>
-              <span className="checkbox-label">
-                {preserveOpacity ? "Enabled" : "Disabled"}
-              </span>
-            </label>
-          </div>
-        </div>
-
-        {/* Configuración del modo de blur */}
-        <div className="config-item">
-          <label className="tool-label">Blur Mode</label>
-          <div className="input-container">
-            <select
-              value={blurMode}
-              onChange={(e) => setBlurMode(e.target.value)}
-              className="select-input"
-            >
-              <option value="gaussian">🌀 Gaussian Blur</option>
-              <option value="box">⬜ Box Blur</option>
-              <option value="motion">➡️ Motion Blur</option>
-              <option value="radial">🎯 Radial Blur</option>
-            </select>
-          </div>
-        </div>
-
-     
 
       </div>
     </div>

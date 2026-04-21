@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo, Activity } from "react";
 import { usePointer, useLayerManager } from "../hooks/hooks";
 import { flushSync } from "react-dom";
 import PlayingAnimation from "./playingAnimation";
@@ -23,6 +23,8 @@ import {
   LuUndo,
   LuRedo,
   LuBrainCircuit,
+  LuUpload,
+  LuBox,
   LuBrush,
   LuMousePointer2,
   LuMousePointerClick,
@@ -68,35 +70,50 @@ import { BsEyedropper, BsPentagon } from "react-icons/bs";
 
 import Enhanced3DFlattener from "./ThreeJsDemo";
 
+import { rasterEllipse, rasterPolygon, rasterLine } from "../rasterizers/primitives";
+import { pixelPerfect, pixelPerfectPath } from "../rasterizers/pixelPerfect";
+import { gaussianBlurRGBA } from "../rasterizers/filters";
 
+// Módulos extraídos durante la refactorización (ver ./container/*).
+import { TOOLS } from "./container/constants/tools";
+import { buildNavItemsLateral } from "./container/constants/navItems";
+import {
+  isPointInPolygon as isPointInPolygonUtil,
+  calculateLassoBoundsFromPoints,
+  findNonEmptyBounds as findNonEmptyBoundsUtil,
+  clampCoordinates as clampCoordinatesUtil,
+  calculateRotationAngle as calculateRotationAngleUtil,
+  getRotationHandlerPosition as getRotationHandlerPositionUtil,
+} from "./container/utils/geometry";
+import {
+  buildIsolatedPixelsSet,
+  canPaintAtPixel as canPaintAtPixelUtil,
+  isPixelIsolated as isPixelIsolatedUtil,
+  isPixelIsolatedOptimized as isPixelIsolatedOptimizedUtil,
+} from "./container/utils/pixelMask";
+import {
+  initializeWebGLImageRenderer as initializeWebGLImageRendererUtil,
+  putImageDataOptimized as putImageDataOptimizedUtil,
+  disposeWebGLImageRenderer,
+} from "./container/utils/webglRenderer";
+import {
+  smoothStroke as smoothStrokeUtil,
+  straightenNearStraightSegments as straightenNearStraightSegmentsUtil,
+  applyCurveSmoothing as applyCurveSmoothingUtil,
+} from "./container/utils/strokeSmoothing";
+import { drawQuadraticCurve as drawQuadraticCurveUtil } from "./container/utils/curveDrawing";
+import { applyRotSprite as applyRotSpriteUtil } from "./container/utils/rotSpriteHelpers";
+import RotationCircle from "./container/components/RotationCircle";
+import SelectionActionsMenu from "./container/components/SelectionActionsMenu";
+import MirrorCornerHandles from "./container/components/MirrorCornerHandles";
+import { renderLayerAnimation } from "./container/components/memoized/memoizedLayerAnimation";
+import { renderFramesTimeline } from "./container/components/memoized/memoizedFramesTimeline";
+import { renderViewportNavigator } from "./container/components/memoized/memoizedViewportNavigator";
+import { renderLayerColor } from "./container/components/memoized/memoizedLayerColor";
+import { renderPlayAnimation } from "./container/components/memoized/memoizedPlayAnimation";
+import { RightPanel } from "../panels/rightPanel";
 
-
-// Definición de las herramientas disponibles
-const TOOLS = {
-  paint: "pencil",
-  paint2: "pencil2",
-  pencilPerfect: "pencilPerfect",
-  eyeDropper: "eyeDropper",
-  erase: "eraser",
-  select: "select",
-  lassoSelect: "lassoSelect",
-  move: "move",
-  fill: "fill",
-  line: "line",
-  curve: "curve",
-  square: "square",
-  triangle: "triangle",
-  circle: "circle",
-  ellipse: "ellipse",
-  polygon: "polygon",
-  polygonPencil: "polygonPencil",
-  light: "light",
-  dark: "dark",
-  selectByColor: "selectByColor",
-  blurFinger: "blurFinger",
-  smudge: "smudge",
-  deblur: "deblur"
-};
+// TOOLS ahora vive en ./container/constants/tools.js (import arriba).
 
 function CanvasTracker({
   setTool,
@@ -119,152 +136,10 @@ function CanvasTracker({
     },
   });
 
-  const navItemsLateral = [
-    {
-      label: "Selector",
-      icon: <LuMousePointer2 />,
-      onClick: () => setTool("select"),
-      toolValue: "select"
-    },
-    {
-      label: "Lazo",
-      icon: <LuLassoSelect />,
-      onClick: () => setTool("lassoSelect"),
-      toolValue: "lassoSelect"
-    },
-   
-    {
-      label: "Selector por color",
-      icon: <LuMousePointerClick />,
-      onClick: () => setTool("selectByColor"),
-      toolValue: "selectByColor"
-    },
-    {
-      label: "Pincel",
-      icon: <LuBrush />,
-      onClick: () => setTool("pencil"),
-      toolValue: "pencil"
-    },
-    {
-      label: "Pincel2",
-      icon: <LuBrush />,
-      onClick: () => setTool("pencil2"),
-      toolValue: "pencil2"
-    },
-    {
-      label: "Rellenar",
-      icon: <LuPaintBucket />,
-      onClick: () => setTool("fill"),
-      toolValue: "fill"
-    },
-    {
-      label: "Borrador",
-      icon: <LuEraser />,
-      onClick: () => setTool("eraser"),
-      toolValue: "eraser"
-    },
-    {
-      label: "Gotero",
-      icon: <BsEyedropper/>, // Usar el componente que ya tienes importado
-      onClick: () => setTool("eyeDropper"),
-      toolValue: "eyeDropper"
-    },
-    {
-      label: "Linea",
-      icon: <TfiLayoutLineSolid />,
-      onClick: () => setTool("line"),
-      toolValue: "line"
-    },
-    {
-      label: "Curva",
-      icon: <FaBezierCurve />,
-      onClick: () => setTool("curve"),
-      toolValue: "curve"
-    },
-    {
-      label: "Cuadrado",
-      icon: <LuSquare />,
-      onClick: () => setTool("square"),
-      toolValue: "square"
-    },
-    {
-      label: "Circulo",
-      icon: <LuCircle />,
-      onClick: () => setTool("circle"),
-      toolValue: "circle"
-    },
-    {
-      label: "Elipse",
-      icon: <LiaFootballBallSolid />,
-      onClick: () => setTool("ellipse"),
-      toolValue: "ellipse"
-    },
-    {
-      label: "Triangulo",
-      icon: <LuTriangle />,
-      onClick: () => setTool("triangle"),
-      toolValue: "triangle"
-    },
-    {
-      label: "Poligono",
-      icon: <BsPentagon />,
-      onClick: () => setTool("polygon"),
-      toolValue: "polygon"
-    },
-    
-    {
-      label: "Difuminador",
-      icon: <MdBlurOn />,
-      onClick: () => setTool("blurFinger"),
-      toolValue: "blurFinger"
-    },
-    {
-      label: "Mezclador",
-      icon: <PiIntersectDuotone />,
-      onClick: () => setTool("smudge"),
-      toolValue: "smudge"
-    },
-    {
-      label: "Clarificar",
-      icon: <MdOutlineDeblur/>,
-      onClick: () => setTool("deblur"),
-      toolValue: "deblur"
-    },
-    {
-      label: "Mover",
-      icon: <LuHand />,
-      onClick: () => setTool("move"),
-      toolValue: "move"
-    },
-   
-  
-    {
-      label: "Text",
-      icon: <LuType />,
-      onClick: () => setTool("text"),
-      toolValue: "text"
-    },
-    {
-      label: "Creador de formas",
-      icon: <FaDrawPolygon />,
-      onClick: () => setTool("polygonPencil"),
-      toolValue: "polygonPencil"
-    },
-    {
-      label: "Luminosidad",
-      icon: <LuSun />,
-      onClick: () => setTool("light"),
-      toolValue: "light"
-    },
-    {
-      label: "Oscurecer",
-      icon: <LuMoon />,
-      onClick: () => setTool("dark"),
-      toolValue: "dark"
-    },
-    
-    
-  ];
+  // navItemsLateral ahora lo construye `buildNavItemsLateral` desde
+  // ./container/constants/navItems.jsx. Se memoiza para estabilizar
+  // identidad mientras `setTool` no cambie.
+  const navItemsLateral = useMemo(() => buildNavItemsLateral(setTool), [setTool]);
 
   const [navConfigLateral, setNavLateralConfig] = useState({
     variant: "vertical",
@@ -562,33 +437,26 @@ const [showExporter, setShowExporter] = useState(false);
 
 
 
-// Función auxiliar para verificar si un píxel está en la lista de píxeles aislados
-const isPixelIsolated = useCallback((x, y) => {
-  if (!isolatedPixels || isolatedPixels.length === 0) {
-    return true; // Si no hay aislamiento, todos los píxeles son válidos
-  }
-  
-  return isolatedPixels.some(pixel => pixel.x === x && pixel.y === y);
-}, [isolatedPixels]);
+// Helpers delegados a ./container/utils/pixelMask.js.
+const isPixelIsolated = useCallback(
+  (x, y) => isPixelIsolatedUtil(x, y, isolatedPixels),
+  [isolatedPixels]
+);
 
-// Versión optimizada usando Set para mejor rendimiento con muchos píxeles
-const isolatedPixelsSet = useMemo(() => {
-  if (!isolatedPixels || isolatedPixels.length === 0) return null;
-  
-  return new Set(isolatedPixels.map(pixel => `${pixel.x},${pixel.y}`));
-}, [isolatedPixels]);
+const isolatedPixelsSet = useMemo(
+  () => buildIsolatedPixelsSet(isolatedPixels),
+  [isolatedPixels]
+);
 
-const isPixelIsolatedOptimized = useCallback((x, y) => {
-  if (!isolatedPixelsSet) return true; // Sin aislamiento
-  
-  return isolatedPixelsSet.has(`${x},${y}`);
-}, [isolatedPixelsSet]);
-// Función auxiliar para verificar si un píxel está en la lista de píxeles aislados
-const canPaintAtPixel = useCallback((x, y) => {
-  if (!isolatedPixelsSet) return true; // Sin aislamiento, todos los píxeles son válidos
-  
-  return isolatedPixelsSet.has(`${x},${y}`);
-}, [isolatedPixelsSet]);
+const isPixelIsolatedOptimized = useCallback(
+  (x, y) => isPixelIsolatedOptimizedUtil(x, y, isolatedPixelsSet),
+  [isolatedPixelsSet]
+);
+
+const canPaintAtPixel = useCallback(
+  (x, y) => canPaintAtPixelUtil(x, y, isolatedPixelsSet),
+  [isolatedPixelsSet]
+);
 
 
 
@@ -707,126 +575,7 @@ const [isDraggingCorners, setIsDraggingCorners] = useState(false);
 
   //===============================Logica de canvas de espejo ====================================================//
 
-  function adjustToPerfectCurves(coordinates) {
-    // Validar que el array no esté vacío
-    if (!coordinates || coordinates.length <= 1) {
-      return coordinates ? [...coordinates] : [];
-    }
-  
-    // PASO 1: Eliminar coordenadas repetidas (duplicados consecutivos)
-    const uniqueCoords = [];
-    for (let i = 0; i < coordinates.length; i++) {
-      if (i === 0 || 
-          coordinates[i].x !== coordinates[i-1].x || 
-          coordinates[i].y !== coordinates[i-1].y) {
-        uniqueCoords.push({x: coordinates[i].x, y: coordinates[i].y});
-      }
-    }
-  
-    if (uniqueCoords.length <= 2) {
-      return uniqueCoords;
-    }
-  
-    // PASO 2: Eliminar SOLO escalones innecesarios
-    const result = [];
-    let c = 0;
-  
-    while (c < uniqueCoords.length) {
-      let shouldSkip = false;
-  
-      // Verificar si es un escalón innecesario (solo esquinas L)
-      if (c > 0 && c + 1 < uniqueCoords.length) {
-        const prev = uniqueCoords[c - 1];
-        const current = uniqueCoords[c];
-        const next = uniqueCoords[c + 1];
-  
-        shouldSkip = isStairStepPoint(prev, current, next);
-      }
-  
-      if (shouldSkip) {
-        c++;
-        continue;
-      }
-  
-      // Agregar el punto actual
-      result.push({x: uniqueCoords[c].x, y: uniqueCoords[c].y});
-      c++;
-    }
-  
-    return result;
-  }
-  
-  function isStairStepPoint(prev, current, next) {
-    // SOLO detectar escalones en esquinas L
-    // Un punto es escalón si:
-    // 1. Está alineado horizontal O verticalmente con el anterior
-    // 2. Está alineado horizontal O verticalmente con el siguiente  
-    // 3. El anterior y siguiente NO están en la misma línea
-    // 4. Forma exactamente una esquina de 90 grados
-    
-    const prevAlignedH = (prev.x === current.x); // alineado horizontalmente con anterior
-    const prevAlignedV = (prev.y === current.y); // alineado verticalmente con anterior
-    const nextAlignedH = (next.x === current.x); // alineado horizontalmente con siguiente
-    const nextAlignedV = (next.y === current.y); // alineado verticalmente con siguiente
-    
-    // Debe estar alineado con ambos puntos (anterior y siguiente)
-    const alignedWithPrev = prevAlignedH || prevAlignedV;
-    const alignedWithNext = nextAlignedH || nextAlignedV;
-    
-    if (!alignedWithPrev || !alignedWithNext) {
-      return false; // No es un escalón si no está perfectamente alineado
-    }
-    
-    // No deben estar todos en la misma línea (ni horizontal ni vertical)
-    const allSameX = (prev.x === current.x && current.x === next.x);
-    const allSameY = (prev.y === current.y && current.y === next.y);
-    
-    if (allSameX || allSameY) {
-      return false; // Es una línea recta, no tocar
-    }
-    
-    // Verificar que sea exactamente una esquina L (90 grados)
-    // Caso 1: Horizontal -> Vertical (prev-current horizontal, current-next vertical)
-    const isLCorner1 = (prevAlignedV && nextAlignedH);
-    // Caso 2: Vertical -> Horizontal (prev-current vertical, current-next horizontal)  
-    const isLCorner2 = (prevAlignedH && nextAlignedV);
-    
-    return isLCorner1 || isLCorner2;
-  }
-  
-  // Función auxiliar para mostrar exactamente qué se está eliminando
-  function debugStairSteps(coordinates) {
-    console.log("=== ANÁLISIS DE ESCALONES ===");
-    
-    const unique = [];
-    for (let i = 0; i < coordinates.length; i++) {
-      if (i === 0 || 
-          coordinates[i].x !== coordinates[i-1].x || 
-          coordinates[i].y !== coordinates[i-1].y) {
-        unique.push({...coordinates[i], index: i});
-      }
-    }
-    
-    console.log("Puntos únicos:", unique.length);
-    
-    for (let i = 1; i < unique.length - 1; i++) {
-      const prev = unique[i - 1];
-      const current = unique[i];
-      const next = unique[i + 1];
-      
-      if (isStairStepPoint(prev, current, next)) {
-        console.log(`Escalón detectado en (${current.x},${current.y}) - será eliminado`);
-      }
-    }
-    
-    const result = adjustToPerfectCurves(coordinates);
-    console.log("Resultado:", result.length, "puntos");
-    console.log("Escalones eliminados:", unique.length - result.length);
-    
-    return result;
-  }
-
-//Obtener rápido el nombre de una capa: 
+//Obtener rápido el nombre de una capa:
 const getActiveLayerName = useCallback(() => {
   const activeLayer = layers.find(layer => layer.id === activeLayerId);
   return activeLayer?.name || 'Capa sin nombre';
@@ -948,272 +697,15 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
 
 
   
-  // Función para dibujar preview de curva
+  // Delegado a ./container/utils/curveDrawing.js.
   const drawQuadraticCurve = useCallback(
-    (ctx, start, end, control, width, color) => {
-      ctx.save();
-      ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
-  
-      const distance = Math.max(
-        Math.abs(end.x - start.x) + Math.abs(end.y - start.y),
-        Math.abs(control.x - start.x) + Math.abs(control.y - start.y),
-        Math.abs(control.x - end.x) + Math.abs(control.y - end.y)
-      );
-  
-      const steps = Math.max(distance * 3, 50);
-      const points = [];
-  
-      // Calcular puntos originales de la curva cuadrática
-      for (let i = 0; i <= steps; i++) {
-        const t = i / steps;
-        const x = Math.round(
-          (1 - t) * (1 - t) * start.x +
-            2 * (1 - t) * t * control.x +
-            t * t * end.x
-        );
-        const y = Math.round(
-          (1 - t) * (1 - t) * start.y +
-            2 * (1 - t) * t * control.y +
-            t * t * end.y
-        );
-        points.push({ x, y });
-      }
-  
-      // Función auxiliar para detectar escalones
-      function isStairStepPoint(prev, current, next) {
-        // Detectar si forma un escalón en L (horizontal-vertical o vertical-horizontal)
-        const isHorizontalThenVertical = 
-          (prev.y === current.y && current.x === next.x) ||
-          (prev.x === current.x && current.y === next.y);
-        
-        return isHorizontalThenVertical;
-      }
-  
-      // Tu función de mejora
-      function adjustToPerfectCurves(coordinates) {
-        // Validar que el array no esté vacío
-        if (!coordinates || coordinates.length <= 1) {
-          return coordinates ? [...coordinates] : [];
-        }
-      
-        // PASO 1: Eliminar coordenadas repetidas (duplicados consecutivos)
-        const uniqueCoords = [];
-        for (let i = 0; i < coordinates.length; i++) {
-          if (i === 0 || 
-              coordinates[i].x !== coordinates[i-1].x || 
-              coordinates[i].y !== coordinates[i-1].y) {
-            uniqueCoords.push({x: coordinates[i].x, y: coordinates[i].y});
-          }
-        }
-      
-        if (uniqueCoords.length <= 2) {
-          return uniqueCoords;
-        }
-      
-        // PASO 2: Eliminar SOLO escalones innecesarios
-        const result = [];
-        let c = 0;
-      
-        while (c < uniqueCoords.length) {
-          let shouldSkip = false;
-      
-          // Verificar si es un escalón innecesario (solo esquinas L)
-          if (c > 0 && c + 1 < uniqueCoords.length) {
-            const prev = uniqueCoords[c - 1];
-            const current = uniqueCoords[c];
-            const next = uniqueCoords[c + 1];
-      
-            shouldSkip = isStairStepPoint(prev, current, next);
-          }
-      
-          if (shouldSkip) {
-            c++;
-            continue;
-          }
-      
-          // Agregar el punto actual
-          result.push({x: uniqueCoords[c].x, y: uniqueCoords[c].y});
-          c++;
-        }
-      
-        return result;
-      }
-  
-      // APLICAR LA FUNCIÓN DE MEJORA A LOS PUNTOS
-      const adjustedPoints = adjustToPerfectCurves(points);
-  
-      // Función para dibujar líneas pixel-perfect
-      const drawPixelPerfectLine = (x0, y0, x1, y1, width) => {
-        const dx = Math.abs(x1 - x0);
-        const dy = -Math.abs(y1 - y0);
-        const sx = x0 < x1 ? 1 : -1;
-        const sy = y0 < y1 ? 1 : -1;
-        let err = dx + dy;
-        let x = x0,
-          y = y0;
-  
-        const offset = Math.floor(width / 2);
-        const drawnPixels = new Set();
-  
-        while (true) {
-          for (let dy = 0; dy < width; dy++) {
-            for (let dx = 0; dx < width; dx++) {
-              const px = x + dx - offset;
-              const py = y + dy - offset;
-              const key = `${px},${py}`;
-  
-              if (
-                !drawnPixels.has(key) &&
-                px >= 0 &&
-                px < ctx.canvas.width &&
-                py >= 0 &&
-                py < ctx.canvas.height
-              ) {
-                ctx.fillRect(px, py, 1, 1);
-                drawnPixels.add(key);
-              }
-            }
-          }
-  
-          if (x === x1 && y === y1) break;
-          const e2 = 2 * err;
-          if (e2 >= dy) {
-            err += dy;
-            x += sx;
-          }
-          if (e2 <= dx) {
-            err += dx;
-            y += sy;
-          }
-        }
-      };
-  
-      // Dibujar líneas usando los puntos ajustados
-      for (let i = 0; i < adjustedPoints.length - 1; i++) {
-        const current = adjustedPoints[i];
-        const next = adjustedPoints[i + 1];
-  
-        if (current.x !== next.x || current.y !== next.y) {
-          drawPixelPerfectLine(current.x, current.y, next.x, next.y, width);
-        }
-      }
-  
-      // Dibujar puntos de inicio y fin
-      const offset = Math.floor(width / 2);
-  
-      for (let dy = 0; dy < width; dy++) {
-        for (let dx = 0; dx < width; dx++) {
-          const px = start.x + dx - offset;
-          const py = start.y + dy - offset;
-          if (
-            px >= 0 &&
-            px < ctx.canvas.width &&
-            py >= 0 &&
-            py < ctx.canvas.height
-          ) {
-            ctx.fillRect(px, py, 1, 1);
-          }
-        }
-      }
-  
-      for (let dy = 0; dy < width; dy++) {
-        for (let dx = 0; dx < width; dx++) {
-          const px = end.x + dx - offset;
-          const py = end.y + dy - offset;
-          if (
-            px >= 0 &&
-            px < ctx.canvas.width &&
-            py >= 0 &&
-            py < ctx.canvas.height
-          ) {
-            ctx.fillRect(px, py, 1, 1);
-          }
-        }
-      }
-  
-      ctx.restore();
-    },
-    [toolParameters]
+    (ctx, start, end, control, width, color) =>
+      drawQuadraticCurveUtil(ctx, start, end, control, width, color),
+    []
   );
-  const drawPreviewCurve = (start, end, control, width) => {
-    const distance = Math.max(
-      Math.abs(end.x - start.x) + Math.abs(end.y - start.y),
-      Math.abs(control.x - start.x) + Math.abs(control.y - start.y),
-      Math.abs(control.x - end.x) + Math.abs(control.y - end.y)
-    );
-
-    const steps = Math.max(distance * 3, 50);
-    const points = [];
-
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      const x = Math.round(
-        (1 - t) * (1 - t) * start.x +
-          2 * (1 - t) * t * control.x +
-          t * t * end.x
-      );
-      const y = Math.round(
-        (1 - t) * (1 - t) * start.y +
-          2 * (1 - t) * t * control.y +
-          t * t * end.y
-      );
-      points.push({ x, y });
-    }
-
-    const offset = Math.floor(width / 2);
-    const drawnPixels = new Set();
-
-    for (let i = 0; i < points.length - 1; i++) {
-      const current = points[i];
-      const next = points[i + 1];
-
-      if (current.x !== next.x || current.y !== next.y) {
-        const dx = Math.abs(next.x - current.x);
-        const dy = -Math.abs(next.y - current.y);
-        const sx = current.x < next.x ? 1 : -1;
-        const sy = current.y < next.y ? 1 : -1;
-        let err = dx + dy;
-        let x = current.x,
-          y = current.y;
-
-        while (true) {
-          for (let brushY = 0; brushY < width; brushY++) {
-            for (let brushX = 0; brushX < width; brushX++) {
-              const px = x + brushX - offset;
-              const py = y + brushY - offset;
-              const key = `${px},${py}`;
-
-              if (!drawnPixels.has(key)) {
-                const screenX = (px - viewportOffset.x) * zoom;
-                const screenY = (py - viewportOffset.y) * zoom;
-
-                if (screenX >= 0 && screenY >= 0) {
-                  ctx.fillRect(
-                    Math.floor(screenX),
-                    Math.floor(screenY),
-                    zoom,
-                    zoom
-                  );
-                  drawnPixels.add(key);
-                }
-              }
-            }
-          }
-
-          if (x === next.x && y === next.y) break;
-          const e2 = 2 * err;
-          if (e2 >= dy) {
-            err += dy;
-            x += sx;
-          }
-          if (e2 <= dx) {
-            err += dx;
-            y += sy;
-          }
-        }
-      }
-    }
-  };
+  // La definición real de `drawPreviewCurve` vive como closure dentro del
+  // bloque de curveState === "setting-control" (más abajo), donde sí tiene
+  // acceso a `ctx`. La versión outer era dead code (ctx fuera de scope).
 
   // Función para dibujar preview de línea
   const drawPreviewLine = (x0, y0, x1, y1) => {
@@ -1232,7 +724,7 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
       if (screenX >= 0 && screenY >= 0) {
         previewCanvasRef.current
           ?.getContext("2d")
-          ?.fillRect(Math.floor(screenX), Math.floor(screenY), zoom, zoom);
+          ?.fillRect(Math.floor(screenX), Math.floor(screenY), Math.floor(screenX + zoom) - Math.floor(screenX), Math.floor(screenY + zoom) - Math.floor(screenY));
       }
 
       if (x === x1 && y === y1) break;
@@ -1388,7 +880,7 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
     const rectWidth = Math.abs(width);
     const rectHeight = Math.abs(height);
 
-    // Early exit para figuras muy grandes (más de 50,000 píxeles)
+    // Early exit para figuras muy grandes (más de 50,000 píxeles de canvas)
     if (rectWidth * rectHeight > 50000) {
       drawPreviewRectSimplified(ctx, start, end, borderColor, fillColor);
       return;
@@ -1406,17 +898,18 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
       startY + rectHeight - viewportOffset.y
     );
 
-    // Solo procesar píxeles visibles
-    const visibleWidth = Math.max(0, viewportEndX - viewportStartX);
-    const visibleHeight = Math.max(0, viewportEndY - viewportStartY);
+    // Solo procesar píxeles visibles (en resolución de canvas, sin zoom)
+    const visibleWidth = Math.max(0, Math.ceil(viewportEndX - viewportStartX));
+    const visibleHeight = Math.max(0, Math.ceil(viewportEndY - viewportStartY));
 
     if (visibleWidth <= 0 || visibleHeight <= 0) return;
 
-    // Usar ImageData para renderizado masivo
-    const imageData = ctx.createImageData(
-      visibleWidth * zoom,
-      visibleHeight * zoom
-    );
+    // Construimos ImageData a resolución de CANVAS (no a resolución de pantalla)
+    // y luego la escalamos con drawImage + nearest-neighbor. Antes el ImageData
+    // se creaba a `visibleWidth*zoom` x `visibleHeight*zoom` y el bucle interno
+    // escribía zoom*zoom píxeles por cada píxel del canvas: el coste y la
+    // memoria crecían con zoom² y la previa se trababa a zooms altos.
+    const imageData = ctx.createImageData(visibleWidth, visibleHeight);
     const data = imageData.data;
 
     // Pre-calcular colores
@@ -1430,100 +923,105 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
     const borderB = borderColor?.b || 0;
     const borderA = Math.floor((borderColor?.a || 0) * 255 * 0.8);
 
-    // Renderizar píxel por píxel pero usando ImageData
     for (let py = 0; py < visibleHeight; py++) {
       for (let px = 0; px < visibleWidth; px++) {
-        // Coordenadas en el canvas original
         const canvasX = viewportStartX + viewportOffset.x + px;
         const canvasY = viewportStartY + viewportOffset.y + py;
 
-        // Verificar si está dentro del rectángulo
         const relativeX = canvasX - startX;
         const relativeY = canvasY - startY;
 
         if (
-          relativeX >= 0 &&
-          relativeX < rectWidth &&
-          relativeY >= 0 &&
-          relativeY < rectHeight
+          relativeX < 0 ||
+          relativeX >= rectWidth ||
+          relativeY < 0 ||
+          relativeY >= rectHeight
         ) {
-          // Lógica del rectángulo redondeado (copiada directamente de tu código)
-          let isInside = true;
-          if (radius > 0) {
-            // Esquina superior izquierda
-            if (relativeX < radius && relativeY < radius) {
-              const dx = radius - relativeX;
-              const dy = radius - relativeY;
-              isInside = dx * dx + dy * dy <= radius * radius;
-            }
-            // Esquina superior derecha
-            else if (relativeX >= rectWidth - radius && relativeY < radius) {
-              const dx = relativeX - (rectWidth - radius - 1);
-              const dy = radius - relativeY;
-              isInside = dx * dx + dy * dy <= radius * radius;
-            }
-            // Esquina inferior izquierda
-            else if (relativeX < radius && relativeY >= rectHeight - radius) {
-              const dx = radius - relativeX;
-              const dy = relativeY - (rectHeight - radius - 1);
-              isInside = dx * dx + dy * dy <= radius * radius;
-            }
-            // Esquina inferior derecha
-            else if (
-              relativeX >= rectWidth - radius &&
-              relativeY >= rectHeight - radius
-            ) {
-              const dx = relativeX - (rectWidth - radius - 1);
-              const dy = relativeY - (rectHeight - radius - 1);
-              isInside = dx * dx + dy * dy <= radius * radius;
-            }
+          continue;
+        }
+
+        // Lógica del rectángulo redondeado
+        let isInside = true;
+        if (radius > 0) {
+          if (relativeX < radius && relativeY < radius) {
+            const dx = radius - relativeX;
+            const dy = radius - relativeY;
+            isInside = dx * dx + dy * dy <= radius * radius;
+          } else if (relativeX >= rectWidth - radius && relativeY < radius) {
+            const dx = relativeX - (rectWidth - radius - 1);
+            const dy = radius - relativeY;
+            isInside = dx * dx + dy * dy <= radius * radius;
+          } else if (relativeX < radius && relativeY >= rectHeight - radius) {
+            const dx = radius - relativeX;
+            const dy = relativeY - (rectHeight - radius - 1);
+            isInside = dx * dx + dy * dy <= radius * radius;
+          } else if (
+            relativeX >= rectWidth - radius &&
+            relativeY >= rectHeight - radius
+          ) {
+            const dx = relativeX - (rectWidth - radius - 1);
+            const dy = relativeY - (rectHeight - radius - 1);
+            isInside = dx * dx + dy * dy <= radius * radius;
           }
+        }
 
-          if (isInside) {
-            // Determinar si es borde (copiada directamente de tu lógica)
-            const isBorder =
-              borderWidth > 0 &&
-              (relativeX < borderWidth ||
-                relativeX >= rectWidth - borderWidth ||
-                relativeY < borderWidth ||
-                relativeY >= rectHeight - borderWidth ||
-                // Verificar bordes internos para esquinas redondeadas
-                (radius > 0 &&
-                  !isInsideInnerRoundedRect(
-                    relativeX - borderWidth,
-                    relativeY - borderWidth,
-                    rectWidth - 2 * borderWidth,
-                    rectHeight - 2 * borderWidth,
-                    Math.max(0, radius - borderWidth)
-                  )));
+        if (!isInside) continue;
 
-            // Dibujar en todas las posiciones del zoom
-            for (let zy = 0; zy < zoom; zy++) {
-              for (let zx = 0; zx < zoom; zx++) {
-                const pixelIndex =
-                  ((py * zoom + zy) * visibleWidth * zoom + (px * zoom + zx)) *
-                  4;
+        const isBorder =
+          borderWidth > 0 &&
+          (relativeX < borderWidth ||
+            relativeX >= rectWidth - borderWidth ||
+            relativeY < borderWidth ||
+            relativeY >= rectHeight - borderWidth ||
+            (radius > 0 &&
+              !isInsideInnerRoundedRect(
+                relativeX - borderWidth,
+                relativeY - borderWidth,
+                rectWidth - 2 * borderWidth,
+                rectHeight - 2 * borderWidth,
+                Math.max(0, radius - borderWidth)
+              )));
 
-                if (isBorder && borderColor && borderWidth > 0) {
-                  data[pixelIndex] = borderR;
-                  data[pixelIndex + 1] = borderG;
-                  data[pixelIndex + 2] = borderB;
-                  data[pixelIndex + 3] = borderA;
-                } else if (!isBorder && fillColor) {
-                  data[pixelIndex] = fillR;
-                  data[pixelIndex + 1] = fillG;
-                  data[pixelIndex + 2] = fillB;
-                  data[pixelIndex + 3] = fillA;
-                }
-              }
-            }
-          }
+        const idx = (py * visibleWidth + px) * 4;
+
+        if (isBorder && borderColor && borderWidth > 0) {
+          data[idx] = borderR;
+          data[idx + 1] = borderG;
+          data[idx + 2] = borderB;
+          data[idx + 3] = borderA;
+        } else if (!isBorder && fillColor) {
+          data[idx] = fillR;
+          data[idx + 1] = fillG;
+          data[idx + 2] = fillB;
+          data[idx + 3] = fillA;
         }
       }
     }
 
-    // Una sola llamada para dibujar todos los píxeles
-    ctx.putImageData(imageData, viewportStartX * zoom, viewportStartY * zoom);
+    // Escalado pixel-perfect a pantalla: volcamos el ImageData a un canvas
+    // offscreen del tamaño del canvas-res y lo blitteamos escalado. El coste
+    // del escalado ya no depende del zoom.
+    const off = document.createElement("canvas");
+    off.width = visibleWidth;
+    off.height = visibleHeight;
+    off.getContext("2d").putImageData(imageData, 0, 0);
+
+    const prevSmoothing = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    const dx0 = Math.round(viewportStartX * zoom);
+    const dy0 = Math.round(viewportStartY * zoom);
+    ctx.drawImage(
+      off,
+      0,
+      0,
+      visibleWidth,
+      visibleHeight,
+      dx0,
+      dy0,
+      Math.round((viewportStartX + visibleWidth) * zoom) - dx0,
+      Math.round((viewportStartY + visibleHeight) * zoom) - dy0
+    );
+    ctx.imageSmoothingEnabled = prevSmoothing;
   };
 
   // Función auxiliar para verificar rectángulo redondeado interno
@@ -1640,140 +1138,80 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
     borderColor,
     fillColor
   ) => {
-    // Calcular las coordenadas del triángulo
-    const startX = Math.min(start.x, end.x);
-    const startY = Math.min(start.y, end.y);
-    const width = Math.abs(end.x - start.x);
-    const height = Math.abs(end.y - start.y);
-
+    const startX = Math.min(start.x, end.x) | 0;
+    const startY = Math.min(start.y, end.y) | 0;
+    const width = Math.abs(end.x - start.x) | 0;
+    const height = Math.abs(end.y - start.y) | 0;
     if (width === 0 || height === 0) return;
 
-    // Definir los tres vértices del triángulo (triángulo equilátero inscrito en rectángulo)
-    const topX = startX + Math.floor(width / 2);
-    const topY = startY;
-    const bottomLeftX = startX;
-    const bottomLeftY = startY + height;
-    const bottomRightX = startX + width;
-    const bottomRightY = startY + height;
+    const verts = [
+      { x: startX + Math.floor(width / 2), y: startY },
+      { x: startX, y: startY + height },
+      { x: startX + width, y: startY + height },
+    ];
 
-    // Función para verificar si un punto está dentro del triángulo usando coordenadas baricéntricas
-    const isInsideTriangle = (px, py, x1, y1, x2, y2, x3, y3) => {
-      const denominator = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
-      if (denominator === 0) return false;
-
-      const a = ((y2 - y3) * (px - x3) + (x3 - x2) * (py - y3)) / denominator;
-      const b = ((y3 - y1) * (px - x3) + (x1 - x3) * (py - y3)) / denominator;
-      const c = 1 - a - b;
-
-      return a >= 0 && b >= 0 && c >= 0;
+    const cw = ctx.canvas.width;
+    const ch = ctx.canvas.height;
+    const stampPx = (x, y) => {
+      if (x < 0 || x >= cw || y < 0 || y >= ch) return;
+      ctx.fillRect(x, y, 1, 1);
     };
 
-    // Función para calcular la distancia de un punto a una línea
-    const distanceToLine = (px, py, x1, y1, x2, y2) => {
-      const A = px - x1;
-      const B = py - y1;
-      const C = x2 - x1;
-      const D = y2 - y1;
+    if (fillColor) {
+      ctx.fillStyle = `rgba(${fillColor.r}, ${fillColor.g}, ${fillColor.b}, ${fillColor.a})`;
+      rasterPolygon(verts, stampPx, true);
+    }
 
-      const dot = A * C + B * D;
-      const lenSq = C * C + D * D;
-
-      if (lenSq === 0) return Math.sqrt(A * A + B * B);
-
-      const param = dot / lenSq;
-      let xx, yy;
-
-      if (param < 0) {
-        xx = x1;
-        yy = y1;
-      } else if (param > 1) {
-        xx = x2;
-        yy = y2;
-      } else {
-        xx = x1 + param * C;
-        yy = y1 + param * D;
-      }
-
-      const dx = px - xx;
-      const dy = py - yy;
-      return Math.sqrt(dx * dx + dy * dy);
-    };
-
-    // Dibujar el triángulo píxel por píxel
-    for (let py = 0; py <= height; py++) {
-      // Cambiar < por <=
-      for (let px = 0; px <= width; px++) {
-        // Cambiar < por <=
-        const finalX = startX + px;
-        const finalY = startY + py;
-
-        if (
-          finalX >= 0 &&
-          finalX < ctx.canvas.width &&
-          finalY >= 0 &&
-          finalY < ctx.canvas.height
-        ) {
-          const isInside = isInsideTriangle(
-            finalX,
-            finalY,
-            topX,
-            topY,
-            bottomLeftX,
-            bottomLeftY,
-            bottomRightX,
-            bottomRightY
-          );
-
-          if (isInside) {
-            let shouldDraw = false;
-            let colorToUse = null;
-
-            // Determinar si es borde o relleno
-            const isBorder =
-              borderWidth > 0 &&
-              (distanceToLine(
-                finalX,
-                finalY,
-                topX,
-                topY,
-                bottomLeftX,
-                bottomLeftY
-              ) < borderWidth ||
-                distanceToLine(
-                  finalX,
-                  finalY,
-                  bottomLeftX,
-                  bottomLeftY,
-                  bottomRightX,
-                  bottomRightY
-                ) < borderWidth ||
-                distanceToLine(
-                  finalX,
-                  finalY,
-                  bottomRightX,
-                  bottomRightY,
-                  topX,
-                  topY
-                ) < borderWidth);
-
-            if (isBorder && borderColor && borderWidth > 0) {
-              shouldDraw = true;
-              colorToUse = borderColor;
-            } else if (!isBorder && fillColor) {
-              shouldDraw = true;
-              colorToUse = fillColor;
-            }
-
-            if (shouldDraw && colorToUse) {
-              ctx.fillStyle = `rgba(${colorToUse.r}, ${colorToUse.g}, ${colorToUse.b}, ${colorToUse.a})`;
-              ctx.fillRect(finalX, finalY, 1, 1);
+    if (borderColor && borderWidth > 0) {
+      ctx.fillStyle = `rgba(${borderColor.r}, ${borderColor.g}, ${borderColor.b}, ${borderColor.a})`;
+      const bw = borderWidth | 0;
+      const half = (bw / 2) | 0;
+      const thickStamp = bw > 1
+        ? (x, y) => {
+            for (let dy = 0; dy < bw; dy++) {
+              for (let dx = 0; dx < bw; dx++) stampPx(x + dx - half, y + dy - half);
             }
           }
-        }
+        : stampPx;
+      for (let i = 0; i < 3; i++) {
+        const a = verts[i];
+        const b = verts[(i + 1) % 3];
+        rasterLine(a.x, a.y, b.x, b.y, thickStamp);
       }
     }
   };
   // Dibujar la previa del triangulo
+  const drawPreviewTriangleSimplified = (
+    ctx,
+    startX,
+    startY,
+    width,
+    height,
+    borderColor
+  ) => {
+    const sx = (startX - viewportOffset.x) * zoom;
+    const sy = (startY - viewportOffset.y) * zoom;
+    const sw = width * zoom;
+    const sh = height * zoom;
+
+    ctx.strokeStyle = borderColor
+      ? `rgba(${borderColor.r}, ${borderColor.g}, ${borderColor.b}, 0.8)`
+      : "rgba(100, 100, 100, 0.5)";
+    ctx.setLineDash([5, 5]);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(sx + sw / 2, sy);
+    ctx.lineTo(sx, sy + sh);
+    ctx.lineTo(sx + sw, sy + sh);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+    ctx.font = "12px monospace";
+    ctx.fillText(`${width}x${height}`, sx + 5, sy + 15);
+  };
+
   const drawPreviewTriangle = (
     ctx,
     start,
@@ -1789,134 +1227,332 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
 
     if (width === 0 || height === 0) return;
 
-    // Definir los tres vértices del triángulo
-    const topX = startX + Math.floor(width / 2);
-    const topY = startY;
-    const bottomLeftX = startX;
-    const bottomLeftY = startY + height;
-    const bottomRightX = startX + width;
-    const bottomRightY = startY + height;
+    // Early exit para triángulos muy grandes (igual umbral que el cuadrado).
+    if (width * height > 50000) {
+      drawPreviewTriangleSimplified(ctx, startX, startY, width, height, borderColor);
+      return;
+    }
 
-    // Función para verificar si un punto está dentro del triángulo
-    const isInsideTriangle = (px, py, x1, y1, x2, y2, x3, y3) => {
-      const denominator = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
-      if (denominator === 0) return false;
+    // Vértices en coords de canvas
+    const verts = [
+      { x: startX + Math.floor(width / 2), y: startY },
+      { x: startX, y: startY + height },
+      { x: startX + width, y: startY + height },
+    ];
 
-      const a = ((y2 - y3) * (px - x3) + (x3 - x2) * (py - y3)) / denominator;
-      const b = ((y3 - y1) * (px - x3) + (x1 - x3) * (py - y3)) / denominator;
-      const c = 1 - a - b;
+    // Padding por el thickStamp del borde: puede desbordar `half` píxeles fuera
+    // del bounding box del triángulo.
+    const bw = borderColor && borderWidth > 0 ? Math.max(0, borderWidth | 0) : 0;
+    const half = (bw / 2) | 0;
+    const pad = Math.max(half, bw - half);
 
-      return a >= 0 && b >= 0 && c >= 0;
+    const viewportStartX = Math.max(0, startX - pad - viewportOffset.x);
+    const viewportStartY = Math.max(0, startY - pad - viewportOffset.y);
+    const viewportEndX = Math.min(
+      viewportWidth,
+      startX + width + pad - viewportOffset.x
+    );
+    const viewportEndY = Math.min(
+      viewportHeight,
+      startY + height + pad - viewportOffset.y
+    );
+
+    const visibleWidth = Math.max(0, Math.ceil(viewportEndX - viewportStartX));
+    const visibleHeight = Math.max(0, Math.ceil(viewportEndY - viewportStartY));
+
+    if (visibleWidth <= 0 || visibleHeight <= 0) return;
+
+    // ImageData a resolución de CANVAS. Antes se hacía `ctx.fillRect(sx, sy,
+    // zoom, zoom)` por cada píxel del canvas — O(área) llamadas a Canvas2D y
+    // O(área × zoom²) píxeles escritos. A zooms altos (20-50) esto dominaba
+    // la previa en cada movimiento del mouse. Ahora escribimos bytes puros en
+    // un buffer pequeño y blitteamos una sola vez con drawImage nearest-
+    // neighbor (GPU), quedando el coste independiente del zoom.
+    const imageData = ctx.createImageData(visibleWidth, visibleHeight);
+    const data = imageData.data;
+
+    const originX = viewportStartX + viewportOffset.x;
+    const originY = viewportStartY + viewportOffset.y;
+
+    const fillR = fillColor?.r || 0;
+    const fillG = fillColor?.g || 0;
+    const fillB = fillColor?.b || 0;
+    const fillA = Math.floor((fillColor?.a || 0) * 255 * 0.6);
+
+    const borderR = borderColor?.r || 0;
+    const borderG = borderColor?.g || 0;
+    const borderB = borderColor?.b || 0;
+    const borderA = Math.floor((borderColor?.a || 0) * 255 * 0.8);
+
+    const plotFill = (x, y) => {
+      const lx = x - originX;
+      const ly = y - originY;
+      if (lx < 0 || ly < 0 || lx >= visibleWidth || ly >= visibleHeight) return;
+      const idx = (ly * visibleWidth + lx) * 4;
+      data[idx] = fillR;
+      data[idx + 1] = fillG;
+      data[idx + 2] = fillB;
+      data[idx + 3] = fillA;
     };
 
-    // Función para calcular la distancia de un punto a una línea
-    const distanceToLine = (px, py, x1, y1, x2, y2) => {
-      const A = px - x1;
-      const B = py - y1;
-      const C = x2 - x1;
-      const D = y2 - y1;
-
-      const dot = A * C + B * D;
-      const lenSq = C * C + D * D;
-
-      if (lenSq === 0) return Math.sqrt(A * A + B * B);
-
-      const param = dot / lenSq;
-      let xx, yy;
-
-      if (param < 0) {
-        xx = x1;
-        yy = y1;
-      } else if (param > 1) {
-        xx = x2;
-        yy = y2;
-      } else {
-        xx = x1 + param * C;
-        yy = y1 + param * D;
-      }
-
-      const dx = px - xx;
-      const dy = py - yy;
-      return Math.sqrt(dx * dx + dy * dy);
+    const plotBorder = (x, y) => {
+      const lx = x - originX;
+      const ly = y - originY;
+      if (lx < 0 || ly < 0 || lx >= visibleWidth || ly >= visibleHeight) return;
+      const idx = (ly * visibleWidth + lx) * 4;
+      data[idx] = borderR;
+      data[idx + 1] = borderG;
+      data[idx + 2] = borderB;
+      data[idx + 3] = borderA;
     };
 
-    // Dibujar preview píxel por píxel
-    for (let py = 0; py <= height; py++) {
-      // Cambiar < por <=
-      for (let px = 0; px <= width; px++) {
-        // Cambiar < por <=
-        const canvasX = startX + px;
-        const canvasY = startY + py;
+    if (fillColor) {
+      rasterPolygon(verts, plotFill, true);
+    }
 
-        const isInside = isInsideTriangle(
-          canvasX,
-          canvasY,
-          topX,
-          topY,
-          bottomLeftX,
-          bottomLeftY,
-          bottomRightX,
-          bottomRightY
-        );
-
-        if (isInside) {
-          let shouldDraw = false;
-          let colorToUse = null;
-          let alpha = 0.7;
-
-          // Determinar si es borde o relleno
-          const isBorder =
-            borderWidth > 0 &&
-            (distanceToLine(
-              canvasX,
-              canvasY,
-              topX,
-              topY,
-              bottomLeftX,
-              bottomLeftY
-            ) < borderWidth ||
-              distanceToLine(
-                canvasX,
-                canvasY,
-                bottomLeftX,
-                bottomLeftY,
-                bottomRightX,
-                bottomRightY
-              ) < borderWidth ||
-              distanceToLine(
-                canvasX,
-                canvasY,
-                bottomRightX,
-                bottomRightY,
-                topX,
-                topY
-              ) < borderWidth);
-
-          if (isBorder && borderColor && borderWidth > 0) {
-            shouldDraw = true;
-            colorToUse = borderColor;
-            alpha = 0.8; // Borde un poco más opaco
-          } else if (!isBorder && fillColor) {
-            shouldDraw = true;
-            colorToUse = fillColor;
-            alpha = 0.6; // Relleno un poco más transparente
-          }
-
-          if (shouldDraw && colorToUse) {
-            const screenX = (canvasX - viewportOffset.x) * zoom;
-            const screenY = (canvasY - viewportOffset.y) * zoom;
-
-            if (screenX >= 0 && screenY >= 0) {
-              ctx.fillStyle = `rgba(${colorToUse.r}, ${colorToUse.g}, ${colorToUse.b}, ${alpha})`;
-              ctx.fillRect(
-                Math.floor(screenX),
-                Math.floor(screenY),
-                zoom,
-                zoom
-              );
+    if (bw > 0) {
+      const thickStamp = bw > 1
+        ? (x, y) => {
+            for (let dy = 0; dy < bw; dy++) {
+              for (let dx = 0; dx < bw; dx++) plotBorder(x + dx - half, y + dy - half);
             }
           }
-        }
+        : plotBorder;
+      for (let i = 0; i < 3; i++) {
+        const a = verts[i];
+        const b = verts[(i + 1) % 3];
+        rasterLine(a.x, a.y, b.x, b.y, thickStamp);
+      }
+    }
+
+    const off = document.createElement("canvas");
+    off.width = visibleWidth;
+    off.height = visibleHeight;
+    off.getContext("2d").putImageData(imageData, 0, 0);
+
+    const prevSmoothing = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    const tdx0 = Math.round(viewportStartX * zoom);
+    const tdy0 = Math.round(viewportStartY * zoom);
+    ctx.drawImage(
+      off,
+      0,
+      0,
+      visibleWidth,
+      visibleHeight,
+      tdx0,
+      tdy0,
+      Math.round((viewportStartX + visibleWidth) * zoom) - tdx0,
+      Math.round((viewportStartY + visibleHeight) * zoom) - tdy0
+    );
+    ctx.imageSmoothingEnabled = prevSmoothing;
+  };
+
+  // Preview version: rasteriza en coords de canvas pero pinta en coords de
+  // pantalla (zoom-scaled) con alpha de preview. Debe producir la misma forma
+  // que rasterizeEllipseToCtx para que el shape no salte al soltar el mouse.
+  const drawPreviewEllipseSimplified = (ctx, cx, cy, rx, ry, borderColor) => {
+    const sx = (cx - viewportOffset.x) * zoom;
+    const sy = (cy - viewportOffset.y) * zoom;
+    ctx.strokeStyle = borderColor
+      ? `rgba(${borderColor.r}, ${borderColor.g}, ${borderColor.b}, 0.8)`
+      : "rgba(100, 100, 100, 0.5)";
+    ctx.setLineDash([5, 5]);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, rx * zoom, ry * zoom, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+    ctx.font = "12px monospace";
+    ctx.fillText(`${rx * 2}x${ry * 2}`, sx - rx * zoom + 5, sy - ry * zoom + 15);
+  };
+
+  const rasterizeEllipsePreview = (
+    ctx,
+    cx,
+    cy,
+    rx,
+    ry,
+    borderWidth,
+    borderColor,
+    fillColor
+  ) => {
+    if (rx <= 0 && ry <= 0) return;
+
+    const viewportStartX = Math.max(0, cx - rx - viewportOffset.x);
+    const viewportStartY = Math.max(0, cy - ry - viewportOffset.y);
+    const viewportEndX = Math.min(
+      viewportWidth,
+      cx + rx + 1 - viewportOffset.x
+    );
+    const viewportEndY = Math.min(
+      viewportHeight,
+      cy + ry + 1 - viewportOffset.y
+    );
+    const visibleWidth = Math.max(0, Math.ceil(viewportEndX - viewportStartX));
+    const visibleHeight = Math.max(0, Math.ceil(viewportEndY - viewportStartY));
+    if (visibleWidth <= 0 || visibleHeight <= 0) return;
+
+    // Safety net contra elipses gigantes. Antes el umbral era 50k canvas-px
+    // (y en bbox, no en área visible), así que a zoom bajo el mismo drag en
+    // pantalla generaba radios grandes y el preview caía en ctx.ellipse()
+    // suavizado — el borde dejaba de verse pixel-perfect. Ahora usamos área
+    // VISIBLE con un tope mucho más alto: cualquier circulo que quepa dentro
+    // del viewport se rasteriza a canvas-res con ImageData + blit (rapidísimo).
+    if (visibleWidth * visibleHeight > 4_000_000) {
+      drawPreviewEllipseSimplified(ctx, cx, cy, rx, ry, borderColor);
+      return;
+    }
+
+    const bw = Math.max(0, borderWidth | 0);
+    const hasBorder = bw > 0 && borderColor;
+    const innerRx = hasBorder ? Math.max(0, rx - bw) : rx;
+    const innerRy = hasBorder ? Math.max(0, ry - bw) : ry;
+
+    const originX = viewportStartX + viewportOffset.x;
+    const originY = viewportStartY + viewportOffset.y;
+
+    // ImageData a resolución de CANVAS. Antes `plotScreen` hacía un
+    // `fillRect(sx, sy, Math.ceil(zoom), Math.ceil(zoom))` por cada píxel del
+    // perímetro/área — O(área) llamadas a Canvas2D + O(área × zoom²) píxeles
+    // escritos. Ahora escribimos bytes al buffer pequeño y blitteamos una
+    // sola vez con nearest-neighbor.
+    const imageData = ctx.createImageData(visibleWidth, visibleHeight);
+    const data = imageData.data;
+
+    const fillR = fillColor?.r || 0;
+    const fillG = fillColor?.g || 0;
+    const fillB = fillColor?.b || 0;
+    const fillA = Math.floor((fillColor?.a || 0) * 255 * 0.6);
+
+    const borderR = borderColor?.r || 0;
+    const borderG = borderColor?.g || 0;
+    const borderB = borderColor?.b || 0;
+    const borderA = Math.floor((borderColor?.a || 0) * 255 * 0.8);
+
+    const plotPixel = (x, y, r, g, b, a) => {
+      const lx = x - originX;
+      const ly = y - originY;
+      if (lx < 0 || ly < 0 || lx >= visibleWidth || ly >= visibleHeight) return;
+      const idx = (ly * visibleWidth + lx) * 4;
+      data[idx] = r;
+      data[idx + 1] = g;
+      data[idx + 2] = b;
+      data[idx + 3] = a;
+    };
+
+    // Ver comentario en rasterizeEllipseToCtx: para bw=1 usar perímetro
+    // directo (fill=false) garantiza grosor uniforme de 1 px. El método
+    // `filled(rx) \ filled(rx-1)` generaba bordes "gordos" en diagonales.
+    if (hasBorder && bw === 1) {
+      if (fillColor) {
+        rasterEllipse(cx, cy, rx, ry,
+          (x, y) => plotPixel(x, y, fillR, fillG, fillB, fillA), true);
+      }
+      rasterEllipse(cx, cy, rx, ry,
+        (x, y) => plotPixel(x, y, borderR, borderG, borderB, borderA), false);
+    } else {
+      if (fillColor && innerRx > 0 && innerRy > 0) {
+        rasterEllipse(cx, cy, innerRx, innerRy,
+          (x, y) => plotPixel(x, y, fillR, fillG, fillB, fillA), true);
+      } else if (fillColor && !hasBorder) {
+        rasterEllipse(cx, cy, rx, ry,
+          (x, y) => plotPixel(x, y, fillR, fillG, fillB, fillA), true);
+      }
+
+      if (hasBorder) {
+        const inner = new Set();
+        rasterEllipse(cx, cy, innerRx, innerRy, (x, y) => {
+          inner.add((x << 16) ^ y);
+        }, true);
+        rasterEllipse(cx, cy, rx, ry, (x, y) => {
+          if (!inner.has((x << 16) ^ y)) plotPixel(x, y, borderR, borderG, borderB, borderA);
+        }, true);
+      }
+    }
+
+    const off = document.createElement("canvas");
+    off.width = visibleWidth;
+    off.height = visibleHeight;
+    off.getContext("2d").putImageData(imageData, 0, 0);
+
+    // Snap de coords de destino a enteros. handleWheel permite zoom fraccional
+    // (1 decimal cuando zoom<10: 1.2, 2.4, 3.1…) y `viewportStartX * zoom` cae
+    // en medio pixel. drawImage con dest fraccional suaviza el resultado
+    // aunque `imageSmoothingEnabled` esté en false — en formas rellenas no se
+    // nota, pero el borde de 1 px del círculo queda difuminado. Redondear
+    // origen+tamaño mantiene el borde crispy a cualquier zoom.
+    const prevSmoothing = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    const dx = Math.round(viewportStartX * zoom);
+    const dy = Math.round(viewportStartY * zoom);
+    const dw = Math.round((viewportStartX + visibleWidth) * zoom) - dx;
+    const dh = Math.round((viewportStartY + visibleHeight) * zoom) - dy;
+    ctx.drawImage(off, 0, 0, visibleWidth, visibleHeight, dx, dy, dw, dh);
+    ctx.imageSmoothingEnabled = prevSmoothing;
+  };
+
+  // Rasteriza elipse/círculo con soporte de border + fill usando rasterEllipse
+  // canónico (midpoint + ajuste Capello). Clipa al canvas vía plot.
+  const rasterizeEllipseToCtx = (
+    ctx,
+    cx,
+    cy,
+    rx,
+    ry,
+    borderWidth,
+    borderColor,
+    fillColor
+  ) => {
+    if (rx <= 0 && ry <= 0) return;
+    const W = ctx.canvas.width;
+    const H = ctx.canvas.height;
+    const bw = Math.max(0, borderWidth | 0);
+
+    const paintColor = (c) => {
+      ctx.fillStyle = `rgba(${c.r}, ${c.g}, ${c.b}, ${c.a})`;
+    };
+    const plotIfIn = (x, y) => {
+      if (x >= 0 && x < W && y >= 0 && y < H) ctx.fillRect(x, y, 1, 1);
+    };
+
+    const hasBorder = bw > 0 && borderColor;
+    const innerRx = hasBorder ? Math.max(0, rx - bw) : rx;
+    const innerRy = hasBorder ? Math.max(0, ry - bw) : ry;
+
+    // Para borde de 1 px: rellenar elipse completa y estampar el perímetro
+    // (rasterEllipse fill=false) encima. El método `filled(rx) \ filled(rx-1)`
+    // daba un anillo de grosor irregular — 1 px en los cardinales pero
+    // 2-4 px en diagonales/mesetas — y el borde se veía "gordo" o no
+    // pixel-perfect según el ángulo. Con el perímetro directo el grosor
+    // es uniforme 1 px en todo el contorno.
+    if (hasBorder && bw === 1) {
+      if (fillColor) {
+        paintColor(fillColor);
+        rasterEllipse(cx, cy, rx, ry, plotIfIn, true);
+      }
+      paintColor(borderColor);
+      rasterEllipse(cx, cy, rx, ry, plotIfIn, false);
+    } else {
+      if (fillColor && innerRx > 0 && innerRy > 0) {
+        paintColor(fillColor);
+        rasterEllipse(cx, cy, innerRx, innerRy, plotIfIn, true);
+      } else if (fillColor && !hasBorder) {
+        paintColor(fillColor);
+        rasterEllipse(cx, cy, rx, ry, plotIfIn, true);
+      }
+
+      if (hasBorder) {
+        const inner = new Set();
+        rasterEllipse(cx, cy, innerRx, innerRy, (x, y) => {
+          inner.add((x << 16) ^ y);
+        }, true);
+        paintColor(borderColor);
+        rasterEllipse(cx, cy, rx, ry, (x, y) => {
+          if (!inner.has((x << 16) ^ y)) plotIfIn(x, y);
+        }, true);
       }
     }
   };
@@ -1932,63 +1568,16 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
     borderColor,
     fillColor
   ) => {
-    if (radius <= 0) return;
-
-    const startX = centerX - radius;
-    const startY = centerY - radius;
-    const diameter = radius * 2;
-
-    // Función auxiliar para verificar si un punto está dentro del círculo
-    const isInsideCircle = (px, py, cx, cy, r) => {
-      const dx = px - cx;
-      const dy = py - cy;
-      return dx * dx + dy * dy <= r * r;
-    };
-
-    // Dibujar el círculo píxel por píxel
-    for (let py = 0; py <= diameter; py++) {
-      for (let px = 0; px <= diameter; px++) {
-        const finalX = startX + px;
-        const finalY = startY + py;
-
-        if (
-          finalX >= 0 &&
-          finalX < ctx.canvas.width &&
-          finalY >= 0 &&
-          finalY < ctx.canvas.height
-        ) {
-          const relativeX = px - radius;
-          const relativeY = py - radius;
-          const distanceFromCenter = Math.sqrt(
-            relativeX * relativeX + relativeY * relativeY
-          );
-
-          const isInside = distanceFromCenter <= radius;
-
-          if (isInside) {
-            let shouldDraw = false;
-            let colorToUse = null;
-
-            // Determinar si es borde o relleno
-            const isBorder =
-              borderWidth > 0 && distanceFromCenter > radius - borderWidth;
-
-            if (isBorder && borderColor && borderWidth > 0) {
-              shouldDraw = true;
-              colorToUse = borderColor;
-            } else if (!isBorder && fillColor) {
-              shouldDraw = true;
-              colorToUse = fillColor;
-            }
-
-            if (shouldDraw && colorToUse) {
-              ctx.fillStyle = `rgba(${colorToUse.r}, ${colorToUse.g}, ${colorToUse.b}, ${colorToUse.a})`;
-              ctx.fillRect(finalX, finalY, 1, 1);
-            }
-          }
-        }
-      }
-    }
+    rasterizeEllipseToCtx(
+      ctx,
+      centerX | 0,
+      centerY | 0,
+      radius | 0,
+      radius | 0,
+      borderWidth,
+      borderColor,
+      fillColor
+    );
   };
 
   // Después de drawPreviewRect
@@ -2003,62 +1592,17 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
     const deltaX = end.x - center.x;
     const deltaY = end.y - center.y;
     const radius = Math.round(Math.sqrt(deltaX * deltaX + deltaY * deltaY));
-
     if (radius <= 0) return;
-
-    const startX = center.x - radius;
-    const startY = center.y - radius;
-    const diameter = radius * 2;
-
-    // Dibujar preview píxel por píxel
-    for (let py = 0; py <= diameter; py++) {
-      for (let px = 0; px <= diameter; px++) {
-        const relativeX = px - radius;
-        const relativeY = py - radius;
-        const distanceFromCenter = Math.sqrt(
-          relativeX * relativeX + relativeY * relativeY
-        );
-
-        const isInside = distanceFromCenter <= radius;
-
-        if (isInside) {
-          let shouldDraw = false;
-          let colorToUse = null;
-          let alpha = 0.7;
-
-          // Determinar si es borde o relleno
-          const isBorder =
-            borderWidth > 0 && distanceFromCenter > radius - borderWidth;
-
-          if (isBorder && borderColor && borderWidth > 0) {
-            shouldDraw = true;
-            colorToUse = borderColor;
-            alpha = 0.8; // Borde un poco más opaco
-          } else if (!isBorder && fillColor) {
-            shouldDraw = true;
-            colorToUse = fillColor;
-            alpha = 0.6; // Relleno un poco más transparente
-          }
-
-          if (shouldDraw && colorToUse) {
-            const canvasX = startX + px;
-            const canvasY = startY + py;
-            const screenX = (canvasX - viewportOffset.x) * zoom;
-            const screenY = (canvasY - viewportOffset.y) * zoom;
-
-            if (screenX >= 0 && screenY >= 0) {
-              ctx.fillStyle = `rgba(${colorToUse.r}, ${colorToUse.g}, ${colorToUse.b}, ${alpha})`;
-              ctx.fillRect(
-                Math.floor(screenX),
-                Math.floor(screenY),
-                zoom,
-                zoom
-              );
-            }
-          }
-        }
-      }
-    }
+    rasterizeEllipsePreview(
+      ctx,
+      center.x | 0,
+      center.y | 0,
+      radius,
+      radius,
+      borderWidth,
+      borderColor,
+      fillColor
+    );
   };
 
   //Funciones para dibujar la elipse:
@@ -2073,81 +1617,16 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
     borderColor,
     fillColor
   ) => {
-    // Calcular dimensiones y centro
     const width = Math.abs(endX - startX);
     const height = Math.abs(endY - startY);
-    const centerX = Math.min(startX, endX) + width / 2;
-    const centerY = Math.min(startY, endY) + height / 2;
-
     if (width <= 0 || height <= 0) return;
 
-    const radiusX = width / 2;
-    const radiusY = height / 2;
+    const cx = Math.round(Math.min(startX, endX) + width / 2);
+    const cy = Math.round(Math.min(startY, endY) + height / 2);
+    const rx = Math.max(0, Math.round(width / 2));
+    const ry = Math.max(0, Math.round(height / 2));
 
-    // Área de renderizado
-    const left = Math.max(0, Math.floor(centerX - radiusX) - 1);
-    const right = Math.min(
-      ctx.canvas.width - 1,
-      Math.ceil(centerX + radiusX) + 1
-    );
-    const top = Math.max(0, Math.floor(centerY - radiusY) - 1);
-    const bottom = Math.min(
-      ctx.canvas.height - 1,
-      Math.ceil(centerY + radiusY) + 1
-    );
-
-    // Dibujar la elipse píxel por píxel
-    for (let py = top; py <= bottom; py++) {
-      for (let px = left; px <= right; px++) {
-        // Coordenadas relativas al centro
-        const relativeX = px - centerX;
-        const relativeY = py - centerY;
-
-        // Ecuación de la elipse: (x/a)² + (y/b)² <= 1
-        const ellipseValue =
-          (relativeX * relativeX) / (radiusX * radiusX) +
-          (relativeY * relativeY) / (radiusY * radiusY);
-
-        const isInside = ellipseValue <= 1;
-
-        if (isInside) {
-          let shouldDraw = false;
-          let colorToUse = null;
-
-          // Determinar si es borde o relleno
-          if (borderWidth > 0 && borderColor) {
-            // Para el borde, calculamos si está en la región exterior del borde
-            const innerRadiusX = Math.max(0, radiusX - borderWidth);
-            const innerRadiusY = Math.max(0, radiusY - borderWidth);
-
-            const innerEllipseValue =
-              innerRadiusX > 0 && innerRadiusY > 0
-                ? (relativeX * relativeX) / (innerRadiusX * innerRadiusX) +
-                  (relativeY * relativeY) / (innerRadiusY * innerRadiusY)
-                : 2;
-
-            const isBorder = innerEllipseValue > 1;
-
-            if (isBorder) {
-              shouldDraw = true;
-              colorToUse = borderColor;
-            } else if (fillColor) {
-              shouldDraw = true;
-              colorToUse = fillColor;
-            }
-          } else if (fillColor) {
-            // Solo relleno, sin borde
-            shouldDraw = true;
-            colorToUse = fillColor;
-          }
-
-          if (shouldDraw && colorToUse) {
-            ctx.fillStyle = `rgba(${colorToUse.r}, ${colorToUse.g}, ${colorToUse.b}, ${colorToUse.a})`;
-            ctx.fillRect(px, py, 1, 1);
-          }
-        }
-      }
-    }
+    rasterizeEllipseToCtx(ctx, cx, cy, rx, ry, borderWidth, borderColor, fillColor);
   };
 
   const drawPreviewEllipse = (
@@ -2158,98 +1637,14 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
     borderColor,
     fillColor
   ) => {
-    // Calcular dimensiones y centro en coordenadas de canvas
-    const canvasWidth = Math.abs(end.x - start.x);
-    const canvasHeight = Math.abs(end.y - start.y);
-    const canvasCenterX = Math.min(start.x, end.x) + canvasWidth / 2;
-    const canvasCenterY = Math.min(start.y, end.y) + canvasHeight / 2;
-
-    if (canvasWidth <= 0 || canvasHeight <= 0) return;
-
-    const canvasRadiusX = canvasWidth / 2;
-    const canvasRadiusY = canvasHeight / 2;
-
-    // Área de renderizado EN COORDENADAS DE CANVAS
-    const left = Math.max(0, Math.floor(canvasCenterX - canvasRadiusX) - 1);
-    const right = Math.ceil(canvasCenterX + canvasRadiusX) + 1;
-    const top = Math.max(0, Math.floor(canvasCenterY - canvasRadiusY) - 1);
-    const bottom = Math.ceil(canvasCenterY + canvasRadiusY) + 1;
-
-    // Iterar en coordenadas de canvas
-    for (let cy = top; cy <= bottom; cy++) {
-      for (let cx = left; cx <= right; cx++) {
-        // Coordenadas relativas al centro en canvas
-        const relativeX = cx - canvasCenterX;
-        const relativeY = cy - canvasCenterY;
-
-        // Ecuación de la elipse en coordenadas de canvas
-        const ellipseValue =
-          canvasRadiusX > 0 && canvasRadiusY > 0
-            ? (relativeX * relativeX) / (canvasRadiusX * canvasRadiusX) +
-              (relativeY * relativeY) / (canvasRadiusY * canvasRadiusY)
-            : 2;
-
-        const isInside = ellipseValue <= 1;
-
-        if (isInside) {
-          let shouldDraw = false;
-          let colorToUse = null;
-          let alpha = 0.7;
-
-          // Determinar si es borde o relleno
-          if (borderWidth > 0 && borderColor) {
-            const innerCanvasRadiusX = Math.max(0, canvasRadiusX - borderWidth);
-            const innerCanvasRadiusY = Math.max(0, canvasRadiusY - borderWidth);
-
-            const innerEllipseValue =
-              innerCanvasRadiusX > 0 && innerCanvasRadiusY > 0
-                ? (relativeX * relativeX) /
-                    (innerCanvasRadiusX * innerCanvasRadiusX) +
-                  (relativeY * relativeY) /
-                    (innerCanvasRadiusY * innerCanvasRadiusY)
-                : 2;
-
-            const isBorder = innerEllipseValue > 1;
-
-            if (isBorder) {
-              shouldDraw = true;
-              colorToUse = borderColor;
-              alpha = 0.8;
-            } else if (fillColor) {
-              shouldDraw = true;
-              colorToUse = fillColor;
-              alpha = 0.6;
-            }
-          } else if (fillColor) {
-            shouldDraw = true;
-            colorToUse = fillColor;
-            alpha = 0.6;
-          }
-
-          if (shouldDraw && colorToUse) {
-            // Convertir a coordenadas de pantalla solo para dibujar
-            const screenX = (cx - viewportOffset.x) * zoom;
-            const screenY = (cy - viewportOffset.y) * zoom;
-
-            // Verificar si está visible en pantalla
-            if (
-              screenX >= 0 &&
-              screenY >= 0 &&
-              screenX < ctx.canvas.width &&
-              screenY < ctx.canvas.height
-            ) {
-              ctx.fillStyle = `rgba(${colorToUse.r}, ${colorToUse.g}, ${colorToUse.b}, ${alpha})`;
-              ctx.fillRect(
-                Math.floor(screenX),
-                Math.floor(screenY),
-                Math.ceil(zoom),
-                Math.ceil(zoom)
-              );
-            }
-          }
-        }
-      }
-    }
+    const w = Math.abs(end.x - start.x);
+    const h = Math.abs(end.y - start.y);
+    if (w <= 0 || h <= 0) return;
+    const cx = Math.round(Math.min(start.x, end.x) + w / 2);
+    const cy = Math.round(Math.min(start.y, end.y) + h / 2);
+    const rx = Math.max(0, Math.round(w / 2));
+    const ry = Math.max(0, Math.round(h / 2));
+    rasterizeEllipsePreview(ctx, cx, cy, rx, ry, borderWidth, borderColor, fillColor);
   };
 
   //Funciones para herramienta de poligono =====================================
@@ -2297,53 +1692,6 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
     return inside;
   };
 
-  // 5. Función para dibujar línea entre dos puntos (para los bordes del polígono)
-  const drawPolygonLine = (ctx, x0, y0, x1, y1, width, color) => {
-    const dx = Math.abs(x1 - x0);
-    const dy = -Math.abs(y1 - y0);
-    const sx = x0 < x1 ? 1 : -1;
-    const sy = y0 < y1 ? 1 : -1;
-    let err = dx + dy;
-    let x = x0,
-      y = y0;
-
-    const offset = Math.floor(width / 2);
-    const drawnPixels = new Set();
-
-    while (true) {
-      for (let brushY = 0; brushY < width; brushY++) {
-        for (let brushX = 0; brushX < width; brushX++) {
-          const px = x + brushX - offset;
-          const py = y + brushY - offset;
-          const key = `${px},${py}`;
-
-          if (
-            !drawnPixels.has(key) &&
-            px >= 0 &&
-            px < ctx.canvas.width &&
-            py >= 0 &&
-            py < ctx.canvas.height
-          ) {
-            ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
-            ctx.fillRect(px, py, 1, 1);
-            drawnPixels.add(key);
-          }
-        }
-      }
-
-      if (x === x1 && y === y1) break;
-      const e2 = 2 * err;
-      if (e2 >= dy) {
-        err += dy;
-        x += sx;
-      }
-      if (e2 <= dx) {
-        err += dx;
-        y += sy;
-      }
-    }
-  };
-
   // 6. Función para dibujar polígono
   const drawPolygon = (
     ctx,
@@ -2356,73 +1704,65 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
     fillColor,
     rotation = 0
   ) => {
-    const points = calculatePolygonPoints(
-      centerX,
-      centerY,
-      radius,
-      vertices,
-      rotation
-    );
+    if (radius <= 0 || vertices < 3) return;
 
-    // Calcular bounding box
-    const minX = Math.min(...points.map((p) => p.x));
-    const maxX = Math.max(...points.map((p) => p.x));
-    const minY = Math.min(...points.map((p) => p.y));
-    const maxY = Math.max(...points.map((p) => p.y));
+    const outer = calculatePolygonPoints(centerX, centerY, radius, vertices, rotation);
 
-    // Dibujar píxel por píxel
-    for (let py = minY; py <= maxY; py++) {
-      for (let px = minX; px <= maxX; px++) {
-        if (
-          px >= 0 &&
-          px < ctx.canvas.width &&
-          py >= 0 &&
-          py < ctx.canvas.height
-        ) {
-          const isInside = isPointInPolygonShape(px, py, points);
+    const cw = ctx.canvas.width;
+    const ch = ctx.canvas.height;
+    const stampPx = (x, y) => {
+      if (x < 0 || x >= cw || y < 0 || y >= ch) return;
+      ctx.fillRect(x, y, 1, 1);
+    };
 
-          if (isInside) {
-            let shouldDraw = false;
-            let colorToUse = null;
+    const bw = Math.max(0, borderWidth | 0);
+    const hasBorder = bw > 0 && borderColor;
 
-            // Verificar si es borde
-            let isBorder = false;
-            if (borderWidth > 0) {
-              // Calcular polígono interior para detectar bordes
-              const innerRadius = Math.max(0, radius - borderWidth);
-              const innerPoints = calculatePolygonPoints(
-                centerX,
-                centerY,
-                innerRadius,
-                vertices,
-                rotation
-              );
-              const isInsideInner =
-                innerRadius > 0
-                  ? isPointInPolygonShape(px, py, innerPoints)
-                  : false;
-              isBorder = !isInsideInner;
-            }
+    if (fillColor) {
+      ctx.fillStyle = `rgba(${fillColor.r}, ${fillColor.g}, ${fillColor.b}, ${fillColor.a})`;
+      rasterPolygon(outer, stampPx, true);
+    }
 
-            if (isBorder && borderColor && borderWidth > 0) {
-              shouldDraw = true;
-              colorToUse = borderColor;
-            } else if (!isBorder && fillColor) {
-              shouldDraw = true;
-              colorToUse = fillColor;
-            }
-
-            if (shouldDraw && colorToUse) {
-              ctx.fillStyle = `rgba(${colorToUse.r}, ${colorToUse.g}, ${colorToUse.b}, ${colorToUse.a})`;
-              ctx.fillRect(px, py, 1, 1);
-            }
+    if (hasBorder) {
+      ctx.fillStyle = `rgba(${borderColor.r}, ${borderColor.g}, ${borderColor.b}, ${borderColor.a})`;
+      if (bw === 1) {
+        rasterPolygon(outer, stampPx, false);
+      } else {
+        const half = (bw / 2) | 0;
+        const thickStamp = (x, y) => {
+          for (let dy = 0; dy < bw; dy++) {
+            for (let dx = 0; dx < bw; dx++) stampPx(x + dx - half, y + dy - half);
           }
+        };
+        for (let i = 0; i < outer.length; i++) {
+          const a = outer[i];
+          const b = outer[(i + 1) % outer.length];
+          rasterLine(a.x, a.y, b.x, b.y, thickStamp);
         }
       }
     }
   };
 
   // 7. Función para dibujar preview del polígono
+  const drawPreviewPolygonSimplified = (ctx, outer, borderColor) => {
+    ctx.strokeStyle = borderColor
+      ? `rgba(${borderColor.r}, ${borderColor.g}, ${borderColor.b}, 0.8)`
+      : "rgba(100, 100, 100, 0.5)";
+    ctx.setLineDash([5, 5]);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < outer.length; i++) {
+      const p = outer[i];
+      const sx = (p.x - viewportOffset.x) * zoom;
+      const sy = (p.y - viewportOffset.y) * zoom;
+      if (i === 0) ctx.moveTo(sx, sy);
+      else ctx.lineTo(sx, sy);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+  };
+
   const drawPreviewPolygon = (
     ctx,
     centerX,
@@ -2434,75 +1774,107 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
     fillColor,
     rotation = 0
   ) => {
-    const points = calculatePolygonPoints(
-      centerX,
-      centerY,
-      radius,
-      vertices,
-      rotation
-    );
+    if (radius <= 0 || vertices < 3) return;
 
-    // Calcular bounding box
-    const minX = Math.min(...points.map((p) => p.x));
-    const maxX = Math.max(...points.map((p) => p.x));
-    const minY = Math.min(...points.map((p) => p.y));
-    const maxY = Math.max(...points.map((p) => p.y));
+    const outer = calculatePolygonPoints(centerX, centerY, radius, vertices, rotation);
 
-    // Dibujar píxel por píxel
-    for (let py = minY; py <= maxY; py++) {
-      for (let px = minX; px <= maxX; px++) {
-        const isInside = isPointInPolygonShape(px, py, points);
+    // Bounding box a partir de los vértices externos.
+    let minX = outer[0].x, maxX = outer[0].x;
+    let minY = outer[0].y, maxY = outer[0].y;
+    for (let i = 1; i < outer.length; i++) {
+      const p = outer[i];
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
 
-        if (isInside) {
-          let shouldDraw = false;
-          let colorToUse = null;
-          let alpha = 0.7;
+    const bw = Math.max(0, borderWidth | 0);
+    const hasBorder = bw > 0 && borderColor;
+    const half = (bw / 2) | 0;
+    const pad = hasBorder ? Math.max(half, bw - half) : 0;
 
-          // Verificar si es borde
-          let isBorder = false;
-          if (borderWidth > 0) {
-            const innerRadius = Math.max(0, radius - borderWidth);
-            const innerPoints = calculatePolygonPoints(
-              centerX,
-              centerY,
-              innerRadius,
-              vertices,
-              rotation
-            );
-            const isInsideInner =
-              innerRadius > 0
-                ? isPointInPolygonShape(px, py, innerPoints)
-                : false;
-            isBorder = !isInsideInner;
+    const bboxW = (maxX - minX + 1) + pad * 2;
+    const bboxH = (maxY - minY + 1) + pad * 2;
+
+    if (bboxW * bboxH > 50000) {
+      drawPreviewPolygonSimplified(ctx, outer, borderColor);
+      return;
+    }
+
+    const viewportStartX = Math.max(0, minX - pad - viewportOffset.x);
+    const viewportStartY = Math.max(0, minY - pad - viewportOffset.y);
+    const viewportEndX = Math.min(viewportWidth, maxX + pad + 1 - viewportOffset.x);
+    const viewportEndY = Math.min(viewportHeight, maxY + pad + 1 - viewportOffset.y);
+    const visibleWidth = Math.max(0, Math.ceil(viewportEndX - viewportStartX));
+    const visibleHeight = Math.max(0, Math.ceil(viewportEndY - viewportStartY));
+    if (visibleWidth <= 0 || visibleHeight <= 0) return;
+
+    const originX = viewportStartX + viewportOffset.x;
+    const originY = viewportStartY + viewportOffset.y;
+
+    // ImageData a resolución de CANVAS. Mismo patrón que cuadrado/triángulo/elipse:
+    // blit único con nearest-neighbor, coste independiente del zoom.
+    const imageData = ctx.createImageData(visibleWidth, visibleHeight);
+    const data = imageData.data;
+
+    const fillR = fillColor?.r || 0;
+    const fillG = fillColor?.g || 0;
+    const fillB = fillColor?.b || 0;
+    const fillA = Math.floor((fillColor?.a || 0) * 255 * 0.6);
+
+    const borderR = borderColor?.r || 0;
+    const borderG = borderColor?.g || 0;
+    const borderB = borderColor?.b || 0;
+    const borderA = Math.floor((borderColor?.a || 0) * 255 * 0.8);
+
+    const plotPixel = (x, y, r, g, b, a) => {
+      const lx = x - originX;
+      const ly = y - originY;
+      if (lx < 0 || ly < 0 || lx >= visibleWidth || ly >= visibleHeight) return;
+      const idx = (ly * visibleWidth + lx) * 4;
+      data[idx] = r;
+      data[idx + 1] = g;
+      data[idx + 2] = b;
+      data[idx + 3] = a;
+    };
+
+    if (fillColor) {
+      rasterPolygon(outer, (x, y) => plotPixel(x, y, fillR, fillG, fillB, fillA), true);
+    }
+
+    if (hasBorder) {
+      if (bw === 1) {
+        rasterPolygon(outer, (x, y) => plotPixel(x, y, borderR, borderG, borderB, borderA), false);
+      } else {
+        const thickPlot = (x, y) => {
+          for (let dy = 0; dy < bw; dy++) {
+            for (let dx = 0; dx < bw; dx++) plotPixel(x + dx - half, y + dy - half, borderR, borderG, borderB, borderA);
           }
-
-          if (isBorder && borderColor && borderWidth > 0) {
-            shouldDraw = true;
-            colorToUse = borderColor;
-            alpha = 0.8;
-          } else if (!isBorder && fillColor) {
-            shouldDraw = true;
-            colorToUse = fillColor;
-            alpha = 0.6;
-          }
-
-          if (shouldDraw && colorToUse) {
-            const screenX = (px - viewportOffset.x) * zoom;
-            const screenY = (py - viewportOffset.y) * zoom;
-
-            if (screenX >= 0 && screenY >= 0) {
-              ctx.fillStyle = `rgba(${colorToUse.r}, ${colorToUse.g}, ${colorToUse.b}, ${alpha})`;
-              ctx.fillRect(
-                Math.floor(screenX),
-                Math.floor(screenY),
-                zoom,
-                zoom
-              );
-            }
-          }
+        };
+        for (let i = 0; i < outer.length; i++) {
+          const a = outer[i];
+          const b = outer[(i + 1) % outer.length];
+          rasterLine(a.x, a.y, b.x, b.y, thickPlot);
         }
       }
     }
+
+    const off = document.createElement("canvas");
+    off.width = visibleWidth;
+    off.height = visibleHeight;
+    off.getContext("2d").putImageData(imageData, 0, 0);
+
+    // Snap de coords de destino a enteros para bordes nítidos a zoom fraccional
+    // (mismo patrón que rasterizeEllipsePreview:1482-1486).
+    const prevSmoothing = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    const dx = Math.round(viewportStartX * zoom);
+    const dy = Math.round(viewportStartY * zoom);
+    const dw = Math.round((viewportStartX + visibleWidth) * zoom) - dx;
+    const dh = Math.round((viewportStartY + visibleHeight) * zoom) - dy;
+    ctx.drawImage(off, 0, 0, visibleWidth, visibleHeight, dx, dy, dw, dh);
+    ctx.imageSmoothingEnabled = prevSmoothing;
   };
 
   //Funcion para pincel de poligono creador de formas: /////////
@@ -2513,156 +1885,374 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
   const [currentCurveIndex, setCurrentCurveIndex] = useState(-1);
   const polygonStartTimeRef = useRef(null);
 
-  const drawPolygonWithCurves = (
-    ctx,
-    points,
-    curvePoints,
-    borderWidth,
-    borderColor,
-    fillColor,
-    isPreview = false
-  ) => {
-    if (points.length < 3) return;
-
-    // Crear path del polígono con curvas
-    const createPolygonPath = () => {
-      const path = [];
-
-      for (let i = 0; i < points.length; i++) {
-        const currentPoint = points[i];
-        const nextPoint = points[(i + 1) % points.length];
-        const curveKey = `${i}-${(i + 1) % points.length}`;
-
-        if (i === 0) {
-          path.push({ x: currentPoint.x, y: currentPoint.y, type: "move" });
-        }
-
-        if (curvePoints.has(curveKey)) {
-          const controlPoint = curvePoints.get(curveKey);
-          // Generar puntos de la curva cuadrática
-          const curveSteps = 20;
-          for (let t = 0; t <= curveSteps; t++) {
-            const ratio = t / curveSteps;
-            const x = Math.round(
-              (1 - ratio) * (1 - ratio) * currentPoint.x +
-                2 * (1 - ratio) * ratio * controlPoint.x +
-                ratio * ratio * nextPoint.x
-            );
-            const y = Math.round(
-              (1 - ratio) * (1 - ratio) * currentPoint.y +
-                2 * (1 - ratio) * ratio * controlPoint.y +
-                ratio * ratio * nextPoint.y
-            );
-            if (t > 0) path.push({ x, y, type: "line" });
-          }
-        } else {
-          path.push({ x: nextPoint.x, y: nextPoint.y, type: "line" });
-        }
-      }
-
-      return path;
+  // Aplana anchors + curvas cuadráticas a una polilínea de vértices enteros.
+  // Subdivisión adaptativa de De Casteljau con tolerancia de 0.5 px — sustituye
+  // el muestreo fijo de 20 pasos (subsampleado a zoom bajo, sobresampleado a
+  // zoom alto). Si `close === false` omite la arista de cierre last→first.
+  // El vértice inicial se emite una sola vez; cada segmento/curva emite
+  // solo sus vértices finales.
+  const flattenPolygonPath = (points, curvePoints, close = true) => {
+    const n = points.length;
+    if (n === 0) return [];
+    const out = [{ x: points[0].x | 0, y: points[0].y | 0 }];
+    const emit = (x, y) => {
+      const ix = x | 0, iy = y | 0;
+      const last = out[out.length - 1];
+      if (last.x !== ix || last.y !== iy) out.push({ x: ix, y: iy });
     };
 
-    const pathPoints = createPolygonPath();
+    const flattenQuad = (p0, c, p2, tol) => {
+      const ax = p2.x - p0.x, ay = p2.y - p0.y;
+      const len = Math.hypot(ax, ay) || 1;
+      const nx = -ay / len, ny = ax / len;
+      const d = Math.abs((c.x - p0.x) * nx + (c.y - p0.y) * ny);
+      if (d < tol) { emit(p2.x, p2.y); return; }
+      const m0 = { x: (p0.x + c.x) * 0.5, y: (p0.y + c.y) * 0.5 };
+      const m1 = { x: (c.x + p2.x) * 0.5, y: (c.y + p2.y) * 0.5 };
+      const mid = { x: (m0.x + m1.x) * 0.5, y: (m0.y + m1.y) * 0.5 };
+      flattenQuad(p0, m0, mid, tol);
+      flattenQuad(mid, m1, p2, tol);
+    };
 
-    // Calcular bounding box
-    const minX = Math.min(...pathPoints.map((p) => p.x));
-    const maxX = Math.max(...pathPoints.map((p) => p.x));
-    const minY = Math.min(...pathPoints.map((p) => p.y));
-    const maxY = Math.max(...pathPoints.map((p) => p.y));
+    const segCount = close ? n : n - 1;
+    for (let i = 0; i < segCount; i++) {
+      const a = points[i];
+      const b = points[(i + 1) % n];
+      const key = `${i}-${(i + 1) % n}`;
+      const ctrl = curvePoints.get(key);
+      if (ctrl) flattenQuad(a, ctrl, b, 0.5);
+      else emit(b.x, b.y);
+    }
+    return out;
+  };
 
-    // Dibujar píxel por píxel
-    for (let py = minY; py <= maxY; py++) {
-      for (let px = minX; px <= maxX; px++) {
-        const isInside = isPointInPolygonShape(
-          px,
-          py,
-          pathPoints.filter((p) => p.type !== "move")
-        );
+  const drawPolygonWithCurves = (ctx, points, curvePoints, borderWidth, borderColor, fillColor) => {
+    if (points.length < 3) return;
+    const polyline = flattenPolygonPath(points, curvePoints, true);
+    if (polyline.length < 3) return;
 
-        if (isInside) {
-          let shouldDraw = false;
-          let colorToUse = null;
-          let alpha = isPreview ? 0.7 : 1.0;
+    const cw = ctx.canvas.width;
+    const ch = ctx.canvas.height;
+    const stampPx = (x, y) => {
+      if (x < 0 || x >= cw || y < 0 || y >= ch) return;
+      ctx.fillRect(x, y, 1, 1);
+    };
 
-          // Verificar si es borde (simplificado para polígonos irregulares)
-          let isBorder = false;
-          if (borderWidth > 0) {
-            // Revisar si está cerca del borde
-            let minDistance = Infinity;
-            for (let i = 0; i < pathPoints.length - 1; i++) {
-              const p1 = pathPoints[i];
-              const p2 = pathPoints[i + 1];
-              const distance = distanceToLineSegment(
-                px,
-                py,
-                p1.x,
-                p1.y,
-                p2.x,
-                p2.y
-              );
-              minDistance = Math.min(minDistance, distance);
-            }
-            isBorder = minDistance <= borderWidth;
+    const bw = Math.max(0, borderWidth | 0);
+    const hasBorder = bw > 0 && borderColor;
+
+    if (fillColor) {
+      ctx.fillStyle = `rgba(${fillColor.r}, ${fillColor.g}, ${fillColor.b}, ${fillColor.a})`;
+      rasterPolygon(polyline, stampPx, true);
+    }
+
+    if (hasBorder) {
+      ctx.fillStyle = `rgba(${borderColor.r}, ${borderColor.g}, ${borderColor.b}, ${borderColor.a})`;
+      if (bw === 1) {
+        rasterPolygon(polyline, stampPx, false);
+      } else {
+        const half = (bw / 2) | 0;
+        const thickStamp = (x, y) => {
+          for (let dy = 0; dy < bw; dy++) {
+            for (let dx = 0; dx < bw; dx++) stampPx(x + dx - half, y + dy - half);
           }
-
-          if (isBorder && borderColor && borderWidth > 0) {
-            shouldDraw = true;
-            colorToUse = borderColor;
-            alpha = isPreview ? 0.8 : 1.0;
-          } else if (!isBorder && fillColor) {
-            shouldDraw = true;
-            colorToUse = fillColor;
-            alpha = isPreview ? 0.6 : 1.0;
-          }
-
-          if (shouldDraw && colorToUse) {
-            if (isPreview) {
-              const screenX = (px - viewportOffset.x) * zoom;
-              const screenY = (py - viewportOffset.y) * zoom;
-              if (screenX >= 0 && screenY >= 0) {
-                ctx.fillStyle = `rgba(${colorToUse.r}, ${colorToUse.g}, ${colorToUse.b}, ${alpha})`;
-                ctx.fillRect(
-                  Math.floor(screenX),
-                  Math.floor(screenY),
-                  zoom,
-                  zoom
-                );
-              }
-            } else {
-              if (
-                px >= 0 &&
-                px < ctx.canvas.width &&
-                py >= 0 &&
-                py < ctx.canvas.height
-              ) {
-                ctx.fillStyle = `rgba(${colorToUse.r}, ${colorToUse.g}, ${colorToUse.b}, ${alpha})`;
-                ctx.fillRect(px, py, 1, 1);
-              }
-            }
-          }
+        };
+        for (let i = 0; i < polyline.length; i++) {
+          const a = polyline[i];
+          const b = polyline[(i + 1) % polyline.length];
+          rasterLine(a.x, a.y, b.x, b.y, thickStamp);
         }
       }
     }
   };
 
-  const distanceToLineSegment = (px, py, x1, y1, x2, y2) => {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const length = Math.sqrt(dx * dx + dy * dy);
+  // Preview de pixel-art para la herramienta polygonPencil.
+  // Lee viewportOffset, zoom, viewportWidth, viewportHeight del closure (igual que drawPreviewPolygon).
+  const drawPolygonPencilPreview = (
+    ctx,
+    points,
+    curvePoints,
+    cursor,
+    borderWidth,
+    borderColor,
+    fillColor,
+    isSettingCurve,
+    currentCurveIndex
+  ) => {
+    if (points.length === 0 && !cursor) return;
 
-    if (length === 0) {
-      return Math.sqrt((px - x1) * (px - x1) + (py - y1) * (py - y1));
+    // --- Construir curvePoints efectivos ---
+    let effectivePoints = points;
+    let effectiveCurves = curvePoints;
+    if (isSettingCurve && currentCurveIndex >= 0 && cursor && points.length >= 2) {
+      const j = (currentCurveIndex + 1) % points.length;
+      effectiveCurves = new Map(curvePoints);
+      effectiveCurves.set(`${currentCurveIndex}-${j}`, cursor);
     }
 
-    const t = Math.max(
-      0,
-      Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (length * length))
-    );
-    const projX = x1 + t * dx;
-    const projY = y1 + t * dy;
+    // --- Info de la curva activa (para guías visuales y segmento de cierre) ---
+    let activeCurveInfo = null;
+    if (isSettingCurve && currentCurveIndex >= 0 && cursor && points.length >= 2) {
+      const j = (currentCurveIndex + 1) % points.length;
+      activeCurveInfo = {
+        start: points[currentCurveIndex],
+        end: points[j],
+        control: cursor,
+        isClosing: j <= currentCurveIndex, // wrap = segmento de cierre
+      };
+    }
 
-    return Math.sqrt((px - projX) * (px - projX) + (py - projY) * (py - projY));
+    // --- Polilínea abierta para strokes (sin arista de cierre) ---
+    const openFlattened = points.length >= 2
+      ? flattenPolygonPath(effectivePoints, effectiveCurves, false)
+      : points.length === 1 ? [{ x: points[0].x | 0, y: points[0].y | 0 }] : [];
+
+    // Rubber band: agregar cursor como próximo segmento recto (solo si no estamos en modo curva)
+    let strokePolyline = openFlattened;
+    if (cursor && !isSettingCurve && points.length >= 1) {
+      const cx = cursor.x | 0, cy = cursor.y | 0;
+      const last = openFlattened[openFlattened.length - 1];
+      if (!last || last.x !== cx || last.y !== cy) {
+        strokePolyline = [...openFlattened, { x: cx, y: cy }];
+      }
+    }
+
+    // Si la curva activa es la de cierre (last → first), la polilínea abierta no
+    // la incluye; aplánala aparte y apéndela al stroke.
+    if (activeCurveInfo && activeCurveInfo.isClosing) {
+      const extra = [];
+      const pushVert = (x, y) => {
+        const ix = x | 0, iy = y | 0;
+        const prev = extra.length > 0
+          ? extra[extra.length - 1]
+          : strokePolyline[strokePolyline.length - 1];
+        if (!prev || prev.x !== ix || prev.y !== iy) extra.push({ x: ix, y: iy });
+      };
+      const flatQ = (p0, c, p2, tol) => {
+        const ax = p2.x - p0.x, ay = p2.y - p0.y;
+        const len = Math.hypot(ax, ay) || 1;
+        const nx = -ay / len, ny = ax / len;
+        const d = Math.abs((c.x - p0.x) * nx + (c.y - p0.y) * ny);
+        if (d < tol) { pushVert(p2.x, p2.y); return; }
+        const m0 = { x: (p0.x + c.x) * 0.5, y: (p0.y + c.y) * 0.5 };
+        const m1 = { x: (c.x + p2.x) * 0.5, y: (c.y + p2.y) * 0.5 };
+        const mid = { x: (m0.x + m1.x) * 0.5, y: (m0.y + m1.y) * 0.5 };
+        flatQ(p0, m0, mid, tol);
+        flatQ(mid, m1, p2, tol);
+      };
+      flatQ(activeCurveInfo.start, activeCurveInfo.control, activeCurveInfo.end, 0.5);
+      if (extra.length > 0) strokePolyline = [...strokePolyline, ...extra];
+    }
+
+    // --- Polilínea cerrada para fill (solo si hay ≥3 puntos y no en modo curva) ---
+    const closedPoly = (points.length >= 3 && !isSettingCurve && fillColor)
+      ? flattenPolygonPath(effectivePoints, effectiveCurves, true)
+      : null;
+
+    // --- Bounding box de todos los vértices ---
+    const allVerts = [...strokePolyline, ...(closedPoly || [])];
+    if (cursor) allVerts.push({ x: cursor.x | 0, y: cursor.y | 0 });
+    effectiveCurves.forEach((cp) => allVerts.push({ x: cp.x | 0, y: cp.y | 0 }));
+
+    if (allVerts.length === 0) return;
+
+    let minX = allVerts[0].x, maxX = allVerts[0].x;
+    let minY = allVerts[0].y, maxY = allVerts[0].y;
+    for (const v of allVerts) {
+      if (v.x < minX) minX = v.x;
+      if (v.x > maxX) maxX = v.x;
+      if (v.y < minY) minY = v.y;
+      if (v.y > maxY) maxY = v.y;
+    }
+
+    const bw = Math.max(0, borderWidth | 0);
+    const half = (bw / 2) | 0;
+    const pad = Math.max(half, bw - half);
+
+    const bboxW = (maxX - minX + 1) + pad * 2;
+    const bboxH = (maxY - minY + 1) + pad * 2;
+
+    // --- Ruta simplificada para áreas muy grandes ---
+    if (bboxW * bboxH > 50000) {
+      // Dibujo fino sólido (sin guiones) como fallback
+      if (strokePolyline.length >= 2) {
+        ctx.strokeStyle = borderColor
+          ? `rgba(${borderColor.r}, ${borderColor.g}, ${borderColor.b}, 0.8)`
+          : "rgba(100, 100, 100, 0.8)";
+        ctx.setLineDash([]);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 0; i < strokePolyline.length; i++) {
+          const p = strokePolyline[i];
+          const sx = (p.x - viewportOffset.x) * zoom;
+          const sy = (p.y - viewportOffset.y) * zoom;
+          if (i === 0) ctx.moveTo(sx, sy);
+          else ctx.lineTo(sx, sy);
+        }
+        ctx.stroke();
+      }
+      // Marcadores de anclas
+      for (const p of points) {
+        const sx = (p.x - viewportOffset.x) * zoom;
+        const sy = (p.y - viewportOffset.y) * zoom;
+        ctx.fillStyle = "rgba(0, 200, 255, 0.9)";
+        ctx.fillRect(Math.round(sx) - 2, Math.round(sy) - 2, 4, 4);
+      }
+      if (activeCurveInfo) {
+        const { start, end, control } = activeCurveInfo;
+        const toScreen = (p) => ({
+          x: (p.x - viewportOffset.x) * zoom,
+          y: (p.y - viewportOffset.y) * zoom,
+        });
+        const s = toScreen(start);
+        const e = toScreen(end);
+        const c = toScreen(control);
+        ctx.strokeStyle = "rgba(234, 0, 255, 0.45)";
+        ctx.setLineDash([]);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y); ctx.lineTo(c.x, c.y);
+        ctx.moveTo(e.x, e.y); ctx.lineTo(c.x, c.y);
+        ctx.stroke();
+      }
+      return;
+    }
+
+    // --- ImageData pattern (igual que drawPreviewPolygon) ---
+    const viewportStartX = Math.max(0, minX - pad - viewportOffset.x);
+    const viewportStartY = Math.max(0, minY - pad - viewportOffset.y);
+    const viewportEndX = Math.min(viewportWidth, maxX + pad + 1 - viewportOffset.x);
+    const viewportEndY = Math.min(viewportHeight, maxY + pad + 1 - viewportOffset.y);
+    const visibleWidth = Math.max(0, Math.ceil(viewportEndX - viewportStartX));
+    const visibleHeight = Math.max(0, Math.ceil(viewportEndY - viewportStartY));
+    if (visibleWidth <= 0 || visibleHeight <= 0) {
+      // Aún así dibujar marcadores en pantalla
+    } else {
+      const originX = viewportStartX + viewportOffset.x;
+      const originY = viewportStartY + viewportOffset.y;
+
+      const imageData = ctx.createImageData(visibleWidth, visibleHeight);
+      const data = imageData.data;
+
+      const plotPixel = (x, y, r, g, b, a) => {
+        const lx = x - originX;
+        const ly = y - originY;
+        if (lx < 0 || ly < 0 || lx >= visibleWidth || ly >= visibleHeight) return;
+        const idx = (ly * visibleWidth + lx) * 4;
+        data[idx] = r;
+        data[idx + 1] = g;
+        data[idx + 2] = b;
+        data[idx + 3] = a;
+      };
+
+      // Paso de fill
+      if (closedPoly && closedPoly.length >= 3) {
+        const fillR = fillColor.r;
+        const fillG = fillColor.g;
+        const fillB = fillColor.b;
+        const fillA = Math.floor((fillColor.a || 0) * 255 * 0.6);
+        rasterPolygon(closedPoly, (x, y) => plotPixel(x, y, fillR, fillG, fillB, fillA), true);
+      }
+
+      // Paso de stroke (borde / polilínea)
+      if (strokePolyline.length >= 2 && borderColor) {
+        const borderR = borderColor.r;
+        const borderG = borderColor.g;
+        const borderB = borderColor.b;
+        const borderA = Math.floor((borderColor.a ?? 1) * 255 * 0.9);
+
+        if (bw <= 1) {
+          for (let i = 0; i < strokePolyline.length - 1; i++) {
+            const a = strokePolyline[i];
+            const b = strokePolyline[i + 1];
+            rasterLine(a.x, a.y, b.x, b.y, (x, y) => plotPixel(x, y, borderR, borderG, borderB, borderA));
+          }
+        } else {
+          const thickPlot = (x, y) => {
+            for (let dy = 0; dy < bw; dy++) {
+              for (let dx = 0; dx < bw; dx++) plotPixel(x + dx - half, y + dy - half, borderR, borderG, borderB, borderA);
+            }
+          };
+          for (let i = 0; i < strokePolyline.length - 1; i++) {
+            const a = strokePolyline[i];
+            const b = strokePolyline[i + 1];
+            rasterLine(a.x, a.y, b.x, b.y, thickPlot);
+          }
+        }
+      }
+
+      // Guías tipo herramienta de curva: dos líneas magenta desde cada ancla
+      // al punto de control (cursor). Mismo estilo visual que el curve tool.
+      if (activeCurveInfo) {
+        const gR = 234, gG = 0, gB = 255;
+        const gA = Math.floor(255 * 0.35);
+        const guidePlot = bw <= 1
+          ? (x, y) => plotPixel(x, y, gR, gG, gB, gA)
+          : (x, y) => {
+              for (let dy = 0; dy < bw; dy++) {
+                for (let dx = 0; dx < bw; dx++) {
+                  plotPixel(x + dx - half, y + dy - half, gR, gG, gB, gA);
+                }
+              }
+            };
+        const { start, end, control } = activeCurveInfo;
+        rasterLine(start.x | 0, start.y | 0, control.x | 0, control.y | 0, guidePlot);
+        rasterLine(end.x | 0, end.y | 0, control.x | 0, control.y | 0, guidePlot);
+      }
+
+      const off = document.createElement("canvas");
+      off.width = visibleWidth;
+      off.height = visibleHeight;
+      off.getContext("2d").putImageData(imageData, 0, 0);
+
+      const prevSmoothing = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = false;
+      const dx = Math.round(viewportStartX * zoom);
+      const dy = Math.round(viewportStartY * zoom);
+      const dw = Math.round((viewportStartX + visibleWidth) * zoom) - dx;
+      const dh = Math.round((viewportStartY + visibleHeight) * zoom) - dy;
+      ctx.drawImage(off, 0, 0, visibleWidth, visibleHeight, dx, dy, dw, dh);
+      ctx.imageSmoothingEnabled = prevSmoothing;
+    }
+
+    // --- Marcadores UI en espacio de pantalla ---
+    // Anclas
+    for (const p of points) {
+      const sx = (p.x - viewportOffset.x) * zoom;
+      const sy = (p.y - viewportOffset.y) * zoom;
+      ctx.fillStyle = "rgba(0, 200, 255, 0.9)";
+      ctx.fillRect(Math.round(sx) - 2, Math.round(sy) - 2, 4, 4);
+    }
+
+    // Puntos de control existentes
+    curvePoints.forEach((cp) => {
+      const sx = (cp.x - viewportOffset.x) * zoom;
+      const sy = (cp.y - viewportOffset.y) * zoom;
+      ctx.fillStyle = "rgba(0, 150, 255, 0.9)";
+      ctx.fillRect(Math.round(sx) - 2, Math.round(sy) - 2, 4, 4);
+    });
+
+    // Punto de control en vivo (modo curva)
+    if (isSettingCurve && cursor) {
+      const sx = (cursor.x - viewportOffset.x) * zoom;
+      const sy = (cursor.y - viewportOffset.y) * zoom;
+      ctx.fillStyle = "rgba(0, 150, 255, 0.9)";
+      ctx.fillRect(Math.round(sx) - 3, Math.round(sy) - 3, 6, 6);
+    }
+
+    // Anillo amarillo de cierre cuando el cursor está cerca del primer punto
+    if (points.length >= 3 && cursor && !isSettingCurve) {
+      const fp = points[0];
+      const distSq = (cursor.x - fp.x) ** 2 + (cursor.y - fp.y) ** 2;
+      if (distSq <= 100) { // <= 10px
+        const sx = (fp.x - viewportOffset.x) * zoom;
+        const sy = (fp.y - viewportOffset.y) * zoom;
+        ctx.strokeStyle = "rgba(255, 220, 0, 0.95)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([]);
+        ctx.strokeRect(Math.round(sx) - 4, Math.round(sy) - 4, 8, 8);
+      }
+    }
   };
 
   // Función para obtener coordenadas de píxel
@@ -2873,22 +2463,19 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
   }, [zoom, workspaceWidth, workspaceHeight, totalWidth, totalHeight]);
 
   // Funciones para manejar el arrastre del canvas
-  // Modifica la función handleStartDrag existente
+  // Acumula screen-pixels exactos para panning suave. Es un ref, sin re-renders.
+  const panAccumRef = useRef({ x: 0, y: 0 });
+
   const handleStartDrag = useCallback(
     (e) => {
       if (drawMode === "move" || isSpacePressed) {
         setIsDragging(true);
         setDragStart({ x: e.clientX, y: e.clientY });
-
-        // Cambiar cursor cuando se inicia el arrastre
-       
+        panAccumRef.current = { x: 0, y: 0 };
       }
     },
     [drawMode, isSpacePressed]
   );
-
-  // Modifica la función handleDrag existente
-  const deltaRef = useRef({ x: 0, y: 0 });
 
   const handleDrag = useCallback(
     (e) => {
@@ -2896,34 +2483,47 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
         const dx = e.clientX - dragStart.x;
         const dy = e.clientY - dragStart.y;
 
-        deltaRef.current.x += -dx / zoom;
-        deltaRef.current.y += -dy / zoom;
+        // Acumular desplazamiento exacto en screen-pixels
+        panAccumRef.current.x += dx;
+        panAccumRef.current.y += dy;
 
-        const moveX = Math.trunc(deltaRef.current.x);
-        const moveY = Math.trunc(deltaRef.current.y);
+        // Píxeles enteros de sprite (drag derecha = viewportOffset disminuye)
+        const moveX = -Math.trunc(panAccumRef.current.x / zoom);
+        const moveY = -Math.trunc(panAccumRef.current.y / zoom);
 
         if (moveX !== 0 || moveY !== 0) {
           moveViewport(moveX, moveY);
-          deltaRef.current.x -= moveX;
-          deltaRef.current.y -= moveY;
-          setDragStart({ x: e.clientX, y: e.clientY });
+          // Descontar lo ya comprometido al viewport
+          panAccumRef.current.x += moveX * zoom;
+          panAccumRef.current.y += moveY * zoom;
         }
+
+        // Aplicar sub-píxel restante como CSS transform (sin re-render del canvas)
+        setPanOffset({ x: panAccumRef.current.x, y: panAccumRef.current.y });
+        setDragStart({ x: e.clientX, y: e.clientY });
       }
     },
     [isDragging, dragStart, zoom, drawMode, moveViewport, isSpacePressed]
   );
 
-  // Modifica la función handleEndDrag existente
   const handleEndDrag = useCallback(() => {
     setIsDragging(false);
 
-   
-  }, [isSpacePressed, drawMode]);
+    // Redondear el sub-píxel restante al sprite-pixel más cercano y confirmarlo
+    const snapX = Math.round(panAccumRef.current.x / zoom);
+    const snapY = Math.round(panAccumRef.current.y / zoom);
+    if (snapX !== 0 || snapY !== 0) {
+      moveViewport(-snapX, -snapY);
+    }
+    panAccumRef.current = { x: 0, y: 0 };
+    setPanOffset({ x: 0, y: 0 });
+  }, [zoom, moveViewport]);
 
   const rellenar = useCallback(
     (coords, color) => {
       floodFill(activeLayerId, coords.x, coords.y, color);
       getMatchingPixels(activeLayerId, coords.x, coords.y);
+      invalidateImageDataCacheOptimized();
     },
     [layers, activeLayerId, toolParameters, zoom, viewportOffset]
   );
@@ -2940,6 +2540,7 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
         ditheringStrength: toolParameters.ditheringStrength,
       };
       gradientFloodFill(activeLayerId, coords.x, coords.y, gradientParams);
+      invalidateImageDataCacheOptimized();
     },
     [layers, toolParameters, activeLayerId, zoom]
   );
@@ -3022,7 +2623,6 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
       ditheringStrength: toolParameters.ditheringStrength,
     };
 
-    console.log("el dithering strenght:", toolParameters.ditheringStrength);
     gradientFloodFill(activeLayerId, 1, 1, gradientParams, gradientPixels);
   }, [toolParameters]);
 
@@ -3109,184 +2709,63 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
   const cachedImageDataRef = useRef(null);
 const cacheValidRef = useRef(false);
 
-const initializeWebGLImageRenderer = useCallback((canvas) => {
-  const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
-  if (!gl) return null;
-  
-  // Vertex shader
-  const vertexShaderSource = `
-    attribute vec2 a_position;
-    attribute vec2 a_texCoord;
-    varying vec2 v_texCoord;
-    
-    void main() {
-      gl_Position = vec4(a_position, 0.0, 1.0);
-      v_texCoord = a_texCoord;
-    }
-  `;
-  
-  // Fragment shader
-  const fragmentShaderSource = `
-    precision mediump float;
-    varying vec2 v_texCoord;
-    uniform sampler2D u_texture;
-    
-    void main() {
-      gl_FragColor = texture2D(u_texture, v_texCoord);
-    }
-  `;
-  
-  // Crear shaders
-  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
-  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
-  const program = createProgram(gl, vertexShader, fragmentShader);
-  
-  // Configurar atributos
-  const positionLocation = gl.getAttribLocation(program, 'a_position');
-  const texCoordLocation = gl.getAttribLocation(program, 'a_texCoord');
-  const textureLocation = gl.getUniformLocation(program, 'u_texture');
-  
-  // Crear buffers para un quad completo
-  const positionBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-    -1, -1,  1, -1,  -1,  1,
-    -1,  1,  1, -1,   1,  1,
-  ]), gl.STATIC_DRAW);
-  
-  const texCoordBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-    0, 1,  1, 1,  0, 0,
-    0, 0,  1, 1,  1, 0,
-  ]), gl.STATIC_DRAW);
-  
-  return {
-    gl,
-    program,
-    positionLocation,
-    texCoordLocation,
-    textureLocation,
-    positionBuffer,
-    texCoordBuffer,
-    texture: gl.createTexture()
-  };
-}, []);
+// Helpers WebGL delegados a ./container/utils/webglRenderer.js.
+const initializeWebGLImageRenderer = useCallback(
+  (canvas) => initializeWebGLImageRendererUtil(canvas),
+  []
+);
 
-// Función para inicializar/actualizar el cache
-const createShader = useCallback((gl, type, source) => {
-  const shader = gl.createShader(type);
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    console.error('Error compilando shader:', gl.getShaderInfoLog(shader));
-    gl.deleteShader(shader);
-    return null;
-  }
-  
-  return shader;
-}, []);
-
-const createProgram = useCallback((gl, vertexShader, fragmentShader) => {
-  const program = gl.createProgram();
-  gl.attachShader(program, vertexShader);
-  gl.attachShader(program, fragmentShader);
-  gl.linkProgram(program);
-  
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    console.error('Error enlazando programa:', gl.getProgramInfoLog(program));
-    gl.deleteProgram(program);
-    return null;
-  }
-  
-  return program;
-}, []);
-
-// 3. FUNCIÓN OPTIMIZADA putImageData
-const putImageDataOptimized = useCallback((imageData, x = 0, y = 0) => {
-  const canvas = compositeCanvasRef.current;
-  if (!canvas) return;
-  
-  if (webglRendererRef.current) {
-    // Usar WebGL (RÁPIDO)
-    const { gl, program, positionLocation, texCoordLocation, textureLocation, 
-            positionBuffer, texCoordBuffer, texture } = webglRendererRef.current;
-    const { data, width, height } = imageData;
-    
-    // Configurar viewport
-    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-    
-    // Usar el programa de shaders
-    gl.useProgram(program);
-    
-    // Configurar textura
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    
-    // Subir datos de imagen
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
-    
-    // Configurar atributos
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.enableVertexAttribArray(positionLocation);
-    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-    
-    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-    gl.enableVertexAttribArray(texCoordLocation);
-    gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
-    
-    // Configurar uniforme
-    gl.uniform1i(textureLocation, 0);
-    
-    // Dibujar
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-  } else {
-    // Fallback a Canvas 2D (LENTO pero compatible)
-    const ctx = canvas.getContext('2d');
-    ctx.putImageData(imageData, x, y);
-  }
-}, []);
+const putImageDataOptimized = useCallback(
+  (imageData, x = 0, y = 0) =>
+    putImageDataOptimizedUtil(
+      compositeCanvasRef.current,
+      webglRendererRef.current,
+      imageData,
+      x,
+      y
+    ),
+  []
+);
 
 
 
 
-// 4. ACTUALIZAR LA FUNCIÓN initializeImageDataCache EXISTENTE
+const glCacheRef = useRef(null);
+
 const initializeImageDataCacheOptimized = (ctx) => {
   const canvas = ctx.canvas;
-  
-  if (!cachedImageDataRef.current || 
-      cachedImageDataRef.current.width !== canvas.width || 
-      cachedImageDataRef.current.height !== canvas.height ||
-      !cacheValidRef.current) {
-    
-    // Intentar WebGL solo para leer píxeles
-    let gl = null;
+
+  if (cachedImageDataRef.current &&
+      cachedImageDataRef.current.width === canvas.width &&
+      cachedImageDataRef.current.height === canvas.height &&
+      cacheValidRef.current) {
+    return;
+  }
+
+  let gl = glCacheRef.current;
+  if (!gl || gl.canvas !== canvas) {
     try {
-      gl = canvas.getContext('webgl2', { preserveDrawingBuffer: true }) || 
-           canvas.getContext('webgl', { preserveDrawingBuffer: true });
-    } catch (e) {
+      gl = canvas.getContext('webgl2', { preserveDrawingBuffer: true }) ||
+           canvas.getContext('webgl',  { preserveDrawingBuffer: true });
+    } catch {
       gl = null;
     }
-    
-    if (gl) {
-      const pixels = new Uint8Array(canvas.width * canvas.height * 4);
-      gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-      cachedImageDataRef.current = new ImageData(
-        new Uint8ClampedArray(pixels), 
-        canvas.width, 
-        canvas.height
-      );
-    } else {
-      // Fallback normal
-      cachedImageDataRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    }
-    
-    cacheValidRef.current = true;
+    glCacheRef.current = gl;
   }
+
+  if (gl) {
+    const w = canvas.width, h = canvas.height;
+    let buf = cachedImageDataRef.current?.data;
+    if (!buf || buf.length !== w * h * 4) {
+      buf = new Uint8ClampedArray(w * h * 4);
+    }
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(buf.buffer));
+    cachedImageDataRef.current = new ImageData(buf, w, h);
+  } else {
+    cachedImageDataRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  }
+
+  cacheValidRef.current = true;
 };
 
 // 5. INICIALIZACIÓN WEBGL EN useEffect
@@ -3308,17 +2787,7 @@ useEffect(() => {
 
 useEffect(() => {
   return () => {
-    // Limpiar recursos WebGL al desmontar
-    if (webglRendererRef.current) {
-      const { gl, program, texture, positionBuffer, texCoordBuffer } = webglRendererRef.current;
-      
-      if (gl) {
-        gl.deleteProgram(program);
-        gl.deleteTexture(texture);
-        gl.deleteBuffer(positionBuffer);
-        gl.deleteBuffer(texCoordBuffer);
-      }
-    }
+    disposeWebGLImageRenderer(webglRendererRef.current);
   };
 }, []);
 
@@ -3327,9 +2796,30 @@ const invalidateImageDataCacheOptimized = useCallback(() => {
   cacheValidRef.current = false;
 }, []);
 
-useEffect(()=>{
-invalidateImageDataCacheOptimized();
-},[isPressed, tool, toolParameters])
+// Invalidar solo cuando la composición externa del canvas pudo cambiar.
+// Antes dependía de isPressed → forzaba readPixels completo en cada trazo.
+// framesResume se omite a propósito: checkIfCanvasIsPaintedViaBlob lo actualiza
+// async tras cada pointerup, lo que invalidaba el caché justo antes del siguiente
+// trazo (contraproducente). Las mutaciones reales del composite (undo/redo, fill,
+// paste) invalidan explícitamente en sus handlers.
+useEffect(() => {
+  invalidateImageDataCacheOptimized();
+}, [
+  activeLayerId,
+  currentFrame,
+  layers.length,
+  drawableWidth,
+  drawableHeight,
+  isolatedPixels,
+  invalidateImageDataCacheOptimized,
+]);
+
+// Pre-warm eliminado a propósito: el caché está atado al contexto del *layer*
+// canvas (resolución nativa), no al composite (escalado por zoom). Pre-calentar
+// con el composite ctx leía la resolución equivocada y además forzaba un
+// getImageData grande justo tras pointerup — ese stall causaba pérdida de
+// nitidez visible durante el re-render del composite. Los callsites de pintura
+// ya llenan el caché con el ctx correcto al primer píxel del trazo.
 // Función auxiliar para voltear ImageData verticalmente (WebGL lee al revés)
 const flipImageDataVertically = (imageData) => {
   const { data, width, height } = imageData;
@@ -3359,180 +2849,20 @@ const invalidateImageDataCache = () => {
 // En el componente CanvasTracker, agregar estos estados:
 const [strokeHistory, setStrokeHistory] = useState([]);
 const [isRecordingStroke, setIsRecordingStroke] = useState(false);
-// Agregar estas funciones de utilidad para suavizado
-const smoothStroke = useCallback((points, perfectionLevel) => {
-  if (!points || points.length < 3 || perfectionLevel === 0) {
-    return points;
-  }
-
-  // Algoritmo 1: Promedio móvil ponderado
-  const windowSize = Math.max(3, Math.floor(5 + perfectionLevel * 10));
-  const smoothedPoints = [];
-
-  for (let i = 0; i < points.length; i++) {
-    let sumX = 0, sumY = 0, weightSum = 0;
-    
-    for (let j = -windowSize; j <= windowSize; j++) {
-      const idx = i + j;
-      if (idx >= 0 && idx < points.length) {
-        // Peso gaussiano
-        const weight = Math.exp(-(j * j) / (2 * windowSize * windowSize / 4));
-        sumX += points[idx].x * weight;
-        sumY += points[idx].y * weight;
-        weightSum += weight;
-      }
-    }
-    
-    smoothedPoints.push({
-      x: Math.round(sumX / weightSum),
-      y: Math.round(sumY / weightSum)
-    });
-  }
-
-  // Algoritmo 2: Detección y corrección de líneas casi rectas
-  if (perfectionLevel > 0.5) {
-    return straightenNearStraightSegments(smoothedPoints, perfectionLevel);
-  }
-
-  return smoothedPoints;
-}, []);
-
-// Función para detectar y enderezar segmentos casi rectos
-const straightenNearStraightSegments = useCallback((points, perfectionLevel) => {
-  if (points.length < 3) return points;
-
-  const threshold = 2 * (2 - perfectionLevel); // Más estricto con mayor perfection
-  const result = [points[0]];
-  let i = 0;
-
-  while (i < points.length - 1) {
-    let j = i + 2;
-    
-    // Buscar el segmento más largo que sea casi recto
-    while (j < points.length) {
-      if (isNearlyStrightLine(points, i, j, threshold)) {
-        j++;
-      } else {
-        break;
-      }
-    }
-    
-    if (j > i + 2) {
-      // Reemplazar con línea recta
-      const steps = j - i - 1;
-      for (let step = 1; step <= steps; step++) {
-        const t = step / steps;
-        result.push({
-          x: Math.round(points[i].x + t * (points[j - 1].x - points[i].x)),
-          y: Math.round(points[i].y + t * (points[j - 1].y - points[i].y))
-        });
-      }
-      i = j - 1;
-    } else {
-      result.push(points[i + 1]);
-      i++;
-    }
-  }
-
-  return result;
-}, []);
-
-// Verificar si los puntos forman casi una línea recta
-const isNearlyStrightLine = (points, start, end, threshold) => {
-  const x1 = points[start].x;
-  const y1 = points[start].y;
-  const x2 = points[end - 1].x;
-  const y2 = points[end - 1].y;
-
-  for (let i = start + 1; i < end - 1; i++) {
-    const distance = distanceToLine(points[i].x, points[i].y, x1, y1, x2, y2);
-    if (distance > threshold) {
-      return false;
-    }
-  }
-  
-  return true;
-};
-
-// Calcular distancia de un punto a una línea
-const distanceToLine = (px, py, x1, y1, x2, y2) => {
-  const A = px - x1;
-  const B = py - y1;
-  const C = x2 - x1;
-  const D = y2 - y1;
-
-  const dot = A * C + B * D;
-  const lenSq = C * C + D * D;
-  
-  if (lenSq === 0) return Math.sqrt(A * A + B * B);
-  
-  const param = dot / lenSq;
-  
-  let xx, yy;
-  if (param < 0) {
-    xx = x1;
-    yy = y1;
-  } else if (param > 1) {
-    xx = x2;
-    yy = y2;
-  } else {
-    xx = x1 + param * C;
-    yy = y1 + param * D;
-  }
-
-  const dx = px - xx;
-  const dy = py - yy;
-  
-  return Math.sqrt(dx * dx + dy * dy);
-};
-
-// Algoritmo adicional: Suavizado de curvas usando splines cúbicos simplificados
-const applyCurveSmoothing = useCallback((points, perfectionLevel) => {
-  if (points.length < 4) return points;
-
-  const result = [];
-  const tension = 0.5 * perfectionLevel; // Controla qué tan suave es la curva
-
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[Math.max(0, i - 1)];
-    const p1 = points[i];
-    const p2 = points[Math.min(points.length - 1, i + 1)];
-    const p3 = points[Math.min(points.length - 1, i + 2)];
-
-    // Catmull-Rom spline
-    for (let t = 0; t < 1; t += 0.1) {
-      const t2 = t * t;
-      const t3 = t2 * t;
-
-      const x = 0.5 * (
-        (2 * p1.x) +
-        (-p0.x + p2.x) * t +
-        (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
-        (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3
-      );
-
-      const y = 0.5 * (
-        (2 * p1.y) +
-        (-p0.y + p2.y) * t +
-        (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
-        (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3
-      );
-
-      result.push({
-        x: Math.round(x),
-        y: Math.round(y)
-      });
-    }
-  }
-
-  // Agregar el último punto
-  result.push(points[points.length - 1]);
-
-  // Eliminar duplicados consecutivos
-  return result.filter((point, index) => 
-    index === 0 || point.x !== result[index - 1].x || point.y !== result[index - 1].y
-  );
-}, []);
+// Helpers de suavizado delegados a ./container/utils/strokeSmoothing.js.
+const smoothStroke = useCallback(
+  (points, perfectionLevel) => smoothStrokeUtil(points, perfectionLevel),
+  []
+);
+const straightenNearStraightSegments = useCallback(
+  (points, perfectionLevel) =>
+    straightenNearStraightSegmentsUtil(points, perfectionLevel),
+  []
+);
+const applyCurveSmoothing = useCallback(
+  (points, perfectionLevel) => applyCurveSmoothingUtil(points, perfectionLevel),
+  []
+);
 // Asegurarse de que perfection esté en toolParameters (en tu CustomTool component)
 // toolParameters.perfection = 0 a 1 (0 = sin suavizado, 1 = máximo suavizado)
 const resetCanvasToolState = useCallback(() => {
@@ -3796,8 +3126,8 @@ useEffect(() => {
         if (!lineStartRef.current) {
           // SOLO guardar el botón cuando se inicia la línea por primera vez
           lineButton.current = isPressed;
-          console.log("ispressed:", isPressed);
-    
+
+
           const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
           const canvasCoords = viewportToCanvasCoords(
             viewportPixelCoords.x,
@@ -4336,8 +3666,7 @@ useEffect(() => {
                     polygonCurvePoints,
                     toolParameters.width,
                     toolParameters.borderColor,
-                    toolParameters.fillColor,
-                    false
+                    toolParameters.fillColor
                   );
                 }));
               }
@@ -4355,13 +3684,15 @@ useEffect(() => {
         }
       }
 
-      // Detectar hold mientras se mantiene presionado
-      if (isPressed && !isSettingCurve && polygonPoints.length >= 1) {
+      // Detectar hold mientras se mantiene presionado.
+      // Comportamiento estilo Illustrator: la curva deforma el segmento
+      // (anterior → recién colocado), no el segmento de cierre. Requiere al
+      // menos 2 anclas colocadas: la penúltima y la actual.
+      if (isPressed && !isSettingCurve && polygonPoints.length >= 2) {
         const holdTime = Date.now() - (polygonStartTimeRef.current || 0);
         if (holdTime > 300) {
-          // 300ms para activar modo curva
           setIsSettingCurve(true);
-          setCurrentCurveIndex(polygonPoints.length - 1); // El último punto agregado
+          setCurrentCurveIndex(polygonPoints.length - 2); // Ancla anterior (la penúltima)
         }
       }
 
@@ -4408,7 +3739,6 @@ useEffect(() => {
       );
     
       if (isPressed) {
-        console.log("se esta presionando el cursor en pincel perfect");
         // Mientras está presionado, recolectar coordenadas
         if (!lastPixelRef.current) {
           // Primer punto - inicializar el path Y guardar qué botón fue presionado
@@ -4425,7 +3755,6 @@ useEffect(() => {
         lastPixelRef.current = viewportPixelCoords;
         return; // No dibujar todavía, solo recolectar
       } else {
-        console.log("se solto el cursor en pincel perfect");
         // Se soltó el cursor - ejecutar el dibujo si hay un path
         if (lastPixelRef.current && pencilPerfectPathRef.current.length > 0) {
           // CORREGIDO: Usar la referencia del botón guardada al inicio del trazo
@@ -4436,8 +3765,13 @@ useEffect(() => {
               ? toolParameters.backgroundColor
               : toolParameters.foregroundColor; // fallback a foreground
     
-          // Obtener el path completo recolectado
-          const pathCoordinates = adjustToPerfectCurves(pencilPerfectPathRef.current);
+          // `pixelPerfectPath` interpola con Bresenham entre los pointer
+          // events crudos y luego descarta los corner-pixels. El pipeline
+          // anterior (pixelPerfect sobre pointer-raw + rasterLine entre
+          // puntos filtrados) dejaba los corners intactos porque los
+          // pointer events casi nunca están a 1 px consecutivo — los saltos
+          // típicos son de 3-10 px y el filtro no disparaba nunca.
+          const pathCoordinates = pixelPerfectPath(pencilPerfectPathRef.current);
     
           drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
             const canvas = ctx.canvas;
@@ -4603,7 +3937,6 @@ useEffect(() => {
               } else {
                 // MODO MANUAL CON BROCHA PERSONALIZADA Y CACHE
                 if (shouldInitializeCache) {
-                  console.log("se actualizo el cache:");
                   // Inicializar ImageData cache
                   initializeImageDataCacheOptimized(ctx);
                  
@@ -4837,7 +4170,6 @@ useEffect(() => {
               // MODO MANUAL ULTRA-OPTIMIZADO CON CACHE
              
               if (shouldInitializeCache) {
-                console.log("se actualizo el cache:");
                 // Inicializar ImageData cache
                 initializeImageDataCacheOptimized(ctx);
                
@@ -5280,7 +4612,6 @@ useEffect(() => {
         // MODO MANUAL CON BROCHA PERSONALIZADA Y CACHE
        
         if (!lastPixelRef.current) {
-           console.log("se actualizo el cache:");
           // Primera vez en este trazo - obtener ImageData
           initializeImageDataCacheOptimized(ctx)
         }
@@ -5514,7 +4845,6 @@ useEffect(() => {
     } else {
       // MODO MANUAL ULTRA-OPTIMIZADO CON CACHE
       if (!lastPixelRef.current ) {
-        console.log("se actualizo el cache:");
        // Primera vez en este trazo - obtener ImageData
        initializeImageDataCacheOptimized(ctx)
      }
@@ -6592,70 +5922,28 @@ useEffect(() => {
         const reflectVertical = (y) =>
           centerY * 2 - y + adjustment + imparAdjustmentHeight;
     
-        // Función para aplicar blur a una región específica
+        // Aplica gaussian blur separable (filters.js) en la región del pincel
+        // y mezcla con el original según intensity. O(n·k) vs O(n·k²) del box loop.
         const applyBlurAt = (centerX, centerY) => {
           const halfWidth = Math.floor(width / 2);
           const regionX = Math.max(0, centerX - halfWidth);
           const regionY = Math.max(0, centerY - halfWidth);
           const regionWidth = Math.min(width, canvas.width - regionX);
           const regionHeight = Math.min(width, canvas.height - regionY);
-    
-          // Validar que la región tenga tamaño válido
+
           if (regionWidth <= 0 || regionHeight <= 0) return;
-    
-          // Obtener los datos de imagen de la región
+
           const imageData = ctx.getImageData(regionX, regionY, regionWidth, regionHeight);
-          const data = imageData.data;
-          const newData = new Uint8ClampedArray(data);
-    
-          // Aplicar filtro de difuminado solo en el área válida
-          for (let y = blurRadius; y < regionHeight - blurRadius; y++) {
-            for (let x = blurRadius; x < regionWidth - blurRadius; x++) {
-              let totalR = 0, totalG = 0, totalB = 0, totalA = 0;
-              let count = 0;
-    
-              // Promediar los píxeles vecinos
-              for (let dy = -blurRadius; dy <= blurRadius; dy++) {
-                for (let dx = -blurRadius; dx <= blurRadius; dx++) {
-                  const sampleX = x + dx;
-                  const sampleY = y + dy;
-                  
-                  if (sampleX >= 0 && sampleX < regionWidth && 
-                      sampleY >= 0 && sampleY < regionHeight) {
-                    const sampleIndex = (sampleY * regionWidth + sampleX) * 4;
-                    totalR += data[sampleIndex];
-                    totalG += data[sampleIndex + 1];
-                    totalB += data[sampleIndex + 2];
-                    totalA += data[sampleIndex + 3];
-                    count++;
-                  }
-                }
-              }
-    
-              if (count > 0) {
-                const avgR = totalR / count;
-                const avgG = totalG / count;
-                const avgB = totalB / count;
-                const avgA = totalA / count;
-    
-                const pixelIndex = (y * regionWidth + x) * 4;
-                const originalR = data[pixelIndex];
-                const originalG = data[pixelIndex + 1];
-                const originalB = data[pixelIndex + 2];
-                const originalA = data[pixelIndex + 3];
-    
-                // Mezclar el color original con el promedio según la intensidad
-                newData[pixelIndex] = originalR + (avgR - originalR) * intensity;
-                newData[pixelIndex + 1] = originalG + (avgG - originalG) * intensity;
-                newData[pixelIndex + 2] = originalB + (avgB - originalB) * intensity;
-                newData[pixelIndex + 3] = originalA + (avgA - originalA) * intensity;
-              }
-            }
+          const src = imageData.data;
+          const blurred = gaussianBlurRGBA(src, regionWidth, regionHeight, blurRadius);
+
+          // Mezcla original ↔ blurred por intensity (píxel a píxel, sin allocs extra).
+          const out = new Uint8ClampedArray(src.length);
+          for (let i = 0; i < src.length; i++) {
+            out[i] = src[i] + (blurred[i] - src[i]) * intensity;
           }
-    
-          // Aplicar los datos modificados de vuelta al canvas
-          const blurredImageData = new ImageData(newData, regionWidth, regionHeight);
-          ctx.putImageData(blurredImageData, regionX, regionY);
+
+          ctx.putImageData(new ImageData(out, regionWidth, regionHeight), regionX, regionY);
         };
     
         // Función para aplicar blur con espejos
@@ -6736,66 +6024,33 @@ useEffect(() => {
         const reflectVertical = (y) =>
           centerY * 2 - y + adjustment + imparAdjustmentHeight;
     
-        // Función para aplicar deblur (aumento de nitidez) a una región específica
+        // Unsharp mask: original + k * (original - gaussianBlur(original)).
+        // Usa gaussianBlurRGBA (separable) como paso de blur — O(n·k) en lugar del
+        // triple bucle 3×3 manual. Alpha se copia tal cual (el sharpening solo
+        // afecta RGB).
         const applyDeblurAt = (centerX, centerY) => {
           const halfWidth = Math.floor(width / 2);
           const regionX = Math.max(0, centerX - halfWidth);
           const regionY = Math.max(0, centerY - halfWidth);
           const regionWidth = Math.min(width, canvas.width - regionX);
           const regionHeight = Math.min(width, canvas.height - regionY);
-    
-          // Validar que la región tenga tamaño válido
+
           if (regionWidth <= 0 || regionHeight <= 0) return;
-    
-          // Obtener los datos de imagen de la región
+
           const imageData = ctx.getImageData(regionX, regionY, regionWidth, regionHeight);
-          const data = imageData.data;
-          const newData = new Uint8ClampedArray(data);
-    
-          // Aplicar filtro de nitidez (unsharp mask simplificado)
-          for (let y = 1; y < regionHeight - 1; y++) {
-            for (let x = 1; x < regionWidth - 1; x++) {
-              for (let channel = 0; channel < 3; channel++) { // RGB, no alpha
-                const centerIndex = (y * regionWidth + x) * 4 + channel;
-                const centerValue = data[centerIndex];
-    
-                // Calcular el promedio de los píxeles adyacentes (filtro de blur)
-                let sum = 0;
-                let count = 0;
-    
-                // Núcleo de convolución 3x3 para blur
-                for (let dy = -1; dy <= 1; dy++) {
-                  for (let dx = -1; dx <= 1; dx++) {
-                    const neighborY = y + dy;
-                    const neighborX = x + dx;
-                    
-                    if (neighborX >= 0 && neighborX < regionWidth && 
-                        neighborY >= 0 && neighborY < regionHeight) {
-                      const neighborIndex = (neighborY * regionWidth + neighborX) * 4 + channel;
-                      sum += data[neighborIndex];
-                      count++;
-                    }
-                  }
-                }
-    
-                const blurredValue = sum / count;
-                
-                // Aplicar unsharp mask: original + intensity * (original - blurred)
-                const sharpenedValue = centerValue + intensity * sharpening * (centerValue - blurredValue);
-                
-                // Clamp a rango válido [0, 255]
-                newData[centerIndex] = Math.max(0, Math.min(255, sharpenedValue));
-              }
-              
-              // Mantener el canal alpha sin cambios
-              const alphaIndex = (y * regionWidth + x) * 4 + 3;
-              newData[alphaIndex] = data[alphaIndex];
-            }
+          const src = imageData.data;
+          const blurred = gaussianBlurRGBA(src, regionWidth, regionHeight, 1);
+
+          const out = new Uint8ClampedArray(src.length);
+          const k = intensity * sharpening;
+          for (let i = 0; i < src.length; i += 4) {
+            out[i]     = Math.max(0, Math.min(255, src[i]     + k * (src[i]     - blurred[i])));
+            out[i + 1] = Math.max(0, Math.min(255, src[i + 1] + k * (src[i + 1] - blurred[i + 1])));
+            out[i + 2] = Math.max(0, Math.min(255, src[i + 2] + k * (src[i + 2] - blurred[i + 2])));
+            out[i + 3] = src[i + 3];
           }
-    
-          // Aplicar los datos modificados de vuelta al canvas
-          const sharpenedImageData = new ImageData(newData, regionWidth, regionHeight);
-          ctx.putImageData(sharpenedImageData, regionX, regionY);
+
+          ctx.putImageData(new ImageData(out, regionWidth, regionHeight), regionX, regionY);
         };
     
         // Función para aplicar deblur con espejos
@@ -7243,7 +6498,7 @@ useEffect(() => {
           const drawPointPreview = (point) => {
             const screenX = (point.x - viewportOffset.x) * zoom;
             const screenY = (point.y - viewportOffset.y) * zoom;
-            ctx.fillRect(Math.floor(screenX), Math.floor(screenY), zoom, zoom);
+            ctx.fillRect(Math.floor(screenX), Math.floor(screenY), Math.floor(screenX + zoom) - Math.floor(screenX), Math.floor(screenY + zoom) - Math.floor(screenY));
           };
 
           const drawPreviewLine = (x0, y0, x1, y1) => {
@@ -7375,98 +6630,50 @@ useEffect(() => {
                   2 * (1 - t) * t * control.y +
                   t * t * end.y
               );
-              points.push({ x, y });
+              const last = points[points.length - 1];
+              if (!last || last.x !== x || last.y !== y) points.push({ x, y });
             }
 
-            const offset = Math.floor(width / 2);
+            const adjustedPoints = pixelPerfect(points);
+            const offset = (width / 2) | 0;
             const drawnPixels = new Set();
 
-            const drawPreviewPixelLine = (x0, y0, x1, y1) => {
-              const dx = Math.abs(x1 - x0);
-              const dy = -Math.abs(y1 - y0);
-              const sx = x0 < x1 ? 1 : -1;
-              const sy = y0 < y1 ? 1 : -1;
-              let err = dx + dy;
-              let x = x0,
-                y = y0;
-
-              while (true) {
-                for (let brushY = 0; brushY < width; brushY++) {
-                  for (let brushX = 0; brushX < width; brushX++) {
-                    const px = x + brushX - offset;
-                    const py = y + brushY - offset;
-                    const key = `${px},${py}`;
-
-                    if (!drawnPixels.has(key)) {
-                      const screenX = (px - viewportOffset.x) * zoom;
-                      const screenY = (py - viewportOffset.y) * zoom;
-
-                      if (screenX >= 0 && screenY >= 0) {
-                        ctx.fillRect(
-                          Math.floor(screenX),
-                          Math.floor(screenY),
-                          zoom,
-                          zoom
-                        );
-                        drawnPixels.add(key);
-                      }
-                    }
-                  }
-                }
-
-                if (x === x1 && y === y1) break;
-                const e2 = 2 * err;
-                if (e2 >= dy) {
-                  err += dy;
-                  x += sx;
-                }
-                if (e2 <= dx) {
-                  err += dx;
-                  y += sy;
+            const stampPreview = (x, y) => {
+              for (let dy = 0; dy < width; dy++) {
+                for (let dx = 0; dx < width; dx++) {
+                  const px = x + dx - offset;
+                  const py = y + dy - offset;
+                  const key = (px << 16) ^ py;
+                  if (drawnPixels.has(key)) continue;
+                  drawnPixels.add(key);
+                  const screenX = (px - viewportOffset.x) * zoom;
+                  const screenY = (py - viewportOffset.y) * zoom;
+                  if (screenX < 0 || screenY < 0) continue;
+                  ctx.fillRect(
+                    Math.floor(screenX),
+                    Math.floor(screenY),
+                    zoom,
+                    zoom
+                  );
                 }
               }
             };
 
-            for (let i = 0; i < points.length - 1; i++) {
-              const current = points[i];
-              const next = points[i + 1];
-
-              if (current.x !== next.x || current.y !== next.y) {
-                drawPreviewPixelLine(current.x, current.y, next.x, next.y);
-              }
+            for (let i = 0; i < adjustedPoints.length - 1; i++) {
+              const cur = adjustedPoints[i];
+              const next = adjustedPoints[i + 1];
+              rasterLine(cur.x, cur.y, next.x, next.y, stampPreview);
             }
 
-            [start, end].forEach((point) => {
-              for (let brushY = 0; brushY < width; brushY++) {
-                for (let brushX = 0; brushX < width; brushX++) {
-                  const px = point.x + brushX - offset;
-                  const py = point.y + brushY - offset;
-                  const key = `${px},${py}`;
-
-                  if (!drawnPixels.has(key)) {
-                    const screenX = (px - viewportOffset.x) * zoom;
-                    const screenY = (py - viewportOffset.y) * zoom;
-
-                    if (screenX >= 0 && screenY >= 0) {
-                      ctx.fillRect(
-                        Math.floor(screenX),
-                        Math.floor(screenY),
-                        zoom,
-                        zoom
-                      );
-                      drawnPixels.add(key);
-                    }
-                  }
-                }
-              }
-            });
+            stampPreview(start.x | 0, start.y | 0);
+            stampPreview(end.x | 0, end.y | 0);
           };
 
           const drawPointPreview = (point, fillStyle) => {
             const screenX = (point.x - viewportOffset.x) * zoom;
             const screenY = (point.y - viewportOffset.y) * zoom;
             ctx.fillStyle = fillStyle;
-            ctx.fillRect(Math.floor(screenX), Math.floor(screenY), zoom, zoom);
+            ctx.fillRect(Math.floor(screenX), Math.floor(screenY), Math.floor(screenX + zoom) - Math.floor(screenX), Math.floor(screenY + zoom) - Math.floor(screenY));
           };
 
           const drawPreviewLine = (x0, y0, x1, y1) => {
@@ -7707,8 +6914,7 @@ useEffect(() => {
 
         ctx.restore();
       } else if ((tool === TOOLS.paint) && !isShiftPressed && toolParameters.perfectCurves) {
-       
-        console.log("el toolparametes de curvas es,", toolParameters.perfectCurves);
+
         // Determinar el color basado en el botón presionado
         const selectedColor =
           isPressed === "left"
@@ -7757,7 +6963,7 @@ useEffect(() => {
       
           if (blur === 0) {
             // Sin blur: rectángulo simple
-            ctx.fillRect(screenX, screenY, width * zoom, width * zoom);
+            ctx.fillRect(Math.floor(screenX), Math.floor(screenY), Math.round(width * zoom), Math.round(width * zoom));
           } else {
             // Con blur: círculo con gradiente
             const maxRadius = (width / 2) * zoom;
@@ -7810,39 +7016,19 @@ useEffect(() => {
           }
         };
       
-        // Si está presionado, mostrar todo el trazo
+        // Si está presionado, mostrar todo el trazo con el MISMO filtro que
+        // aplica el commit final (pixelPerfectPath: Bresenham + drop de
+        // L-corners). Antes la previa rasterizaba sin filtrar, así que al
+        // soltar el mouse el trazo "saltaba" a otro shape. Ahora coincide.
         if (isPressed && path.length > 0) {
-          // Convertir todo el path a coordenadas de canvas
           const canvasPath = path.map((point) => {
             const viewportPixelCoords = getPixelCoordinates(point);
             return viewportToCanvasCoords(viewportPixelCoords.x, viewportPixelCoords.y);
           });
-      
-          // Dibujar el primer punto
-          if (canvasPath.length > 0) {
-            drawPreviewWithMirrors(canvasPath[0].x, canvasPath[0].y);
-          }
-      
-          // Dibujar líneas entre todos los puntos usando Bresenham
-          for (let i = 0; i < canvasPath.length - 1; i++) {
-            const start = canvasPath[i];
-            const end = canvasPath[i + 1];
-      
-            let x0 = start.x, y0 = start.y;
-            let x1 = end.x, y1 = end.y;
-            let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
-            let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
-            let err = dx + dy;
-      
-            while (true) {
-              drawPreviewWithMirrors(x0, y0);
-      
-              if (x0 === x1 && y0 === y1) break;
-      
-              const e2 = 2 * err;
-              if (e2 >= dy) { err += dy; x0 += sx; }
-              if (e2 <= dx) { err += dx; y0 += sy; }
-            }
+
+          const filtered = pixelPerfectPath(canvasPath);
+          for (let i = 0; i < filtered.length; i++) {
+            drawPreviewWithMirrors(filtered[i].x, filtered[i].y);
           }
         }
         // Si no está presionado, solo mostrar el cursor
@@ -8158,7 +7344,7 @@ useEffect(() => {
         ctx.setLineDash([]);
         
         // Círculo interior sólido
-        ctx.fillRect(screenX, screenY, width * zoom, width * zoom);
+        ctx.fillRect(Math.floor(screenX), Math.floor(screenY), Math.round(width * zoom), Math.round(width * zoom));
       }      
       
       else if (tool === TOOLS.polygonPencil) {
@@ -8187,219 +7373,61 @@ useEffect(() => {
         const reflectVertical = (y) =>
           centerY * 2 - y + adjustment + imparAdjustmentHeight;
 
-        const drawPolygonPreview = (points, curvePoints) => {
-          if (points.length === 0) return;
-
-          // Dibujar puntos existentes
-          points.forEach((point, index) => {
-            const screenX = (point.x - viewportOffset.x) * zoom;
-            const screenY = (point.y - viewportOffset.y) * zoom;
-            ctx.fillStyle = `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, 0.8)`;
-            ctx.fillRect(
-              Math.floor(screenX - 2),
-              Math.floor(screenY - 2),
-              4,
-              4
-            );
-          });
-
-          // Dibujar líneas entre puntos
-          for (let i = 0; i < points.length - 1; i++) {
-            const start = points[i];
-            const end = points[i + 1];
-            const curveKey = `${i}-${i + 1}`;
-
-            ctx.strokeStyle = `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, 0.6)`;
-            ctx.lineWidth = 1;
-            ctx.setLineDash([5, 5]);
-
-            if (curvePoints.has(curveKey)) {
-              // Dibujar curva
-              const control = curvePoints.get(curveKey);
-              const startScreen = {
-                x: (start.x - viewportOffset.x) * zoom,
-                y: (start.y - viewportOffset.y) * zoom,
-              };
-              const endScreen = {
-                x: (end.x - viewportOffset.x) * zoom,
-                y: (end.y - viewportOffset.y) * zoom,
-              };
-              const controlScreen = {
-                x: (control.x - viewportOffset.x) * zoom,
-                y: (control.y - viewportOffset.y) * zoom,
-              };
-
-              ctx.beginPath();
-              ctx.moveTo(startScreen.x, startScreen.y);
-              ctx.quadraticCurveTo(
-                controlScreen.x,
-                controlScreen.y,
-                endScreen.x,
-                endScreen.y
-              );
-              ctx.stroke();
-
-              // Punto de control
-              ctx.fillStyle = "rgba(0, 150, 255, 0.8)";
-              ctx.fillRect(
-                Math.floor(controlScreen.x - 2),
-                Math.floor(controlScreen.y - 2),
-                4,
-                4
-              );
-            } else {
-              // Línea recta
-              const startScreen = {
-                x: (start.x - viewportOffset.x) * zoom,
-                y: (start.y - viewportOffset.y) * zoom,
-              };
-              const endScreen = {
-                x: (end.x - viewportOffset.x) * zoom,
-                y: (end.y - viewportOffset.y) * zoom,
-              };
-
-              ctx.beginPath();
-              ctx.moveTo(startScreen.x, startScreen.y);
-              ctx.lineTo(endScreen.x, endScreen.y);
-              ctx.stroke();
-            }
-          }
-
-          // Línea al cursor si hay puntos
-          if (points.length > 0 && !isSettingCurve) {
-            const lastPoint = points[points.length - 1];
-            const lastScreen = {
-              x: (lastPoint.x - viewportOffset.x) * zoom,
-              y: (lastPoint.y - viewportOffset.y) * zoom,
-            };
-            const cursorScreen = {
-              x: (canvasCoords.x - viewportOffset.x) * zoom,
-              y: (canvasCoords.y - viewportOffset.y) * zoom,
-            };
-
-            ctx.strokeStyle = `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, 0.4)`;
-            ctx.setLineDash([3, 3]);
-            ctx.beginPath();
-            ctx.moveTo(lastScreen.x, lastScreen.y);
-            ctx.lineTo(cursorScreen.x, cursorScreen.y);
-            ctx.stroke();
-          }
-
-          // Preview de curva en configuración
-          if (isSettingCurve && currentCurveIndex >= 0 && points.length >= 2) {
-            const currentPoint = points[currentCurveIndex];
-            const nextIndex =
-              currentCurveIndex < points.length - 1 ? currentCurveIndex + 1 : 0;
-            const nextPoint = points[nextIndex];
-
-            const currentScreen = {
-              x: (currentPoint.x - viewportOffset.x) * zoom,
-              y: (currentPoint.y - viewportOffset.y) * zoom,
-            };
-            const nextScreen = {
-              x: (nextPoint.x - viewportOffset.x) * zoom,
-              y: (nextPoint.y - viewportOffset.y) * zoom,
-            };
-            const controlScreen = {
-              x: (canvasCoords.x - viewportOffset.x) * zoom,
-              y: (canvasCoords.y - viewportOffset.y) * zoom,
-            };
-
-            // Líneas de guía al punto de control
-            ctx.strokeStyle = "rgba(0, 150, 255, 0.5)";
-            ctx.setLineDash([2, 2]);
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(currentScreen.x, currentScreen.y);
-            ctx.lineTo(controlScreen.x, controlScreen.y);
-            ctx.stroke();
-
-            ctx.beginPath();
-            ctx.moveTo(nextScreen.x, nextScreen.y);
-            ctx.lineTo(controlScreen.x, controlScreen.y);
-            ctx.stroke();
-
-            // Preview de la curva
-            ctx.strokeStyle = `rgba(${toolParameters.fillColor.r}, ${toolParameters.fillColor.g}, ${toolParameters.fillColor.b}, 0.8)`;
-            ctx.setLineDash([]);
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(currentScreen.x, currentScreen.y);
-            ctx.quadraticCurveTo(
-              controlScreen.x,
-              controlScreen.y,
-              nextScreen.x,
-              nextScreen.y
-            );
-            ctx.stroke();
-
-            // Punto de control
-            ctx.fillStyle = "rgba(0, 150, 255, 0.8)";
-            ctx.fillRect(
-              Math.floor(controlScreen.x - 3),
-              Math.floor(controlScreen.y - 3),
-              6,
-              6
-            );
-          }
-
-          // Preview del polígono completo si hay suficientes puntos
-          if (points.length >= 3) {
-            drawPolygonWithCurves(
-              ctx,
-              points,
-              curvePoints,
-              toolParameters.width,
-              toolParameters.borderColor,
-              toolParameters.fillColor,
-              true
-            );
-          }
+        const mirrorPolygonPoints = (pts, horizontal, vertical) => {
+          return pts.map((point) => ({
+            x: horizontal ? reflectHorizontal(point.x) : point.x,
+            y: vertical ? reflectVertical(point.y) : point.y,
+          }));
         };
 
-        // Dibujar polígono original
-        drawPolygonPreview(polygonPoints, polygonCurvePoints);
-
-        // Dibujar polígonos reflejados si el mirroring está activo
-        if (mirrorState.vertical || mirrorState.horizontal) {
-          const mirrorPolygonPoints = (points, horizontal, vertical) => {
-            return points.map((point) => ({
+        const mirrorCurvePoints = (curves, horizontal, vertical) => {
+          const mirrored = new Map();
+          curves.forEach((point, key) => {
+            mirrored.set(key, {
               x: horizontal ? reflectHorizontal(point.x) : point.x,
               y: vertical ? reflectVertical(point.y) : point.y,
-            }));
-          };
-
-          const mirrorCurvePoints = (curvePoints, horizontal, vertical) => {
-            const mirrored = new Map();
-            curvePoints.forEach((point, key) => {
-              mirrored.set(key, {
-                x: horizontal ? reflectHorizontal(point.x) : point.x,
-                y: vertical ? reflectVertical(point.y) : point.y,
-              });
             });
-            return mirrored;
-          };
+          });
+          return mirrored;
+        };
 
+        const renderPreview = (pts, curves) => {
+          drawPolygonPencilPreview(
+            ctx,
+            pts,
+            curves,
+            canvasCoords,
+            toolParameters.width,
+            toolParameters.borderColor,
+            toolParameters.fillColor,
+            isSettingCurve,
+            currentCurveIndex
+          );
+        };
+
+        renderPreview(polygonPoints, polygonCurvePoints);
+
+        if (mirrorState.vertical || mirrorState.horizontal) {
           if (mirrorState.vertical) {
-            const vPoints = mirrorPolygonPoints(polygonPoints, false, true);
-            const vCurves = mirrorCurvePoints(polygonCurvePoints, false, true);
-            drawPolygonPreview(vPoints, vCurves);
+            renderPreview(
+              mirrorPolygonPoints(polygonPoints, false, true),
+              mirrorCurvePoints(polygonCurvePoints, false, true)
+            );
           }
-
           if (mirrorState.horizontal) {
-            const hPoints = mirrorPolygonPoints(polygonPoints, true, false);
-            const hCurves = mirrorCurvePoints(polygonCurvePoints, true, false);
-            drawPolygonPreview(hPoints, hCurves);
+            renderPreview(
+              mirrorPolygonPoints(polygonPoints, true, false),
+              mirrorCurvePoints(polygonCurvePoints, true, false)
+            );
           }
-
           if (mirrorState.vertical && mirrorState.horizontal) {
-            const dhPoints = mirrorPolygonPoints(polygonPoints, true, true);
-            const dhCurves = mirrorCurvePoints(polygonCurvePoints, true, true);
-            drawPolygonPreview(dhPoints, dhCurves);
+            renderPreview(
+              mirrorPolygonPoints(polygonPoints, true, true),
+              mirrorCurvePoints(polygonCurvePoints, true, true)
+            );
           }
         }
 
-        ctx.setLineDash([]);
         ctx.restore();
       } else if (
         tool === TOOLS.move ||
@@ -8445,7 +7473,7 @@ useEffect(() => {
         const y = canvasY - offset;
         const screenX = (x - viewportOffset.x) * zoom;
         const screenY = (y - viewportOffset.y) * zoom;
-        ctx.fillRect(screenX, screenY, width * zoom, width * zoom);
+        ctx.fillRect(Math.floor(screenX), Math.floor(screenY), Math.round(width * zoom), Math.round(width * zoom));
       };
 
       // Punto original
@@ -8495,8 +7523,7 @@ useEffect(() => {
             polygonCurvePoints,
             toolParameters.width,
             toolParameters.borderColor,
-            toolParameters.fillColor,
-            false
+            toolParameters.fillColor
           );
         });
 
@@ -8742,114 +7769,29 @@ const [cumulativeRotationAngle, setCumulativeRotationAngle] = useState(0); // Á
   const selectionCanvasRef = useRef(null);
   const [selectionCoords, setSelectionCoords] = useState([]);
   const [croppedSelectionBounds, setCroppedSelectionBounds] = useState(null);
+  // Refs para evitar remapear toda la ruta del puntero en cada frame durante el arrastre de selección.
+  const selectionStartRef = useRef(null);
+  const lastSelectionEndRef = useRef(null);
   // Add a new state for lasso selection points
   const [lassoPoints, setLassoPoints] = useState([]);
 
   /// Funciones de utilidad para mi LASSO: ////===================
-  // Función para verificar si un punto está dentro de un polígono
-  const isPointInPolygon = useCallback((x, y, polygon) => {
-    let inside = false;
-    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-      const xi = polygon[i].x,
-        yi = polygon[i].y;
-      const xj = polygon[j].x,
-        yj = polygon[j].y;
+  // Helpers de geometría delegados a ./container/utils/geometry.js.
+  const isPointInPolygon = useCallback(
+    (x, y, polygon) => isPointInPolygonUtil(x, y, polygon),
+    []
+  );
 
-      const intersect =
-        yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
-      if (intersect) inside = !inside;
-    }
-    return inside;
-  }, []);
-
-  // Calcular los límites (bounds) del lazo
   const calculateLassoBounds = useCallback(() => {
-    if (lassoPoints.length < 3) return;
-
-    // Encontrar los límites del polígono
-    const xCoords = lassoPoints.map((point) => point.x);
-    const yCoords = lassoPoints.map((point) => point.y);
-
-    const minX = Math.min(...xCoords);
-    const maxX = Math.max(...xCoords);
-    const minY = Math.min(...yCoords);
-    const maxY = Math.max(...yCoords);
-
-    // Establecer los límites del área de selección
-    setCroppedSelectionBounds({
-      x: minX,
-      y: minY,
-      width: maxX - minX + 1,
-      height: maxY - minY + 1,
-    });
+    const bounds = calculateLassoBoundsFromPoints(lassoPoints);
+    if (bounds) setCroppedSelectionBounds(bounds);
   }, [lassoPoints]);
 
-  const findNonEmptyBounds = useCallback((imageData, width, height) => {
-    const data = imageData.data;
-
-    let top = 0,
-      bottom = height - 1;
-    let left = 0,
-      right = width - 1;
-
-    let found = false;
-
-    // Buscar el primer top con alpha > 0
-    for (; top < height; top++) {
-      for (let x = 0; x < width; x++) {
-        if (data[(top * width + x) * 4 + 3] > 0) {
-          found = true;
-          break;
-        }
-      }
-      if (found) break;
-    }
-
-    // Buscar el primer bottom con alpha > 0
-    found = false;
-    for (; bottom >= top; bottom--) {
-      for (let x = 0; x < width; x++) {
-        if (data[(bottom * width + x) * 4 + 3] > 0) {
-          found = true;
-          break;
-        }
-      }
-      if (found) break;
-    }
-
-    // Buscar el primer left con alpha > 0
-    found = false;
-    for (; left < width; left++) {
-      for (let y = top; y <= bottom; y++) {
-        if (data[(y * width + left) * 4 + 3] > 0) {
-          found = true;
-          break;
-        }
-      }
-      if (found) break;
-    }
-
-    // Buscar el primer right con alpha > 0
-    found = false;
-    for (; right >= left; right--) {
-      for (let y = top; y <= bottom; y++) {
-        if (data[(y * width + right) * 4 + 3] > 0) {
-          found = true;
-          break;
-        }
-      }
-      if (found) break;
-    }
-
-    if (left > right || top > bottom) return null; // No se encontró ningún pixel visible
-
-    return {
-      x: left,
-      y: top,
-      width: right - left + 1,
-      height: bottom - top + 1,
-    };
-  }, []);
+  const findNonEmptyBounds = useCallback(
+    (imageData, width, height) =>
+      findNonEmptyBoundsUtil(imageData, width, height),
+    []
+  );
 
   // Función para limpiar la selección actual
   const clearCurrentSelection = useCallback(() => {
@@ -8899,6 +7841,8 @@ const [cumulativeRotationAngle, setCumulativeRotationAngle] = useState(0); // Á
     setLassoPoints([]);
     setIsDraggingSelection(false);
     setDragStartPoint(null);
+
+    invalidateImageDataCacheOptimized();
   }, [
     selectedPixels,
     originalPixelColors,
@@ -8909,6 +7853,7 @@ const [cumulativeRotationAngle, setCumulativeRotationAngle] = useState(0); // Á
     isDraggingSelection, // Nueva dependencia
     selectedGroup, // Nueva dependencia
     updatePixelGroup, // Función del hook useLayerManager,
+    invalidateImageDataCacheOptimized,
   ]);
 
 
@@ -9217,70 +8162,67 @@ const [cumulativeRotationAngle, setCumulativeRotationAngle] = useState(0); // Á
   }, [activeLayerId, lassoPoints, getLayerData]);
 
   const clampCoordinates = useCallback(
-    (coords, maxWidth = totalWidth, maxHeight = totalHeight) => {
-      return {
-        x: Math.max(0, Math.min(maxWidth - 1, coords.x)),
-        y: Math.max(0, Math.min(maxHeight - 1, coords.y)),
-      };
-    },
+    (coords, maxWidth = totalWidth, maxHeight = totalHeight) =>
+      clampCoordinatesUtil(coords, maxWidth, maxHeight),
     [totalWidth, totalHeight]
   );
 
-  // Lógica para nueva selección
+  // Lógica para nueva selección (rectángulo).
+  // Optimización: los consumidores de `selectionCoords` sólo leen el primer y el último punto,
+  // así que evitamos mapear toda la ruta acumulada del puntero y sólo actualizamos el estado
+  // cuando el píxel final cambia. Esto quita el trabajo O(n) por frame y los re-renders
+  // innecesarios durante el arrastre.
   useEffect(() => {
     if (isSpacePressed) return;
-
     if (tool !== TOOLS.select || !isPressed) return;
+    if (isDraggingSelection) return;
+    if (selectionActive) return;
+    if (path.length === 0) return;
 
-    // Si acabamos de iniciar el presionado y NO estamos arrastrando una selección existente
-    if (path.length === 1 && !isDraggingSelection) {
-      const clickPoint = path[0];
-      const pixelCoords = getPixelCoordinates(clickPoint);
-      const canvasCoords = viewportToCanvasCoords(pixelCoords.x, pixelCoords.y);
-
-      // Solo procesar como nueva selección si no hay selección activa
-      // o si clickeamos fuera de la selección existente
-      if (!selectionActive) {
-        // Iniciar nueva selección
-        if (
-          path.length === 0 &&
-          (selectedPixels.length > 0 || croppedSelectionBounds)
-        ) {
-          clearCurrentSelection();
-        }
-      }
-    }
-
-    // No procesar nueva selección si estamos arrastrando
-    if (isDraggingSelection) {
-      return;
-    }
-
-    // Lógica existente para nueva selección (solo cuando NO hay selección activa)
-    if (!selectionActive && path.length >= 1) {
-      const canvasCoords = path.map((point) => {
-        const viewportPixelCoords = getPixelCoordinates(point);
-        const rawCoords = viewportToCanvasCoords(
-          viewportPixelCoords.x,
-          viewportPixelCoords.y
-        );
-
-        // AGREGAR AQUÍ: Limitar coordenadas dentro del canvas
-        return clampCoordinates(rawCoords);
-      });
-
-      setSelectionCoords(canvasCoords);
+    // Primer frame del press: fijar punto de inicio y limpiar bounds anteriores una sola vez.
+    if (path.length === 1 || !selectionStartRef.current) {
+      const first = path[0];
+      const firstPixel = getPixelCoordinates(first);
+      const firstCanvas = clampCoordinates(
+        viewportToCanvasCoords(firstPixel.x, firstPixel.y)
+      );
+      selectionStartRef.current = firstCanvas;
+      lastSelectionEndRef.current = null;
       setCroppedSelectionBounds(null);
     }
+
+    // Punto final actual en coordenadas de canvas (snap a píxel).
+    const last = path[path.length - 1];
+    const lastPixel = getPixelCoordinates(last);
+    const endCanvas = clampCoordinates(
+      viewportToCanvasCoords(lastPixel.x, lastPixel.y)
+    );
+
+    const prevEnd = lastSelectionEndRef.current;
+    if (prevEnd && prevEnd.x === endCanvas.x && prevEnd.y === endCanvas.y) {
+      // Mismo píxel: no hay cambios visuales, saltar update.
+      return;
+    }
+    lastSelectionEndRef.current = endCanvas;
+
+    setSelectionCoords([selectionStartRef.current, endCanvas]);
   }, [
+    isSpacePressed,
     isPressed,
     path,
     tool,
     isDraggingSelection,
-    activeLayerId,
     selectionActive,
     clampCoordinates,
   ]);
+
+  // Reset de refs cuando se suelta el puntero, para el próximo arrastre.
+  useEffect(() => {
+    if (!isPressed) {
+      selectionStartRef.current = null;
+      lastSelectionEndRef.current = null;
+    }
+  }, [isPressed]);
 
   // Finalizar arrastre cuando se suelta el mouse
   useEffect(() => {
@@ -9348,159 +8290,101 @@ const [cumulativeRotationAngle, setCumulativeRotationAngle] = useState(0); // Á
       // Aplicar tanto el viewportOffset como el panOffset
       const screenX = (x - viewportOffset.x) * zoom;
       const screenY = (y - viewportOffset.y) * zoom;
-      ctx.fillRect(screenX, screenY, zoom, zoom);
+      ctx.fillRect(Math.floor(screenX), Math.floor(screenY), Math.floor(screenX + zoom) - Math.floor(screenX), Math.floor(screenY + zoom) - Math.floor(screenY));
     },
     [zoom, viewportOffset]
   ); // Añadir viewportOffset como dependencia
 
-  // Dibujar el rectángulo de selección
+  // Calcular píxeles dentro del área de selección.
+  // Optimización: UNA sola lectura de la capa con `getLayerData(x, y, w, h)` en lugar de
+  // N·M promesas de 1×1. La versión anterior disparaba una promesa (y un getImageData)
+  // por píxel — en un bounds de 200×200 eso eran 40.000 lecturas async y causaba el retraso
+  // de ~2s antes de que apareciera el contenido seleccionado.
   useEffect(() => {
-   
     if (!croppedSelectionBounds || isPressed || selectedPixels.length > 0) return;
-  
+    if (!activeLayerId) return;
+
     const { x, y, width, height } = croppedSelectionBounds;
-  
-    // Verificación rápida si hay píxeles visibles
-    const quickCheckPromise = async () => {
-      const sampleSize = Math.min(100, width * height);
-      const samplePromises = [];
-  
-      for (let i = 0; i < sampleSize; i++) {
-        const sampleX = x + Math.floor(Math.random() * width);
-        const sampleY = y + Math.floor(Math.random() * height);
-  
-        // Para el lazo, solo verificar puntos dentro del polígono
-        if (
-          tool === TOOLS.select ||
-          (tool === TOOLS.lassoSelect &&
-            isPointInPolygon(sampleX, sampleY, lassoPoints))
-        ) {
-          const promise = getPixelColor(sampleX, sampleY).then((color) => ({
-            x: sampleX,
-            y: sampleY,
-            color,
-          }));
-          samplePromises.push(promise);
-        }
-      }
-  
-      const sampleResults = await Promise.all(samplePromises);
-      const hasVisiblePixels = sampleResults.some(
-        ({ color }) =>
-          color &&
-          color.a > 0 &&
-          !(color.r === 0 && color.g === 0 && color.b === 0 && color.a === 0)
-      );
-  
-      return hasVisiblePixels;
-    };
-  
-    if (selectedPixels.length === 0) {
-      quickCheckPromise()
-        .then((hasVisiblePixels) => {
-          if (!hasVisiblePixels) {
-            console.log("No se encontraron píxeles visibles en la selección");
-            setCroppedSelectionBounds(null);
-            setSelectionActive(false);
-            return;
-          }
-  
-          // Procesar todos los píxeles en el área
-          let pixelPromises = [];
-  
-          for (let i = y; i < y + height; i++) {
-            for (let j = x; j < x + width; j++) {
-              // Para el lazo, verificar si el punto está dentro del polígono
-              const shouldCheck =
-                tool === TOOLS.select ||
-                (tool === TOOLS.lassoSelect &&
-                  isPointInPolygon(j, i, lassoPoints));
-  
-              if (shouldCheck) {
-                const promise = getPixelColor(j, i).then((color) => ({
-                  x: j,
-                  y: i,
-                  color,
-                }));
-                pixelPromises.push(promise);
-              }
-            }
-          }
-  
-          Promise.all(pixelPromises).then((allPixels) => {
-            const selectionPixels = allPixels.filter(({ color }) => {
-              return (
-                color &&
-                color.a > 0 &&
-                !(
-                  color.r === 0 &&
-                  color.g === 0 &&
-                  color.b === 0 &&
-                  color.a === 0
-                )
-              );
-            });
-  
-            if (selectionPixels.length > 0) {
-              // MODIFICACIÓN PRINCIPAL: Guardar estado original
-              
-              // 1. Crear copias profundas de los píxeles originales
-              const originalPixelsCopy = selectionPixels.map((pixel) => ({
-                x: pixel.x,
-                y: pixel.y,
-                color: {
-                  r: pixel.color.r,
-                  g: pixel.color.g,
-                  b: pixel.color.b,
-                  a: pixel.color.a
-                }
-              }));
-  
-              // 2. Crear copia profunda de los bounds originales
-              const originalBoundsCopy = {
-                x: croppedSelectionBounds.x,
-                y: croppedSelectionBounds.y,
-                width: croppedSelectionBounds.width,
-                height: croppedSelectionBounds.height
-              };
-  
-              // 3. Guardar estados originales para RotSprite
-              setOriginalSelectedPixels(originalPixelsCopy);
-              setOriginalSelectionBounds(originalBoundsCopy);
-              
-              // 4. Resetear ángulo de rotación acumulado
-              setCumulativeRotationAngle(0);
-  
-              // 5. Guardar colores originales (para otras operaciones)
-              const originalColors = selectionPixels.map((pixel) => ({
-                r: pixel.color.r,
-                g: pixel.color.g,
-                b: pixel.color.b,
-                a: pixel.color.a
-              }));
-              setOriginalPixelColors(originalColors);
-  
-              // 6. Establecer píxeles seleccionados actuales
-              setSelectedPixels(selectionPixels);
-              
-              // 7. Finalizar selección
-              setFinalizedSelection(true);
-  
-              console.log(`Selección creada: ${selectionPixels.length} píxeles`);
-              console.log('Estado original guardado para RotSprite');
-              
-            } else {
-              setCroppedSelectionBounds(null);
-              setSelectionActive(false);
-            }
-          });
-        })
-        .catch((error) => {
-          console.error("Error en la verificación de píxeles:", error);
+    if (width <= 0 || height <= 0) return;
+
+    let cancelled = false;
+
+    (async () => {
+      let imageData;
+      try {
+        imageData = await getLayerData(activeLayerId, x, y, width, height);
+      } catch (err) {
+        console.error("Error leyendo la capa para la selección:", err);
+        if (!cancelled) {
           setCroppedSelectionBounds(null);
           setSelectionActive(false);
-        });
-    }
+        }
+        return;
+      }
+
+      if (cancelled) return;
+      if (!imageData || !imageData.data) {
+        setCroppedSelectionBounds(null);
+        setSelectionActive(false);
+        return;
+      }
+
+      const data = imageData.data;
+      const useLasso = tool === TOOLS.lassoSelect;
+
+      const selectionPixels = [];
+      const originalColors = [];
+
+      for (let row = 0; row < height; row++) {
+        const py = y + row;
+        const rowBase = row * width * 4;
+        for (let col = 0; col < width; col++) {
+          const px = x + col;
+          if (useLasso && !isPointInPolygon(px, py, lassoPoints)) continue;
+
+          const idx = rowBase + col * 4;
+          const aRaw = data[idx + 3];
+          if (aRaw === 0) continue; // píxel transparente → fuera de la selección
+
+          const r = data[idx];
+          const g = data[idx + 1];
+          const b = data[idx + 2];
+          const a = aRaw / 255;
+
+          selectionPixels.push({ x: px, y: py, color: { r, g, b, a } });
+          originalColors.push({ r, g, b, a });
+        }
+      }
+
+      if (cancelled) return;
+
+      if (selectionPixels.length === 0) {
+        console.log("No se encontraron píxeles visibles en la selección");
+        setCroppedSelectionBounds(null);
+        setSelectionActive(false);
+        return;
+      }
+
+      const originalPixelsCopy = selectionPixels.map((p) => ({
+        x: p.x,
+        y: p.y,
+        color: { r: p.color.r, g: p.color.g, b: p.color.b, a: p.color.a },
+      }));
+      const originalBoundsCopy = { x, y, width, height };
+
+      setOriginalSelectedPixels(originalPixelsCopy);
+      setOriginalSelectionBounds(originalBoundsCopy);
+      setCumulativeRotationAngle(0);
+      setOriginalPixelColors(originalColors);
+      setSelectedPixels(selectionPixels);
+      setFinalizedSelection(true);
+
+      console.log(`Selección creada: ${selectionPixels.length} píxeles`);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     croppedSelectionBounds,
     isPressed,
@@ -9508,17 +8392,16 @@ const [cumulativeRotationAngle, setCumulativeRotationAngle] = useState(0); // Á
     tool,
     lassoPoints,
     isPointInPolygon,
-    getPixelColor,
+    getLayerData,
+    activeLayerId,
     setOriginalPixelColors,
     setSelectedPixels,
     setFinalizedSelection,
     setCroppedSelectionBounds,
     setSelectionActive,
-    // NUEVAS DEPENDENCIAS PARA ROTSPRITE:
-    rotationAngle,
     setOriginalSelectedPixels,
-    setOriginalSelectionBounds, 
-    setCumulativeRotationAngle
+    setOriginalSelectionBounds,
+    setCumulativeRotationAngle,
   ]);
 
   // Manejar el arrastre de la selección
@@ -9696,8 +8579,8 @@ const [cumulativeRotationAngle, setCumulativeRotationAngle] = useState(0); // Á
       ctx.strokeStyle = "rgba(0, 120, 255, 0.5)";
       ctx.fillStyle = "rgba(0, 120, 255, 0.1)";
       ctx.lineWidth = 1;
-      ctx.fillRect(screenX, screenY, width * zoom, height * zoom);
-      ctx.strokeRect(screenX, screenY, width * zoom, height * zoom);
+      ctx.fillRect(Math.floor(screenX), Math.floor(screenY), Math.round(width * zoom), Math.round(height * zoom));
+      ctx.strokeRect(Math.floor(screenX), Math.floor(screenY), Math.round(width * zoom), Math.round(height * zoom));
     }
 
     // Si hay una selección activa, mostrar el borde y los pixeles seleccionados
@@ -9723,8 +8606,8 @@ const [cumulativeRotationAngle, setCumulativeRotationAngle] = useState(0); // Á
           ? "rgba(255, 150, 0, 0.2)"
           : "rgba(0, 200, 100, 0.2)";
         ctx.lineWidth = 2;
-        ctx.fillRect(screenX, screenY, width * zoom, height * zoom);
-        ctx.strokeRect(screenX, screenY, width * zoom, height * zoom);
+        ctx.fillRect(screenX, screenY, Math.round(width * zoom), Math.round(height * zoom));
+        ctx.strokeRect(screenX, screenY, Math.round(width * zoom), Math.round(height * zoom));
 
         // Mantener marcadores de esquina
         const markerSize = 2;
@@ -9759,14 +8642,28 @@ const [cumulativeRotationAngle, setCumulativeRotationAngle] = useState(0); // Á
        
       }
 
-      // Pintar píxeles seleccionados (ya corregido con la función paintPixelInSelectionCanvas)
+      // Pintar píxeles seleccionados via OffscreenCanvas 1:1 → drawImage escalado,
+      // igual que compositeRender, para evitar líneas de malla a zooms fraccionarios.
+      const offscreen = new OffscreenCanvas(viewportWidth, viewportHeight);
+      const offCtx = offscreen.getContext("2d");
+
       selectedPixels.forEach((pixel) => {
-        paintPixelInSelectionCanvas(
-          pixel.x + dragOffset.x,
-          pixel.y + dragOffset.y,
-          pixel.color
-        );
+        const px = pixel.x + dragOffset.x - viewportOffset.x;
+        const py = pixel.y + dragOffset.y - viewportOffset.y;
+        if (px < 0 || py < 0 || px >= viewportWidth || py >= viewportHeight) return;
+        const { r, g, b, a } = pixel.color;
+        offCtx.fillStyle = `rgba(${r},${g},${b},${a})`;
+        offCtx.fillRect(px, py, 1, 1);
       });
+
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(
+        offscreen,
+        0, 0, viewportWidth, viewportHeight,
+        0, 0,
+        Math.round(viewportWidth * zoom),
+        Math.round(viewportHeight * zoom)
+      );
     }
   }, [
     selectedPixels,
@@ -9776,11 +8673,13 @@ const [cumulativeRotationAngle, setCumulativeRotationAngle] = useState(0); // Á
     selectionActive,
     isDraggingSelection,
     viewportOffset,
+    viewportWidth,
+    viewportHeight,
+    zoom,
     tool,
     clearCurrentSelection,
     selectionCoords,
     lassoPoints,
-    paintPixelInSelectionCanvas,
     isRotationHandlerContainerPressed
   ]);
 
@@ -9939,6 +8838,8 @@ const [cumulativeRotationAngle, setCumulativeRotationAngle] = useState(0); // Á
       x: prev.x + 5,
       y: prev.y + 5,
     }));
+
+    invalidateImageDataCacheOptimized();
   }
 
   const rotatePixels90 = useCallback(
@@ -9977,8 +8878,7 @@ const [cumulativeRotationAngle, setCumulativeRotationAngle] = useState(0); // Á
 
       return newPixels;
     },
-    
-    dragOffset
+    [dragOffset]
   );
 
   const handleRotation = (direction) => {
@@ -10491,225 +9391,100 @@ const cutSelection = useCallback(() => {
   }, [currentFrame, activeLayerId, frameCount, layers, frames, selectedPixels, dragOffset]);
 
   
-  const MemoizedLayerAnimation = useMemo(() => {
-    return (
-      <LayerAnimation
-        // Todas las props de LayerManager
-        updateLayerZIndex={updateLayerZIndex}
-        moveLayerToPosition={moveLayerToPosition}
-        moveGroupToLayer={moveGroupToLayer}
-        moveGroupToPosition={moveGroupToPosition}
-        layers={layers}
-        addLayer={addLayer}
-        deleteLayer={deleteLayer}
-        moveLayerUp={moveLayerUp}
-        moveLayerDown={moveLayerDown}
-        toggleLayerVisibility={toggleLayerVisibility}
-        renameLayer={renameLayer}
-        clearLayer={clearLayer}
-        activeLayerId={activeLayerId}
-        setActiveLayerId={setActiveLayerId}
-        pixelGroups={pixelGroups}
-        selectedGroup={selectedGroup}
-        selectedPixels={selectedPixels}
-        createPixelGroup={createPixelGroup}
-        deletePixelGroup={deletePixelGroup}
-        getLayerGroups={getLayerGroups}
-        selectPixelGroup={selectPixelGroup}
-        clearSelectedGroup={clearSelectedGroup}
-        renamePixelGroup={renamePixelGroup}
-        toggleGroupVisibility={toggleGroupVisibility}
-        setSelectedPixels={setSelectedPixels}
-        handleSelectGroup={handleSelectGroup}
-        dragOffset={dragOffset}
-        setSelectionCoords={setSelectionCoords}
-        setSelectionActive={setSelectionActive}
-        setCroppedSelectionBounds={setCroppedSelectionBounds}
-        autoCropSelection={autoCropSelection}
-        setOriginalPixelColors={setOriginalPixelColors}
-        setDragOffset={setDragOffset}
-        setTool={setTool}
-        clearCurrentSelection={clearCurrentSelection}
-        getHierarchicalLayers={getHierarchicalLayers}
-        getMainLayers={getMainLayers}
-        getGroupLayersForParent={getGroupLayersForParent}
-        selectionActive={selectionActive}
-        selectAllCanvas={selectAllCanvas}
-        duplicateLayer={duplicateLayer}
-        //Props para animacion:
-        frames={frames}
-        currentFrame={currentFrame}
-        frameCount={frameCount}
-        createFrame={createFrame}
-        setActiveFrame={setActiveFrame}
-        deleteFrame={deleteFrame}
-        duplicateFrame={duplicateFrame}
-        saveCurrentFrameState={saveCurrentFrameState}
-        getFramesInfo={getFramesInfo}
-        renameFrame={renameFrame}
-        syncWithCurrentFrame={renameFrame}
-        toggleLayerVisibilityInFrame={toggleLayerVisibilityInFrame}
-        getLayerVisibility={getLayerVisibility}
-        //Onion skin:
-
-        toggleOnionSkin={toggleOnionSkin}
-        setOnionSkinConfig={setOnionSkinConfig}
-        setOnionSkinFrameConfig={setOnionSkinConfig}
-        getOnionSkinFrameConfig={getOnionSkinFrameConfig}
-        getOnionSkinPresets={getOnionSkinFrameConfig}
-        applyOnionSkinPreset={applyOnionSkinPreset}
-        getOnionSkinInfo={getOnionSkinFrameConfig}
-        onionSkinEnabled={onionSkinEnabled}
-        showOnionSkinForLayer={showOnionSkinForLayer}
-        clearOnionSkinLayerFilter={clearOnionSkinLayerFilter}
-        onionSkinSettings={onionSkinSettings}
-        //gestion de tiempo de los frames:
-
-        setFrameDuration={setFrameDuration}
-        getFrameDuration={getFrameDuration}
-        getFrameRate={getFrameRate}
-        setDefaultFrameRate={setDefaultFrameRate}
-        defaultFrameDuration={defaultFrameDuration}
-        //gestion de opacidad de los frames:
-        setFrameOpacity={setFrameOpacity}
-        getFrameOpacity={getFrameOpacity}
-        framesResume={framesResume}
-        setFramesResume={setFramesResume}
-        externalCanvasRef={previewAnimationRef}
-        viewportOffset={viewportOffset}
-        viewportWidth={viewportWidth}
-        viewportHeight={viewportHeight}
-        zoom={zoom}
-        isPlaying={isPlaying}
-        setIsPlaying={setIsPlaying}
-        eyeDropperColor={eyeDropperColor}
-//el verdadero onion skin:
-onionFramesConfig={onionFramesConfig}// Recibir la configuración actual del estado principal
-  setOnionFramesConfig={setOnionFramesConfig}
-  updateFrameConfig={updateFrameConfig}
-  addPreviousFrame={addPreviousFrame}
-  addNextFrame={addNextFrame}
-  removeFrame={removeFrame}
-  toggleOnionFrames={toggleOnionFrames}
-  applyOnionFramesPreset={applyOnionFramesPreset}
-  clearTintCache={clearTintCache}
-        
-      />
-    );
-  }, [
-    // Solo las dependencias que realmente afectan LayerAnimation
-    frozenProps,
-  isPlaying,
-    viewportOffset,
-    zoom,
-    framesResume,
-    selectedPixels,
-    dragOffset,
-    layers,
-    eyeDropperColor,
-    initialHeight,
-    initialWidth,
-    onionFramesConfig
-    // NO incluir position ni relativeToTarget aquí
-  ]);
-
-  const MemoizedFramesTimeline = useMemo(() => {
-    return (
-      <FramesTimeline 
-        updateLayerZIndex={updateLayerZIndex}
-        moveLayerToPosition={moveLayerToPosition}
-        moveGroupToLayer={moveGroupToLayer}
-        moveGroupToPosition={moveGroupToPosition}
-        layers={layers}
-        addLayer={addLayer}
-        deleteLayer={deleteLayer}
-        moveLayerUp={moveLayerUp}
-        moveLayerDown={moveLayerDown}
-        toggleLayerVisibility={toggleLayerVisibility}
-        renameLayer={renameLayer}
-        clearLayer={clearLayer}
-        activeLayerId={activeLayerId}
-        setActiveLayerId={setActiveLayerId}
-        pixelGroups={pixelGroups}
-        selectedGroup={selectedGroup}
-        selectedPixels={selectedPixels}
-        createPixelGroup={createPixelGroup}
-        deletePixelGroup={deletePixelGroup}
-        getLayerGroups={getLayerGroups}
-        selectPixelGroup={selectPixelGroup}
-        clearSelectedGroup={clearSelectedGroup}
-        renamePixelGroup={renamePixelGroup}
-        toggleGroupVisibility={toggleGroupVisibility}
-        setSelectedPixels={setSelectedPixels}
-        handleSelectGroup={handleSelectGroup}
-        dragOffset={dragOffset}
-        setSelectionCoords={setSelectionCoords}
-        setSelectionActive={setSelectionActive}
-        setCroppedSelectionBounds={setCroppedSelectionBounds}
-        autoCropSelection={autoCropSelection}
-        setOriginalPixelColors={setOriginalPixelColors}
-        setDragOffset={setDragOffset}
-        setTool={setTool}
-        clearCurrentSelection={clearCurrentSelection}
-        getHierarchicalLayers={getHierarchicalLayers}
-        getMainLayers={getMainLayers}
-        getGroupLayersForParent={getGroupLayersForParent}
-        selectionActive={selectionActive}
-        selectAllCanvas={selectAllCanvas}
-        duplicateLayer={duplicateLayer}
-        // Props para animacion:
-        frames={frames}
-        currentFrame={currentFrame}
-        frameCount={frameCount}
-        createFrame={createFrame}
-        setActiveFrame={setActiveFrame}
-        deleteFrame={deleteFrame}
-        duplicateFrame={duplicateFrame}
-        saveCurrentFrameState={saveCurrentFrameState}
-        getFramesInfo={getFramesInfo}
-        renameFrame={renameFrame}
-        syncWithCurrentFrame={renameFrame}
-        toggleLayerVisibilityInFrame={toggleLayerVisibilityInFrame}
-        getLayerVisibility={getLayerVisibility}
-        // Onion skin:
-        toggleOnionSkin={toggleOnionSkin}
-        setOnionSkinConfig={setOnionSkinConfig}
-        setOnionSkinFrameConfig={setOnionSkinConfig}
-        getOnionSkinFrameConfig={getOnionSkinFrameConfig}
-        getOnionSkinPresets={getOnionSkinFrameConfig}
-        applyOnionSkinPreset={applyOnionSkinPreset}
-        getOnionSkinInfo={getOnionSkinFrameConfig}
-        onionSkinEnabled={onionSkinEnabled}
-        showOnionSkinForLayer={showOnionSkinForLayer}
-        clearOnionSkinLayerFilter={clearOnionSkinLayerFilter}
-        onionSkinSettings={onionSkinSettings}
-        // Gestion de tiempo de los frames:
-        setFrameDuration={setFrameDuration}
-        getFrameDuration={getFrameDuration}
-        getFrameRate={getFrameRate}
-        setDefaultFrameRate={setDefaultFrameRate}
-        defaultFrameDuration={defaultFrameDuration}
-        // Gestion de opacidad de los frames:
-        setFrameOpacity={setFrameOpacity}
-        getFrameOpacity={getFrameOpacity}
-        framesResume={framesResume}
-        setFramesResume={setFramesResume}
-        externalCanvasRef={previewAnimationRef}
-        viewportOffset={viewportOffset}
-        viewportWidth={viewportWidth}
-        viewportHeight={viewportHeight}
-        zoom={zoom}
-        isPlaying={isPlaying}
-        setIsPlaying={setIsPlaying}
-        eyeDropperColor={eyeDropperColor}
-
-        //
-      />
-    );
-  }, [
-    // Solo framesResume como dependencia
-    frozenProps,
-    isPlaying,
+  const MemoizedLayerAnimation = useMemo(
+    () =>
+      renderLayerAnimation({
+        updateLayerZIndex,
+        moveLayerToPosition,
+        moveGroupToLayer,
+        moveGroupToPosition,
+        layers,
+        addLayer,
+        deleteLayer,
+        moveLayerUp,
+        moveLayerDown,
+        toggleLayerVisibility,
+        renameLayer,
+        clearLayer,
+        activeLayerId,
+        setActiveLayerId,
+        pixelGroups,
+        selectedGroup,
+        selectedPixels,
+        createPixelGroup,
+        deletePixelGroup,
+        getLayerGroups,
+        selectPixelGroup,
+        clearSelectedGroup,
+        renamePixelGroup,
+        toggleGroupVisibility,
+        setSelectedPixels,
+        handleSelectGroup,
+        dragOffset,
+        setSelectionCoords,
+        setSelectionActive,
+        setCroppedSelectionBounds,
+        autoCropSelection,
+        setOriginalPixelColors,
+        setDragOffset,
+        setTool,
+        clearCurrentSelection,
+        getHierarchicalLayers,
+        getMainLayers,
+        getGroupLayersForParent,
+        selectionActive,
+        selectAllCanvas,
+        duplicateLayer,
+        frames,
+        currentFrame,
+        frameCount,
+        createFrame,
+        setActiveFrame,
+        deleteFrame,
+        duplicateFrame,
+        saveCurrentFrameState,
+        getFramesInfo,
+        renameFrame,
+        toggleLayerVisibilityInFrame,
+        getLayerVisibility,
+        toggleOnionSkin,
+        setOnionSkinConfig,
+        getOnionSkinFrameConfig,
+        applyOnionSkinPreset,
+        onionSkinEnabled,
+        showOnionSkinForLayer,
+        clearOnionSkinLayerFilter,
+        onionSkinSettings,
+        setFrameDuration,
+        getFrameDuration,
+        getFrameRate,
+        setDefaultFrameRate,
+        defaultFrameDuration,
+        setFrameOpacity,
+        getFrameOpacity,
+        framesResume,
+        setFramesResume,
+        externalCanvasRef: previewAnimationRef,
+        viewportOffset,
+        viewportWidth,
+        viewportHeight,
+        zoom,
+        isPlaying,
+        setIsPlaying,
+        eyeDropperColor,
+        onionFramesConfig,
+        setOnionFramesConfig,
+        updateFrameConfig,
+        addPreviousFrame,
+        addNextFrame,
+        removeFrame,
+        toggleOnionFrames,
+        applyOnionFramesPreset,
+        clearTintCache,
+      }),
+    [
+      frozenProps,
+      isPlaying,
       viewportOffset,
       zoom,
       framesResume,
@@ -10718,55 +9493,145 @@ onionFramesConfig={onionFramesConfig}// Recibir la configuración actual del est
       layers,
       eyeDropperColor,
       initialHeight,
-      initialWidth
-  
-   
-  ]);
+      initialWidth,
+      onionFramesConfig,
+    ]
+  );
 
-  const MemoizedViewportNavigator = useMemo(()=>{
+  const MemoizedFramesTimeline = useMemo(
+    () =>
+      renderFramesTimeline({
+        updateLayerZIndex,
+        moveLayerToPosition,
+        moveGroupToLayer,
+        moveGroupToPosition,
+        layers,
+        addLayer,
+        deleteLayer,
+        moveLayerUp,
+        moveLayerDown,
+        toggleLayerVisibility,
+        renameLayer,
+        clearLayer,
+        activeLayerId,
+        setActiveLayerId,
+        pixelGroups,
+        selectedGroup,
+        selectedPixels,
+        createPixelGroup,
+        deletePixelGroup,
+        getLayerGroups,
+        selectPixelGroup,
+        clearSelectedGroup,
+        renamePixelGroup,
+        toggleGroupVisibility,
+        setSelectedPixels,
+        handleSelectGroup,
+        dragOffset,
+        setSelectionCoords,
+        setSelectionActive,
+        setCroppedSelectionBounds,
+        autoCropSelection,
+        setOriginalPixelColors,
+        setDragOffset,
+        setTool,
+        clearCurrentSelection,
+        getHierarchicalLayers,
+        getMainLayers,
+        getGroupLayersForParent,
+        selectionActive,
+        selectAllCanvas,
+        duplicateLayer,
+        frames,
+        currentFrame,
+        frameCount,
+        createFrame,
+        setActiveFrame,
+        deleteFrame,
+        duplicateFrame,
+        saveCurrentFrameState,
+        getFramesInfo,
+        renameFrame,
+        toggleLayerVisibilityInFrame,
+        getLayerVisibility,
+        toggleOnionSkin,
+        setOnionSkinConfig,
+        getOnionSkinFrameConfig,
+        applyOnionSkinPreset,
+        onionSkinEnabled,
+        showOnionSkinForLayer,
+        clearOnionSkinLayerFilter,
+        onionSkinSettings,
+        setFrameDuration,
+        getFrameDuration,
+        getFrameRate,
+        setDefaultFrameRate,
+        defaultFrameDuration,
+        setFrameOpacity,
+        getFrameOpacity,
+        framesResume,
+        setFramesResume,
+        externalCanvasRef: previewAnimationRef,
+        viewportOffset,
+        viewportWidth,
+        viewportHeight,
+        zoom,
+        isPlaying,
+        setIsPlaying,
+        eyeDropperColor,
+      }),
+    [
+      frozenProps,
+      isPlaying,
+      viewportOffset,
+      zoom,
+      framesResume,
+      selectedPixels,
+      dragOffset,
+      layers,
+      eyeDropperColor,
+      initialHeight,
+      initialWidth,
+    ]
+  );
 
-    return(
-      <ViewportNavigator
-      totalWidth={totalWidth}
-      totalHeight={totalHeight}
-      viewportWidth={viewportWidth}
-      viewportHeight={viewportHeight}
-      viewportOffset={viewportOffset}
-      zoom={zoom}
-      onViewportMove={moveViewport}
-      onZoomChange={handleZoomChange} // Nueva prop necesaria
-      compositeCanvasRef={compositeCanvasRef}
-      getFullCanvas={getFullCanvas}
-    />
-    )
+  const MemoizedViewportNavigator = useMemo(
+    () =>
+      renderViewportNavigator({
+        totalWidth,
+        totalHeight,
+        viewportWidth,
+        viewportHeight,
+        viewportOffset,
+        zoom,
+        moveViewport,
+        handleZoomChange,
+        compositeCanvasRef,
+        getFullCanvas,
+      }),
+    [viewportOffset, zoom]
+  );
 
-  },[viewportOffset, zoom])
+  const MemoizedLayerColor = useMemo(
+    () =>
+      renderLayerColor({
+        tool,
+        toolParameters,
+        setToolParameters,
+        getLayerPixelData,
+        paintPixelsRGBA,
+        currentFrame,
+        activeLayerId,
+        isPressed,
+        eyeDropperColor,
+      }),
+    [tool, toolParameters, currentFrame, activeLayerId]
+  );
 
-  const MemoizedLayerColor = useMemo(()=>{
-    return(
-
-      <LayerColor
-      tool={tool}
-      toolParameters={toolParameters}
-      setToolParameters={setToolParameters}
-      //funcion para obtener informacion de pixeles pintados:
-      getLayerPixelData={getLayerPixelData}
-      paintPixelsRGBA={paintPixelsRGBA}
-      //otras props necesarias,
-      currentFrame={currentFrame}
-      activeLayerId={activeLayerId}
-      isPressed={isPressed}
-      eyeDropperColor={eyeDropperColor}
-    />
-    )
-  },[tool, toolParameters, currentFrame, activeLayerId, isPressed])
-
-  const MemoizedPlayAnimation = useMemo(()=>{
-    return(
-      <PlayAnimation frames={frames} />
-    )
-   
-  },[frames])
+  const MemoizedPlayAnimation = useMemo(
+    () => renderPlayAnimation({ frames }),
+    [frames]
+  );
 
  
  
@@ -10994,138 +9859,29 @@ const [showRotationInput, setShowRotationInput] = useState(false);
 
 const [isRotating, setIsRotating] = useState(false);
 
-// 3. FUNCIÓN ROTSPRITE: Implementación del algoritmo completo
-const applyRotSprite = useCallback(async (pixels, angle, bounds) => {
-  if (!pixels.length || angle === 0) return pixels;
-
-  try {
-    setIsRotating(true);
-
-    // Crear canvas temporal para la selección
-    const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
-    
-    // Calcular dimensiones de la selección
-    const width = bounds.width;
-    const height = bounds.height;
-    
-    tempCanvas.width = width;
-    tempCanvas.height = height;
-
-    // Dibujar los píxeles en el canvas temporal
-    const imageData = tempCtx.createImageData(width, height);
-    const data = imageData.data;
-
-    // Llenar con transparencia
-    for (let i = 0; i < data.length; i += 4) {
-      data[i] = 0;     // R
-      data[i + 1] = 0; // G
-      data[i + 2] = 0; // B
-      data[i + 3] = 0; // A
+// Wrapper de RotSprite: delega el algoritmo puro a ./container/utils/rotSpriteHelpers.js
+// y conserva aquí el estado `isRotating` (spinner/UX) que no pertenece al util.
+const applyRotSprite = useCallback(
+  async (pixels, angle, bounds) => {
+    if (!pixels.length || angle === 0) return pixels;
+    try {
+      setIsRotating(true);
+      return await applyRotSpriteUtil(
+        pixels,
+        angle,
+        bounds,
+        totalWidth,
+        totalHeight
+      );
+    } catch (error) {
+      console.error("Error en RotSprite:", error);
+      return pixels;
+    } finally {
+      setIsRotating(false);
     }
-
-    // Dibujar píxeles seleccionados
-    pixels.forEach(pixel => {
-      const relativeX = pixel.x - bounds.x;
-      const relativeY = pixel.y - bounds.y;
-      
-      if (relativeX >= 0 && relativeX < width && relativeY >= 0 && relativeY < height) {
-        const index = (relativeY * width + relativeX) * 4;
-        const color = pixel.color;
-        
-        data[index] = color.r;
-        data[index + 1] = color.g;
-        data[index + 2] = color.b;
-        data[index + 3] = color.a * 255;
-      }
-    });
-
-    tempCtx.putImageData(imageData, 0, 0);
-
-    // Convertir canvas a imagen para jsAlgorithm
-    const imageUrl = tempCanvas.toDataURL('image/png');
-    
-    // Crear canvas para el resultado rotado
-    const resultCanvas = document.createElement('canvas');
-    
-    // Aplicar el algoritmo RotSprite
-    const rotatedDataUrl = await jsAlgorithm(resultCanvas, imageUrl, angle);
-    
-    // Crear imagen del resultado
-    const resultImage = new Image();
-    
-    return new Promise((resolve, reject) => {
-      resultImage.onload = () => {
-        try {
-          // Canvas para extraer píxeles del resultado
-          const extractCanvas = document.createElement('canvas');
-          const extractCtx = extractCanvas.getContext('2d');
-          
-          extractCanvas.width = resultImage.naturalWidth;
-          extractCanvas.height = resultImage.naturalHeight;
-          
-          extractCtx.drawImage(resultImage, 0, 0);
-          
-          const resultImageData = extractCtx.getImageData(
-            0, 0, 
-            extractCanvas.width, 
-            extractCanvas.height
-          );
-          
-          // Convertir píxeles de vuelta al formato de la aplicación
-          const rotatedPixels = [];
-          const resultData = resultImageData.data;
-          
-          // Calcular offset para centrar la rotación
-          const centerX = bounds.x + bounds.width / 2;
-          const centerY = bounds.y + bounds.height / 2;
-          const newCenterX = Math.floor(extractCanvas.width / 2);
-          const newCenterY = Math.floor(extractCanvas.height / 2);
-          
-          for (let y = 0; y < extractCanvas.height; y++) {
-            for (let x = 0; x < extractCanvas.width; x++) {
-              const index = (y * extractCanvas.width + x) * 4;
-              const alpha = resultData[index + 3];
-              
-              if (alpha > 0) {
-                // Calcular posición final
-                const finalX = Math.round(centerX + (x - newCenterX));
-                const finalY = Math.round(centerY + (y - newCenterY));
-                
-                // Asegurar que esté dentro del canvas
-                if (finalX >= 0 && finalX < totalWidth && finalY >= 0 && finalY < totalHeight) {
-                  rotatedPixels.push({
-                    x: finalX,
-                    y: finalY,
-                    color: {
-                      r: resultData[index],
-                      g: resultData[index + 1],
-                      b: resultData[index + 2],
-                      a: alpha / 255
-                    }
-                  });
-                }
-              }
-            }
-          }
-          
-          resolve(rotatedPixels);
-        } catch (error) {
-          reject(error);
-        }
-      };
-      
-      resultImage.onerror = reject;
-      resultImage.src = rotatedDataUrl;
-    });
-    
-  } catch (error) {
-    console.error('Error en RotSprite:', error);
-    return pixels; // Retornar píxeles originales en caso de error
-  } finally {
-    setIsRotating(false);
-  }
-}, [totalWidth, totalHeight]);
+  },
+  [totalWidth, totalHeight]
+);
 
 // 4. FUNCIÓN PARA MANEJAR LA ROTACIÓN
 
@@ -11247,18 +10003,12 @@ const handleRotSprite = useCallback(async (angle,applyBounds) => {
 
 
 
-// 2. Función para calcular el ángulo basado en la posición del mouse
-const calculateRotationAngle = useCallback((mouseX, mouseY, centerX, centerY) => {
-  const deltaX = mouseX - centerX;
-  const deltaY = mouseY - centerY;
-  // Convertir de radianes a grados y ajustar para que 0° sea hacia arriba
-  let angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
-  // Ajustar para que 0° sea hacia arriba en lugar de hacia la derecha
-  angle = angle + 90;
-  // Normalizar el ángulo entre 0 y 360
-  if (angle < 0) angle += 360;
-  return Math.round(angle);
-}, []);
+// Helper de ángulo de rotación delegado a ./container/utils/geometry.js.
+const calculateRotationAngle = useCallback(
+  (mouseX, mouseY, centerX, centerY) =>
+    calculateRotationAngleUtil(mouseX, mouseY, centerX, centerY),
+  []
+);
 // 4. useEffect para manejar la rotación en tiempo real
 useEffect(() => {
   if (!isRotationHandlerContainerPressed || !rotationHandlerRelative.x || !rotationHandlerRelative.y) {
@@ -11291,179 +10041,27 @@ useEffect(() => {
   }
 }, [isRotationHandlerContainerPressed]);
 
-// 6. Función para calcular la posición del punto de control
-const getRotationHandlerPosition = useCallback(() => {
-  if (!croppedSelectionBounds) return { x: 0, y: 0 };
+// Posición del handle de rotación — delegada a ./container/utils/geometry.js.
+const getRotationHandlerPosition = useCallback(
+  () =>
+    getRotationHandlerPositionUtil({
+      croppedSelectionBounds,
+      dragOffset,
+      rotationAngleSelection,
+      rotationHandlerRadius,
+      zoom,
+    }),
+  [
+    croppedSelectionBounds,
+    dragOffset,
+    rotationAngleSelection,
+    rotationHandlerRadius,
+    zoom,
+  ]
+);
 
-  // Centro de la selección
-  const centerX = croppedSelectionBounds.x + croppedSelectionBounds.width/2 + dragOffset.x;
-  const centerY = croppedSelectionBounds.y + croppedSelectionBounds.height/2 + dragOffset.y;
-
-  // Convertir el ángulo a radianes (ajustando para que 0° sea hacia arriba)
-  const angleRad = (rotationAngleSelection - 90) * (Math.PI / 180);
-  
-  // Calcular la posición del punto de control
-  const radiusInCanvas = rotationHandlerRadius / zoom; // Convertir radio a coordenadas de canvas
-  const handleX = centerX + Math.cos(angleRad) * radiusInCanvas;
-  const handleY = centerY + Math.sin(angleRad) * radiusInCanvas;
-
-  return { x: handleX, y: handleY };
-}, [croppedSelectionBounds, dragOffset, rotationAngleSelection, rotationHandlerRadius, zoom]);
-
-// 7. Componente del círculo de rotación (agregar esto en el JSX)
-const RotationCircleComponent = () => {
-  if (!croppedSelectionBounds || !selectionActive || selectedPixels.length < 2) return null;
-
-  // Crear el ref localmente
-  const localRotationHandlerRef = useRef(null);
-  
-  // Estado local para trackear el ángulo inicial cuando se presiona
-  const [initialAngle, setInitialAngle] = useState(0);
-  const [wasPressed, setWasPressed] = useState(false);
-
-  // Mover el usePointer aquí
-  const {
-    isPressed: isRotationHandlerPressed,
-    relativeToTarget: rotationHandlerRelative,
-  } = usePointer(localRotationHandlerRef, artboardRef, [], {
-    endPressOnLeave: false,
-    preventContextMenu: true
-  });
-
-  // Detectar cuando se suelta el handler y aplicar rotación
- 
-
-  // Mover toda la lógica de rotación aquí
-  useEffect(() => {
-    if (!isRotationHandlerPressed || !rotationHandlerRelative.x || !rotationHandlerRelative.y) {
-      return;
-    }
-
-    if (!croppedSelectionBounds) return;
-
-    // Calcular el centro de la selección en coordenadas de pantalla
-    const selectionCenterX = (croppedSelectionBounds.x + croppedSelectionBounds.width/2 + dragOffset.x - viewportOffset.x) * zoom;
-    const selectionCenterY = (croppedSelectionBounds.y + croppedSelectionBounds.height/2 + dragOffset.y - viewportOffset.y) * zoom;
-
-    // Calcular el ángulo basado en la posición del mouse
-    const newAngle = calculateRotationAngle(
-      rotationHandlerRelative.x,
-      rotationHandlerRelative.y,
-      selectionCenterX,
-      selectionCenterY
-    );
-
-    setRotationAngleSelection(newAngle);
-    setIsRotationHandlerActive(true);
-
-  }, [isRotationHandlerPressed, rotationHandlerRelative, croppedSelectionBounds, dragOffset, viewportOffset, zoom]);
-
-  // Resetear cuando se suelta
-  useEffect(() => {
-    if (!isRotationHandlerPressed) {
-      setIsRotationHandlerActive(false);
-    }
-  }, [isRotationHandlerPressed]);
-
-  const centerX = (croppedSelectionBounds.x + croppedSelectionBounds.width/2 + dragOffset.x - viewportOffset.x) * zoom;
-  const centerY = (croppedSelectionBounds.y + croppedSelectionBounds.height/2 + dragOffset.y - viewportOffset.y) * zoom;
-  
-  const handlePos = getRotationHandlerPosition();
-  const handleScreenX = (handlePos.x - viewportOffset.x) * zoom;
-  const handleScreenY = (handlePos.y - viewportOffset.y) * zoom;
-
-
-
-  return (
-    <>
-      {/* Círculo de rotación */}
-      <div
-        style={{
-          position: "absolute",
-          top: centerY - rotationHandlerRadius,
-          left: centerX - rotationHandlerRadius,
-          width: rotationHandlerRadius * 2,
-          height: rotationHandlerRadius * 2,
-          border: `2px dashed ${isRotationHandlerActive ? '#ff6b35' : '#4a90e2'}`,
-          borderRadius: '50%',
-          pointerEvents: 'none',
-          zIndex: 12,
-          opacity: 0.7,
-        }}
-      />
-      
-      {/* Línea desde el centro al punto de control */}
-      <svg
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          pointerEvents: 'none',
-          zIndex: 11,
-        }}
-      >
-        <line
-          x1={centerX}
-          y1={centerY}
-          x2={handleScreenX}
-          y2={handleScreenY}
-          stroke={isRotationHandlerActive ? '#ff6b35' : '#4a90e2'}
-          strokeWidth="2"
-          strokeDasharray="5,5"
-          opacity="0.7"
-        />
-      </svg>
-
-      {/* Punto de control de rotación */}
-      <div
-        ref={localRotationHandlerRef}
-      
-        style={{
-          position: "absolute",
-          top: handleScreenY - 8,
-          left: handleScreenX - 8,
-          width: 16,
-          height: 16,
-          backgroundColor: isRotationHandlerPressed ? '#ff6b35' : '#4a90e2',
-          border: '2px solid white',
-          borderRadius: '50%',
-          cursor: isRotationHandlerPressed ? 'grabbing' : 'grab',
-          zIndex: 13,
-          pointerEvents: "auto",
-          boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-          transform: isRotationHandlerPressed ? 'scale(1.2)' : 'scale(1)',
-          transition: 'all 0.1s ease',
-        }}
-      />
-
-      {/* Indicador de ángulo */}
-      <div
-        style={{
-          position: "absolute",
-          top: centerY - 80,
-          left: centerX - 30,
-          width: 60,
-          height: 20,
-          backgroundColor: 'rgba(0,0,0,0.8)',
-          color: 'white',
-          borderRadius: '4px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '12px',
-          fontFamily: 'monospace',
-          pointerEvents: 'none',
-          zIndex: 14,
-          opacity: isRotationHandlerActive ? 1 : 0.7,
-        }}
-      >
-        {rotationAngleSelection}°
-      </div>
-    </>
-  );
-};
+// RotationCircleComponent extraído a ./container/components/RotationCircle.jsx.
+// Se renderiza como `<RotationCircle .../>` en el JSX principal, pasando props equivalentes.
 
 useEffect(()=>{
   
@@ -11488,72 +10086,75 @@ handleRotSprite(rotationAngleSelection, true);
           
 
         </div>
-        <div className="tools" style={{ display: "flex", gap: "8px" }}>
-          <div
-            className={true ? "grid-control active" : "grid-control"}
-            onClick={true ? () => undo() : undefined}
-          >
-            <LuUndo />
-            <p>Undo</p>
+        <div className="tools">
+          {/* Grupo: Historial */}
+          <div className="tools-group">
+            <div
+              className="grid-control active"
+              onClick={() => { undo(); invalidateImageDataCacheOptimized(); }}
+            >
+              <LuUndo />
+              <p>Undo</p>
+            </div>
+            <div
+              className="grid-control active"
+              onClick={() => { redo(); invalidateImageDataCacheOptimized(); }}
+            >
+              <LuRedo />
+              <p>Redo</p>
+            </div>
           </div>
-          <div
-            className={true ? "grid-control active" : "grid-control"}
-            onClick={() => {
-              redo();
-            }}
-          >
-            <p>Redo</p>
-            <LuRedo />
+
+          <div className="tools-divider" />
+
+          {/* Grupo: Herramientas avanzadas */}
+          <div className="tools-group">
+            <div
+              className="grid-control active"
+              onClick={() => { setActiveAI(!activeAI); }}
+            >
+              <LuBrainCircuit />
+              <p>Gen. IA</p>
+            </div>
+            <div
+              className="grid-control active"
+              onClick={() => { setThreeJsVisualizer(!threeJsVisualizer); }}
+            >
+              <LuBox />
+              <p>3D</p>
+            </div>
           </div>
-          <div
-            className={true ? "grid-control active" : "grid-control"}
-            onClick={() => {
-              setActiveAI(!activeAI);
-            }}
-          >
-            <p>Generador IA</p>
-            <LuBrainCircuit />
+
+          <div className="tools-divider" />
+
+          {/* Grupo: Acciones de archivo */}
+          <div className="tools-group">
+            <div
+              className="grid-control active"
+              onClick={() => { setShowExporter(!showExporter); }}
+            >
+              <LuUpload />
+              <p>Exportar</p>
+            </div>
+            <div
+              className="grid-control active grid-control--save"
+              onClick={() => { handleExport(); }}
+            >
+              <LuSave />
+              <p>Guardar</p>
+            </div>
           </div>
-          <div
-            className={true ? "grid-control active" : "grid-control"}
-            onClick={() => {
-              setThreeJsVisualizer(!threeJsVisualizer);
-            }}
-          >
-            <p>Visualizador 3D</p>
-            <LuBrainCircuit />
-          </div>
-          <div
-            className={true ? "grid-control active" : "grid-control"}
-            onClick={() => {
-              setShowExporter(!showExporter);
-            }}
-          >
-            <p>Exportar</p>
-            E
-          </div>
-          
-          <div
-            className={true ? "grid-control active" : "grid-control"}
-            onClick={() => {
-              handleExport();
-            }}
-          >
-            <p>Guardar</p>
-            <LuSave />
-          </div>
-          
-          {isolatedPixels&&
-          <div
-            className={true ? "grid-control active" : "grid-control"}
-            onClick={() => {
-              setIsolatedPixels(null);
-            }}
-          >
-            <p>Salir de aislamiento</p>
-            <FaFileExport />
-          </div>
-          }
+
+          {/* Salir de aislamiento (condicional) */}
+          {isolatedPixels && (
+            <div
+              className="grid-control active grid-control--danger"
+              onClick={() => { setIsolatedPixels(null); }}
+            >
+              <FaFileExport />
+              <p>Salir</p>
+            </div>
+          )}
         </div>
         <ReflexMode
           mirrorState={mirrorState}
@@ -11598,9 +10199,15 @@ handleRotSprite(rotationAngleSelection, true);
             
 
           </div>
-          <div style={{display: threeJsVisualizer ? 'block' : 'none'}} >
-          <Enhanced3DFlattener   onPixelDataReady={handlePixelDataFromThreeJS} paintPixelsRGBA={paintPixelsRGBA} activeLayerId={activeLayerId}/>
-          </div>
+          {/* <Activity> preserva estado y DOM del visor 3D (igual que el
+              display:none anterior), pero además destruye los efectos mientras
+              está oculto: el render-loop de Three.js se pausa en vez de quemar
+              CPU/GPU en segundo plano. */}
+          <Activity mode={threeJsVisualizer ? 'visible' : 'hidden'}>
+            <div>
+              <Enhanced3DFlattener onPixelDataReady={handlePixelDataFromThreeJS} paintPixelsRGBA={paintPixelsRGBA} activeLayerId={activeLayerId}/>
+            </div>
+          </Activity>
           
 
       
@@ -11682,251 +10289,97 @@ handleRotSprite(rotationAngleSelection, true);
                 ref={artboardRef}
                 style={{
                   imageRendering: "pixelated",
-                  width: viewportWidth * zoom,
-                  height: viewportHeight * zoom,
+                  width: Math.round(viewportWidth * zoom),
+                  height: Math.round(viewportHeight * zoom),
                   position: "relative",
 
                   backgroundColor: "rgb(128, 128, 128)",
-                  backgroundImage: `
-      linear-gradient(45deg,rgb(185, 183, 183) 25%, transparent 25%), 
-      linear-gradient(-45deg, rgb(185, 183, 183) 25%, transparent 25%), 
-      linear-gradient(45deg, transparent 75%,rgb(185, 183, 183) 75%), 
-      linear-gradient(-45deg, transparent 75%,rgb(185, 183, 183) 75%)
-    `,
+                  // Checkerboard como SVG inline: un solo layer, sin gradientes
+                  // diagonales. Las 4 capas de linear-gradient(±45deg) anteriores
+                  // dejaban costuras sub-píxel visibles como líneas oscuras
+                  // diagonales en zooms no enteros. shape-rendering=crispEdges +
+                  // image-rendering:pixelated del artboard garantizan bordes netos.
+                  backgroundImage:
+                    "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 2' shape-rendering='crispEdges'><rect width='1' height='1' fill='%23b9b7b7'/><rect x='1' y='1' width='1' height='1' fill='%23b9b7b7'/></svg>\")",
                   backgroundSize: `${zoom * 2 * checkerboardFactor}px ${
                     zoom * 2 * checkerboardFactor
                   }px`,
-                  // MODIFICACIÓN PRINCIPAL: Ajustar backgroundPosition basándose en viewportOffset
-                  backgroundPosition: `
-      ${(-viewportOffset.x * zoom) % (zoom * 2 * checkerboardFactor)}px ${
-                    (-viewportOffset.y * zoom) % (zoom * 2 * checkerboardFactor)
-                  }px,
-      ${(-viewportOffset.x * zoom) % (zoom * 2 * checkerboardFactor)}px ${
-                    (-viewportOffset.y * zoom + zoom * checkerboardFactor) %
+                  backgroundRepeat: "repeat",
+                  backgroundPosition: `${
+                    (((-viewportOffset.x * zoom) %
+                      (zoom * 2 * checkerboardFactor)) +
+                      zoom * 2 * checkerboardFactor) %
                     (zoom * 2 * checkerboardFactor)
-                  }px,
-      ${
-        (-viewportOffset.x * zoom + zoom * checkerboardFactor) %
-        (zoom * 2 * checkerboardFactor)
-      }px ${
-                    (-viewportOffset.y * zoom - zoom * checkerboardFactor) %
+                  }px ${
+                    (((-viewportOffset.y * zoom) %
+                      (zoom * 2 * checkerboardFactor)) +
+                      zoom * 2 * checkerboardFactor) %
                     (zoom * 2 * checkerboardFactor)
-                  }px,
-      ${
-        (-viewportOffset.x * zoom - zoom * checkerboardFactor) %
-        (zoom * 2 * checkerboardFactor)
-      }px ${(-viewportOffset.y * zoom) % (zoom * 2 * checkerboardFactor)}px
-    `,
+                  }px`,
                 }}
               >
 
 
                   <div
                 ref={rotationHandlerRef}>
-                <RotationCircleComponent 
-  // Pasar las funciones y estados que necesita
-  calculateRotationAngle={calculateRotationAngle}
-  setRotationAngleSelection={setRotationAngleSelection}
-  setIsRotationHandlerActive={setIsRotationHandlerActive}
-  rotationAngleSelection={rotationAngleSelection}
-  isRotationHandlerActive={isRotationHandlerActive}
-
-  // ... otras props necesarias
-/>
+                <RotationCircle
+                  croppedSelectionBounds={croppedSelectionBounds}
+                  selectionActive={selectionActive}
+                  selectedPixels={selectedPixels}
+                  artboardRef={artboardRef}
+                  viewportOffset={viewportOffset}
+                  zoom={zoom}
+                  dragOffset={dragOffset}
+                  rotationHandlerRadius={rotationHandlerRadius}
+                  rotationAngleSelection={rotationAngleSelection}
+                  setRotationAngleSelection={setRotationAngleSelection}
+                  isRotationHandlerActive={isRotationHandlerActive}
+                  setIsRotationHandlerActive={setIsRotationHandlerActive}
+                />
                 </div>
                 
                 
             
-                {croppedSelectionBounds && selectionActive && !isPressed && !isRotationHandlerContainerPressed && selectedPixels.length>0 &&(
-                  <>
-                  <div
-                    ref={selectionActionsRef}
-                    className="workspace-selection-actions"
-                    style={{
-                      position: "absolute",
-                      top:
-                        (croppedSelectionBounds.y +
-                          dragOffset.y -
-                          viewportOffset.y) *
-                        zoom,
-                      left:
-                        (croppedSelectionBounds.x +
-                          croppedSelectionBounds.width +
-                          dragOffset.x -
-                          viewportOffset.x) *
-                        zoom,
-                      zIndex: 10,
-                      pointerEvents: "auto", // Asegurar que el div puede recibir eventos
-                    }}
-                  >
-                    <div className="selection-actions-buttons">
-                      <button
-                        className="action-button"
-                        onClick={() => {
-                          handleRotation("left");
-                        }}
-                      >
-                        <span className="icon">
-                          <MdOutlineRotate90DegreesCcw />
-                        </span>
-                        <p className="action-text"></p>
-                      </button>
-                      <button
-                        className="action-button"
-                        onClick={() => {
-                          handleRotation("right");
-                        }}
-                      >
-                        <span className="icon">
-                          <MdOutlineRotate90DegreesCw />
-                        </span>
-                        <p className="action-text"></p>
-                      </button>
-                      <button
-                        className="action-button"
-                        onClick={deleteSelection}
-                      >
-                        <span className="icon">
-                          <LuEraser />
-                        </span>
-                        <p className="action-text">Borrar</p>
-                      </button>
-                      {
-                        <button
-                          className="action-button"
-                          onClick={fillSelection}
-                        >
-                          <span className="icon">
-                            <LuPaintBucket />
-                          </span>
-                          <p className="action-text">Rellenar</p>
-                        </button>
-                      }
-                      <button
-                        className="action-button"
-                        onClick={clearCurrentSelection}
-                      >
-                        <span className="icon">
-                          <LuPointerOff />
-                        </span>
-                        <p className="action-text">Deseleccionar</p>
-                      </button>
-                      <button
-                        className="action-button"
-                        onClick={groupSelection}
-                      >
-                        <span className="icon">
-                          <LuGroup />
-                        </span>
-                        <p className="action-text">Agrupar</p>
-                      </button>
+                <SelectionActionsMenu
+                  croppedSelectionBounds={croppedSelectionBounds}
+                  selectionActive={selectionActive}
+                  isPressed={isPressed}
+                  isRotationHandlerContainerPressed={isRotationHandlerContainerPressed}
+                  selectedPixels={selectedPixels}
+                  selectionActionsRef={selectionActionsRef}
+                  dragOffset={dragOffset}
+                  viewportOffset={viewportOffset}
+                  zoom={zoom}
+                  handleRotation={handleRotation}
+                  deleteSelection={deleteSelection}
+                  fillSelection={fillSelection}
+                  clearCurrentSelection={clearCurrentSelection}
+                  groupSelection={groupSelection}
+                  ungroupSelection={ungroupSelection}
+                  duplicateSelection={duplicateSelection}
+                  copySelection={copySelection}
+                  cutSelection={cutSelection}
+                  isolateSelection={isolateSelection}
+                />
 
-                      <button
-                        className="action-button"
-                        onClick={ungroupSelection}
-                      >
-                        <span className="icon">
-                          <LuGroup />
-                        </span>
-                        <p className="action-text">Desagrupar</p>
-                      </button>
-                      <button
-                        className="action-button"
-                        onClick={duplicateSelection}
-                      >
-                        <span className="icon">D</span>
-                        <p className="action-text">Duplicar </p>
-                      </button>
-                      <button className="action-button" onClick={copySelection}>
-                        <span className="icon">c</span>
-                        <p className="action-text">Copiar </p>
-                      </button>
-                      <button className="action-button" onClick={cutSelection}>
-                        <span className="icon">cu</span>
-                        <p className="action-text">Cortar </p>
-                      </button>
-                      <button className="action-button" onClick={isolateSelection}>
-                        <span className="icon">I</span>
-                        <p className="action-text">Aislar pixeles </p>
-                      </button>
-           
-                    </div>
-                  </div>
-  
-                  </>
-                )}
-              
-  <div style={{display: mirrorState.customArea ? "block" : "none" }}>
-    {/* Esquina superior izquierda */}
-    <div
-      ref={leftMirrorCornerRef}
-      className="canvas-resize-handle-container"
-      style={{
-        position: "absolute",
-        top: (positionCorners.y1 - viewportOffset.y) * zoom - 15,
-        left: (positionCorners.x1 - viewportOffset.x) * zoom - 15,
-        zIndex: 15, // Z-index más alto
-        pointerEvents: "auto",
-        cursor: leftIsPressedMirror ? 'grabbing' : 'grab',
-      }}
-    >
-      <div className="resize-handle-wrapper">
-        <button 
-          className={`resize-handle resize-handle-nw ${leftIsPressedMirror ? 'dragging' : ''}`}
-          style={{
-            backgroundColor: leftIsPressedMirror ? '#ff4444' : '#4444ff',
-            transform: leftIsPressedMirror ? 'scale(1.2)' : 'scale(1)',
-            transition: 'all 0.1s ease'
-          }}
-        >
-          <span className="resize-handle-icon">
-            <GrTopCorner />
-          </span>
-        </button>
-        <p className="area-canvas-size-text">
-          {Math.abs(mirrorState.bounds.x2 - mirrorState.bounds.x1)}x
-          {Math.abs(mirrorState.bounds.y2 - mirrorState.bounds.y1)}
-        </p>
-      </div>
-    </div>
-
-    {/* Esquina inferior derecha */}
-    <div
-      ref={rightMirrorCornerRef}
-      className="canvas-resize-handle-container"
-      style={{
-        position: "absolute",
-        top: (positionCorners.y2 - viewportOffset.y) * zoom - 15,
-        left: (positionCorners.x2 - viewportOffset.x) * zoom - 15,
-        zIndex: 15, // Z-index más alto
-        pointerEvents: "auto",
-        cursor: rightIsPressedMirror ? 'grabbing' : 'grab',
-      }}
-    >
-      <div className="resize-handle-wrapper">
-        <button 
-          className={`resize-handle resize-handle-se ${rightIsPressedMirror ? 'dragging' : ''}`}
-          style={{
-            backgroundColor: rightIsPressedMirror ? '#ff4444' : '#4444ff',
-            transform: rightIsPressedMirror ? 'scale(1.2)' : 'scale(1)',
-            transition: 'all 0.1s ease'
-          }}
-        >
-          <span className="resize-handle-icon">
-            <GrBottomCorner />
-          </span>
-        </button>
-      </div>
-    </div>
-  </div >
+                <MirrorCornerHandles
+                  mirrorState={mirrorState}
+                  leftMirrorCornerRef={leftMirrorCornerRef}
+                  rightMirrorCornerRef={rightMirrorCornerRef}
+                  positionCorners={positionCorners}
+                  viewportOffset={viewportOffset}
+                  zoom={zoom}
+                  leftIsPressedMirror={leftIsPressedMirror}
+                  rightIsPressedMirror={rightIsPressedMirror}
+                />
 
 
                 {/* Composite Canvas - only this canvas is actually in the DOM */}
 
                 <canvas
                   ref={isPlaying ? previewAnimationRef : compositeCanvasRef}
-                  width={viewportWidth * zoom}
-                  height={viewportHeight * zoom}
+                  width={Math.round(viewportWidth * zoom)}
+                  height={Math.round(viewportHeight * zoom)}
                   style={{
                     position: "absolute",
                     top: 0,
@@ -11937,8 +10390,8 @@ handleRotSprite(rotationAngleSelection, true);
 
                 <canvas
                   ref={selectionCanvasRef}
-                  width={viewportWidth * zoom}
-                  height={viewportHeight * zoom}
+                  width={Math.round(viewportWidth * zoom)}
+                  height={Math.round(viewportHeight * zoom)}
                   style={{
                     position: "absolute",
                     top: 0,
@@ -11950,8 +10403,8 @@ handleRotSprite(rotationAngleSelection, true);
 
                 <canvas
                   ref={mirrorCanvasRef}
-                  width={viewportWidth * zoom}
-                  height={viewportHeight * zoom}
+                  width={Math.round(viewportWidth * zoom)}
+                  height={Math.round(viewportHeight * zoom)}
                   style={{
                     position: "absolute",
                     top: 0,
@@ -11962,8 +10415,8 @@ handleRotSprite(rotationAngleSelection, true);
                 />
                 <canvas
                   ref={previewCanvasRef}
-                  width={viewportWidth * zoom}
-                  height={viewportHeight * zoom}
+                  width={Math.round(viewportWidth * zoom)}
+                  height={Math.round(viewportHeight * zoom)}
                   style={{
                     position: "absolute",
                     top: 0,
@@ -11998,20 +10451,13 @@ handleRotSprite(rotationAngleSelection, true);
           }
         </div>
 
-       {true && <div
-        className="right-panel"
-        style={{
-          padding: 10,
-        }}
-      >
- 
-        {MemoizedLayerColor}
-        {MemoizedPlayAnimation}
-      
-       
-      </div>
-
-      }
+       <RightPanel
+         paneles={{
+           viewportNavigator: MemoizedViewportNavigator,
+           layerColor: MemoizedLayerColor,
+           playAnimation: MemoizedPlayAnimation,
+         }}
+       />
         {false && (
           <SaveProject
             frames={frames}
@@ -12026,7 +10472,7 @@ handleRotSprite(rotationAngleSelection, true);
           />
         )}
       </div>
-     
+
 
     </div>
   );

@@ -153,6 +153,19 @@
   top: 0;
   left: 0;
   pointer-events: none;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+/* Forzar nearest-neighbor en TODOS los <canvas> dentro del artboard.
+   Sin esto, en pantallas con devicePixelRatio fraccional (Windows 125%/150%)
+   el compositor resamplea bilinealmente y aparecen hairlines translúcidas
+   entre los bloques de píxeles a ciertos niveles de zoom. */
+.artboard canvas {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
 }
 
 .layer-canvas.hidden {
@@ -174,8 +187,7 @@
 
 /* Right panel */
 .right-panel {
-  
-  padding: 20px;
+  padding: 10px;
   width: 300px;
   background: var(--bg-secondary);
   height: 100%;
@@ -183,6 +195,19 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.right-panel-colapsado {
+  width: 36px;
+  min-width: 36px;
+  padding: 6px 2px;
+  overflow: hidden;
+}
+
+.pc-dock-slot {
+  flex: 0 0 auto;
 }
 
 /* Layers panel */
@@ -417,6 +442,9 @@
   top: 0;
   left: 0;
   pointer-events: none;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
 }
 
 .tool-select {
@@ -499,60 +527,127 @@
   background-color: var(--bg-tertiary);
 }
 
+/* ── Grupos de botones en la barra superior ── */
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.tools-group {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.tools-divider {
+  width: 1px;
+  height: 16px;
+  background-color: rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+  margin: 0 3px;
+}
+
+/* ── Botón de herramienta base ── */
 .grid-control {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 5px 8px;
-  
-  border-radius: 8px;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 4px;
   cursor: pointer;
-  transition: all 0.3s ease;
-
-  border: 2px solid transparent;
+  transition: background-color 0.12s ease, color 0.12s ease;
+  border: 1px solid transparent;
   user-select: none;
-  background-color: #2a2a2a;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  background-color: transparent;
+  height: 24px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  white-space: nowrap;
 }
 
 .grid-control p {
   margin: 0;
-  font-weight: 600;
-  font-size: 14px;
-  color: #555;
-  transition: color 0.3s ease;
+  font-weight: 500;
+  font-size: 11.5px;
+  color: #888;
+  letter-spacing: 0.01em;
+  transition: color 0.12s ease;
+  line-height: 1;
 }
 
 .grid-control svg {
-  width: 18px;
-  height: 18px;
-  color: #555;
-  transition: color 0.3s ease, transform 0.3s ease;
+  width: 13px;
+  height: 13px;
+  color: #888;
+  transition: color 0.12s ease;
+  flex-shrink: 0;
 }
 
-/* Hover state */
+/* Hover */
 .grid-control:hover {
-  background-color: #333333;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
-  border-color: var(--accent-active);
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  background-color: rgba(255, 255, 255, 0.08);
 }
 
+.grid-control:hover p,
 .grid-control:hover svg {
-  transform: scale(1.1);
+  color: var(--text-primary);
 }
 
-/* Active state */
-.grid-control.active {
-  background-color: #321e5f;
-
- 
-}
-
+/* Estado activo (habilitado) */
 .grid-control.active p,
 .grid-control.active svg {
-  color: #e0e0e0;
+  color: var(--text-secondary);
+}
+
+.grid-control.active:hover p,
+.grid-control.active:hover svg {
+  color: var(--text-primary);
+}
+
+/* Variante: Guardar (acción principal — acento púrpura) */
+.grid-control--save {
+  background-color: rgba(140, 82, 255, 0.15) !important;
+  border-color: rgba(140, 82, 255, 0.28) !important;
+}
+
+.grid-control--save p,
+.grid-control--save svg {
+  color: #c4a8ff !important;
+}
+
+.grid-control--save:hover {
+  background-color: rgba(140, 82, 255, 0.26) !important;
+  border-color: rgba(140, 82, 255, 0.45) !important;
+}
+
+.grid-control--save:hover p,
+.grid-control--save:hover svg {
+  color: #d8c0ff !important;
+}
+
+/* Variante: Peligro / Salir de aislamiento */
+.grid-control--danger {
+  background-color: rgba(255, 82, 82, 0.1) !important;
+  border-color: rgba(255, 82, 82, 0.22) !important;
+}
+
+.grid-control--danger p,
+.grid-control--danger svg {
+  color: #ff9595 !important;
+}
+
+.grid-control--danger:hover {
+  background-color: rgba(255, 82, 82, 0.2) !important;
+}
+
+.grid-control--danger:hover p,
+.grid-control--danger:hover svg {
+  color: #ffb0b0 !important;
 }
 
 
@@ -751,21 +846,37 @@ cursor: grab;
   height: 20px;
 }
 
-.worspace-actual-layername{
+.worspace-actual-layername {
   display: flex;
-  background: var(--accent-color);
-  padding: 8px;
-  border-radius: 5px;
-  font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
-  gap: 10px;
+  align-items: center;
+  background-color: rgba(140, 82, 255, 0.1);
+  border: 1px solid rgba(140, 82, 255, 0.25);
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  gap: 5px;
+  height: 24px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.layer-name-label{
-  font-weight: 600;
-  color: rgb(223, 223, 223);
+.layer-name-label {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: rgba(196, 168, 255, 0.7);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1;
+  margin: 0;
 }
 
-.actual-layername{
-  color: white;
+.actual-layername {
+  font-size: 12px;
   font-weight: 600;
+  color: #c4a8ff;
+  line-height: 1;
+  margin: 0;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
