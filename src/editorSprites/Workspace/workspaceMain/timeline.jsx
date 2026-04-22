@@ -163,8 +163,9 @@ const FramesTimeline = ({
   console.log("se esta renderizando layer animation");
   const [editingLayerId, setEditingLayerId] = useState(null);
   const [editingName, setEditingName] = useState('');
-  const [editingGroupId, setEditingGroupId] = useState(null);
-  const [editingGroupName, setEditingGroupName] = useState('');
+  // (Eliminado: `editingGroupId` / `editingGroupName` useStates — solo los
+  // leían `startEditingGroup` / `saveGroupName` / `handleGroupKeyDown`, todos
+  // ya borrados como dead code.)
   const [expandedLayers, setExpandedLayers] = useState({});
   const [newGroupName, setNewGroupName] = useState('');
   const [showCreateGroup, setShowCreateGroup] = useState(null);
@@ -459,29 +460,9 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
     }
   ];
   
-  // Función auxiliar para crear grupos (necesitarás ajustar el handleCreateGroup)
-  const handleCreateGroupFromMenu = (layerId, groupName) => {
-    if (!selectedPixels?.length) {
-      alert('Selecciona píxeles primero');
-      return;
-    }
-  
-    const pixelsWithOffset = selectedPixels.map(pixel => ({
-      ...pixel,
-      x: pixel.x + dragOffset.x,
-      y: pixel.y + dragOffset.y
-    }));
-    
-    const newGroupId = createPixelGroup(layerId, pixelsWithOffset, groupName);
-  
-    if (newGroupId) {
-      selectPixelGroup(layerId, newGroupId);
-      setActiveLayerId(newGroupId.groupLayerId || newGroupId);
-    }
-  
-    setExpandedLayers(prev => ({ ...prev, [layerId]: true }));
-  };
-  
+  // (Eliminado: `handleCreateGroupFromMenu` — duplicaba `handleCreateGroup`
+  // pero no tenía call site; la versión viva está más abajo.)
+
 
    
 //-------GESTION DEL MENU CONTEXTUAL AL DAR CLICK DERECHO -----------------------//
@@ -656,39 +637,7 @@ const handleLayerFrameMouseEnter = (frameNumber) => {
 
 
 
-//FUncion para usar el hue de onionSkinSetings:
-
-function hueToRGBA(hue, alpha = 0.4, saturation = 100, lightness = 50) {
-  // Convertimos HSL a RGB
-  const s = saturation / 100;
-  const l = lightness / 100;
-
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs((hue / 60) % 2 - 1));
-  const m = l - c / 2;
-
-  let r = 0, g = 0, b = 0;
-
-  if (0 <= hue && hue < 60) {
-    r = c; g = x; b = 0;
-  } else if (60 <= hue && hue < 120) {
-    r = x; g = c; b = 0;
-  } else if (120 <= hue && hue < 180) {
-    r = 0; g = c; b = x;
-  } else if (180 <= hue && hue < 240) {
-    r = 0; g = x; b = c;
-  } else if (240 <= hue && hue < 300) {
-    r = x; g = 0; b = c;
-  } else if (300 <= hue && hue < 360) {
-    r = c; g = 0; b = x;
-  }
-
-  const R = Math.round((r + m) * 255);
-  const G = Math.round((g + m) * 255);
-  const B = Math.round((b + m) * 255);
-
-  return `rgba(${R}, ${G}, ${B}, ${alpha})`;
-}
+// (Eliminado: `hueToRGBA` — conversor HSL→RGBA sin call site.)
 
 
 
@@ -707,242 +656,37 @@ useEffect(() => {
   });
   
 }, [pixelGroups, currentFrame, frames, saveCurrentFrameState]);
-/*Funciones especiales para la gestion de la animacion: */
+/* Funciones especiales para la gestion de la animacion: */
 
-const getLayerFrameData = useCallback((layerId, frameNumber) => {
-  const frameData = frames[frameNumber];
-  
-  // Debug: Log para verificar estructura
-  
-  
-  if (!frameData) {
-    return { isEmpty: true, visible: true, hasGroups: false };
-  }
-  
-  // Verificar visibilidad del layer en el frame
-  const layerInFrame = frameData.layers?.find(l => l.id === layerId);
-  const isVisibleInFrame = layerInFrame ? (layerInFrame.visible ?? true) : true;
-  
-  // 1. VERIFICAR GRUPOS PRIMERO
-  const hasGroups = frameData.pixelGroups?.[layerId] && 
-                   Object.keys(frameData.pixelGroups[layerId]).length > 0;
-  
-  if (hasGroups) {
-  
-    return {
-      isEmpty: false,
-      visible: isVisibleInFrame,
-      hasGroups: true
-    };
-  }
-  
-  // 2. VERIFICAR CANVAS CON MÚLTIPLES RUTAS POSIBLES
-  let layerCanvas = null;
-  
-  // Intentar diferentes ubicaciones del canvas
-  if (frameData.canvases?.[layerId]) {
-    layerCanvas = frameData.canvases[layerId];
-  } else if (frameData.layerCanvases?.[layerId]) {
-    layerCanvas = frameData.layerCanvases[layerId];
-  } else if (frameData[layerId]?.canvas) {
-    layerCanvas = frameData[layerId].canvas;
-  }
-  
+// (Eliminado: `getLayerFrameData` — useCallback con `ctx.getImageData` sobre
+// todo el canvas de cada capa. Nunca invocada; potencial footgun si alguien
+// lo cableaba a render porque se ejecutaría sincrónicamente. Si se necesita
+// saber si una capa tiene contenido, usar
+// `framesResume.computed.resolvedFrames[N].layerHasContent[layerId]`.)
 
-  
-  let hasContent = false;
-  
-  if (layerCanvas && layerCanvas.getContext) {
-    try {
-      const ctx = layerCanvas.getContext('2d');
-      
-      // MEJORA: Verificar todo el canvas, no solo una muestra
-      const imageData = ctx.getImageData(0, 0, layerCanvas.width, layerCanvas.height);
-      
-      // Verificar si hay píxeles con alpha > 0
-      for (let i = 3; i < imageData.data.length; i += 4) {
-        if (imageData.data[i] > 0) {
-          hasContent = true;
-          break;
-        }
-      }
- 
-    } catch (error) {
-  
-      hasContent = false;
-    }
-  }
-  
-  // 3. VERIFICAR PIXELS DIRECTOS (backup)
-  if (!hasContent && frameData.pixels?.[layerId]) {
-    hasContent = frameData.pixels[layerId].length > 0;
+// (Eliminado: `clearFrameContentCache` — 0 call sites, accedía a un global
+// `window.layerContentCache` inexistente.)
 
-  }
-  
-  return {
-    isEmpty: !hasContent,
-    visible: isVisibleInFrame,
-    hasGroups: false
-  };
-}, [frames]);
+// (Eliminados: `selectLayerFrame` + `selectFrameRange` — cadena interna dead
+// (selectFrameRange solo llamaba a selectLayerFrame). La selección activa vive
+// en `handleFrameSelection` + `handleFrameMouseDown` + `handleLayerFrameMouseDown`
+// más arriba en el archivo.)
 
-// FUNCIÓN ADICIONAL: Limpiar cache cuando sea necesario
-const clearFrameContentCache = () => {
-  if (window.layerContentCache) {
-    window.layerContentCache.clear();
-   
-  }
-};
+// (Eliminados stubs `clearFrameSelection` / `copySelectedFrames` / `deleteSelectedFrames`:
+// nunca se invocaban en el árbol, y `copySelectedFrames` referenciaba una var
+// inexistente `layerFrames[layerId][index]` que iba a lanzar ReferenceError si
+// alguien lo cableaba. Si se retoma copiar/eliminar multi-frame, la fuente
+// correcta es `framesResume.frames[frameNumber]`.)
 
-
-
-// Función para seleccionar frame específico de una capa
-const selectLayerFrame = (layerId, frameIndex, ctrlKey = false) => {
-  const frameNumber = frameIndex + 1;
-  
-  // ✅ CRÍTICO: Verificar que el frame existe antes de cambiar
-  if (!frames[frameNumber]) {
-    console.warn(`Intentando acceder a frame inexistente: ${frameNumber}`);
-    return;
-  }
-  
-  const layer = layers.find(l => l.id === layerId);
-  const isGroup = layer?.isGroupLayer;
-  
-  if (ctrlKey && multiSelectMode) {
-    setSelectedLayerFrames(prev => {
-      const layerFrames = prev[layerId] || [];
-      const isSelected = layerFrames.includes(frameIndex);
-      
-      if (isSelected) {
-        return {
-          ...prev,
-          [layerId]: layerFrames.filter(f => f !== frameIndex)
-        };
-      } else {
-        return {
-          ...prev,
-          [layerId]: [...layerFrames, frameIndex]
-        };
-      }
-    });
-  } else {
-    // ✅ CRÍTICO: Guardar estado actual ANTES de cambiar
-    if (currentFrame !== frameNumber) {
-     
-      saveCurrentFrameState();
-    }
-    
-    // ✅ Actualizar selecciones y frame
-    setSelectedLayerFrames({ [layerId]: [frameIndex] });
-    setActiveLayerId(layerId);
-    
-    // ✅ CRÍTICO: Usar setTimeout para asegurar orden de operaciones
-    setTimeout(() => {
-      setActiveFrame(frameNumber);
-      
-      // ✅ Sincronización adicional para grupos
-      if (isGroup) {
-        setTimeout(() => {
-          syncWithCurrentFrame();
-          selectPixelGroup(layer.parentLayerId, layerId);
-        }, 50); // Dar tiempo para que se complete el cambio de frame
-      }
-    }, 0);
-  }
-};
-
-
-
-// Función para seleccionar rango de frames (Shift+click)
-const selectFrameRange = (layerId, frameIndex, shiftKey = false) => {
-  if (shiftKey && selectedLayerFrames[layerId]?.length > 0) {
-    const lastSelected = Math.max(...selectedLayerFrames[layerId]);
-    const start = Math.min(lastSelected, frameIndex);
-    const end = Math.max(lastSelected, frameIndex);
-    const range = Array.from({length: end - start + 1}, (_, i) => start + i);
-    
-    setSelectedLayerFrames(prev => ({
-      ...prev,
-      [layerId]: range
-    }));
-    setSelectedFrameRange({ layerId, start, end });
-  } else {
-    
-    selectLayerFrame(layerId, frameIndex);
-  }
-};
-
-
-// Función para limpiar selección de frames
-const clearFrameSelection = () => {
-  setSelectedLayerFrames({});
-  setSelectedFrameRange(null);
-};
-
-// Función para copiar frames seleccionados
-const copySelectedFrames = () => {
-  const selectedFrames = {};
-  Object.entries(selectedLayerFrames).forEach(([layerId, frameIndices]) => {
-    selectedFrames[layerId] = frameIndices.map(index => ({
-      ...layerFrames[layerId][index],
-      copied: true
-    }));
-  });
-
-  // Aquí implementarías la lógica de copiado real
-};
-
-// Función para eliminar frames seleccionados
-const deleteSelectedFrames = () => {
-  if (Object.keys(selectedLayerFrames).length === 0) return;
-  
-  if (window.confirm('¿Eliminar frames seleccionados?')) {
-    Object.entries(selectedLayerFrames).forEach(([layerId, frameIndices]) => {
-      frameIndices.sort((a, b) => b - a).forEach(index => {
-        if (frameCount > 1) {
-          deleteFrame(index);
-        }
-      });
-    });
-    clearFrameSelection();
-  }
-};
-
-// Funciones de gestión de grupos que faltaban
-const startEditingGroup = (group, e) => {
-  e.stopPropagation();
-  setEditingGroupId(group.id);
-  setEditingGroupName(group.name);
-};
-
-const saveGroupName = () => {
-  if (editingGroupId && editingGroupName.trim()) {
-    const layerId = Object.keys(pixelGroups).find(layerId => 
-      pixelGroups[layerId]?.[editingGroupId]
-    );
-    if (layerId) renamePixelGroup(layerId, editingGroupId, editingGroupName);
-    setEditingGroupId(null);
-  }
-};
-
-const handleGroupKeyDown = (e) => {
-  if (e.key === 'Enter') saveGroupName();
-  else if (e.key === 'Escape') setEditingGroupId(null);
-};
+// (Eliminados: `startEditingGroup` / `saveGroupName` / `handleGroupKeyDown` —
+// trio de rename inline de grupos sin call site activo.)
 
 const toggleLayerExpansion = (layerId) => {
   setExpandedLayers(prev => ({ ...prev, [layerId]: !prev[layerId] }));
 };
-// Función para asegurar que el grupo se sincronice correctamente
-const ensureGroupInCurrentFrame = (layerId, groupId) => {
-  // Verificar si el grupo existe en el frame actual
-  const currentFrameData = frames[currentFrame];
-  if (!currentFrameData?.pixelGroups?.[layerId]?.[groupId]) {
-    // Si no existe, sincronizar el estado actual
-    saveCurrentFrameState();
-  }
-};
+
+// (Eliminado: `ensureGroupInCurrentFrame` — verificador dead code.)
+
 const handleCreateGroup = (layerId) => {
   if (!selectedPixels?.length) {
     alert('Selecciona píxeles primero');
@@ -975,10 +719,8 @@ const handleCreateGroup = (layerId) => {
   setExpandedLayers(prev => ({ ...prev, [layerId]: true }));
 };
 
-const handleDeleteGroup = (layerId, groupId, e) => {
-  e.stopPropagation();
-  if (window.confirm('¿Eliminar grupo?')) deletePixelGroup(layerId, groupId);
-};
+// (Eliminado: `handleDeleteGroup` — sin call site en el árbol; si se retoma
+// la UI de grupos, llamar directo a `deletePixelGroup` del prop.)
   // Efecto para la reproducción automática
   
   // Funciones de control de animación
@@ -1048,10 +790,7 @@ const handleLastFrame = () => {
 
  
 
-  // Función para ir a un frame específico
-  const goToFrame = (frameIndex) => {
-    setActiveFrame(frameIndex + 1); // Los frames empiezan en 1
-  };
+  // (Eliminado: `goToFrame` — wrapper trivial sobre setActiveFrame sin call site.)
 
   // Funciones heredadas del LayerManager
   const getOrderedLayers = () => {
@@ -1404,20 +1143,10 @@ const renderLayerWithTimeline = (layer, depth = 0) => {
 
 
 
-const MemoizedFrameNumber = React.memo(({ frameNumber, isCurrent, isSelected, onMouseDown, onMouseEnter }) => (
-  <div
-    className={`frame-number ${isCurrent ? 'current' : ''} ${isSelected ? 'selected' : ''}`}
-    onMouseDown={onMouseDown}
-    onMouseEnter={onMouseEnter}
-    style={{ userSelect: 'none' }}
-    title={`Frame ${frameNumber}\nArrastrar para seleccionar múltiples`}
-  >
-    {frameNumber}
-    {isSelected && !isCurrent && (
-      <div className="selection-indicator" />
-    )}
-  </div>
-));
+// (Eliminado: `MemoizedFrameNumber` — definido pero nunca usado en el JSX de
+// este archivo. Además, estaba dentro del cuerpo del componente —anti-patrón
+// que rompe memoización—. Si se retoma un strip de números de frame, usar el
+// `FrameNumberCell` hoisted en `layerAnimation.jsx`.)
 
   return (
     < 
