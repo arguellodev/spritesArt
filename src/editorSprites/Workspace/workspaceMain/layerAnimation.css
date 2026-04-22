@@ -1749,280 +1749,422 @@ margin-right: 20px;
 /* Estilo para indicar que se puede hacer selección múltiple */
 
 /* ============================================================================
-   ANIMATION BAR UNIFIED — barra de reproducción + grid de frames en un único
-   bloque. Scroll horizontal compartido con toolbar sticky-left.
-   Patrón usado en editores profesionales (Figma timeline, Aseprite, After
-   Effects): la toolbar no se desplaza; los frames sí. Un solo scrollbar.
+   ANIMATION BAR UNIFIED — una sola fila, misma altura, mismo contenedor.
+
+   Layout horizontal en un único elemento:
+     [ STICKY-LEFT: toolbar completa ]  [ SCROLL: frame-numbers ]  [ STICKY-RIGHT: onion ]
+
+   Todos los elementos comparten la misma altura (var --anim-bar-h). Un solo
+   scrollbar horizontal en la raíz. La toolbar de la izquierda se mantiene
+   pegada al borde cuando scrolleas; los frames fluyen por debajo/detrás.
+
+   Mismo patrón que Aseprite / After Effects / Figma timeline.
    ============================================================================ */
 
 .animation-bar-unified {
+  --anim-bar-h: 44px;             /* altura unificada de TODO */
+  --sticky-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
+
   display: flex;
-  flex-direction: column;
-  background: var(--bg-secondary);
+  flex-direction: row;
+  align-items: stretch;            /* todo se estira a la misma altura */
+  height: var(--anim-bar-h);
+  min-height: var(--anim-bar-h);
+  max-height: var(--anim-bar-h);
+  background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: var(--panel-shadow);
-  overflow: hidden;
-  height: 100%;
-  min-height: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-/* ---- Top bar: controles globales (play/pause, speed, onion skin) ---- */
-.unified-top-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  gap: 12px;
-  background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
-  border-bottom: 1px solid var(--border-color);
-  backdrop-filter: blur(10px);
-  flex-shrink: 0;
-}
-
-.unified-top-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-/* ---- Timeline scroll: único contenedor con scroll horizontal ---- */
-.unified-timeline-scroll {
-  display: flex;
-  flex-direction: row;
   overflow-x: auto;
   overflow-y: hidden;
-  flex: 1;
-  min-height: 0;
-  background: var(--bg-primary);
-  /* Smooth scroll pero respetando prefers-reduced-motion. */
+  position: relative;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Scroll suave con fallback a no-motion */
   scroll-behavior: smooth;
-  /* Scrollbar discreto pero visible. */
   scrollbar-width: thin;
   scrollbar-color: var(--accent-color) transparent;
 }
 
-.unified-timeline-scroll::-webkit-scrollbar {
-  height: 10px;
+.animation-bar-unified::-webkit-scrollbar {
+  height: 8px;
 }
 
-.unified-timeline-scroll::-webkit-scrollbar-track {
-  background: var(--bg-tertiary);
+.animation-bar-unified::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.unified-timeline-scroll::-webkit-scrollbar-thumb {
+.animation-bar-unified::-webkit-scrollbar-thumb {
   background: var(--accent-color);
-  border-radius: 5px;
-  border: 2px solid var(--bg-tertiary);
+  border-radius: 4px;
+  opacity: 0.8;
 }
 
-.unified-timeline-scroll::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-hover, var(--accent-color));
+.animation-bar-unified::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-active, var(--accent-color));
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .unified-timeline-scroll {
+  .animation-bar-unified {
     scroll-behavior: auto;
+  }
+  .animation-bar-unified *,
+  .animation-bar-unified *::before,
+  .animation-bar-unified *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }
 
-/* ---- Sticky-left toolbar: acciones de capa + ajustes del frame actual ---- */
+/* ---- STICKY-LEFT — toolbar completa pegada a la izquierda ---- */
 .unified-timeline-left {
   position: sticky;
   left: 0;
   z-index: 2;
   flex-shrink: 0;
   display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
+  gap: 8px;
+  height: 100%;
+  padding: 0 10px;
   background: var(--bg-tertiary);
-  border-right: 2px solid var(--border-color);
-  /* Sombra sutil que indica visualmente el borde de la zona fija al scrollear. */
-  box-shadow: 4px 0 6px -2px rgba(0, 0, 0, 0.15);
+  border-right: 1px solid var(--border-color);
+  /* Sombra que sugiere que hay contenido detrás/debajo al scrollear */
+  box-shadow: 4px 0 8px -4px rgba(0, 0, 0, 0.25);
 }
 
-.unified-divider {
-  width: 1px;
-  height: 24px;
-  background: var(--border-color);
-  flex-shrink: 0;
-}
-
-.current-frame-tools {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-/* Botón "Nueva Capa" más compacto */
-.animation-bar-unified .add-layer-btn {
+/* Grupos de controles dentro del toolbar */
+.unified-timeline-left .toolbar-group {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 10px;
-  font-size: 11px;
-  font-weight: 500;
-  border-radius: 6px;
-  cursor: pointer;
-  background: var(--accent-color);
-  color: white;
-  border: none;
-  transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  height: 100%;
 }
 
-.animation-bar-unified .add-layer-btn:hover {
-  background: var(--accent-active, var(--accent-color));
+.toolbar-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--border-color);
+  flex-shrink: 0;
+  opacity: 0.6;
 }
 
-.animation-bar-unified .add-layer-btn:focus-visible {
-  outline: 2px solid var(--accent-color);
-  outline-offset: 2px;
-}
-
-/* Botón header (move layer up/down) consistente */
-.animation-bar-unified .header-btn {
+/* Botones generales dentro del toolbar (28x28, consistente) */
+.unified-timeline-left .control-btn,
+.unified-timeline-left .setting-btn,
+.unified-timeline-left .header-btn,
+.unified-timeline-left .frame-control-btn {
   width: 28px;
   height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
   border: 1px solid var(--button-border);
   background: var(--button-bg);
   color: var(--text-secondary);
   border-radius: 5px;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 12px;
+  transition:
+    background 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.animation-bar-unified .header-btn:hover:not(:disabled) {
-  background: var(--button-hover);
-  color: var(--text-primary);
-  border-color: var(--accent-color);
-}
-
-.animation-bar-unified .header-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-/* Overrides ligeros para integrar los controles existentes al toolbar unificado:
-   los componentes `.frame-rate-control`, `.frame-controls`, `.zoom-slider-container`
-   ya están estilizados arriba; aquí solo aseguramos cohesión visual. */
-.unified-timeline-left .frame-rate-control,
-.unified-timeline-left .frame-controls,
-.unified-timeline-left .zoom-slider-container {
-  background: transparent;
-  border: none;
-  padding: 0;
-  margin: 0;
-  box-shadow: none;
-}
-
-.unified-timeline-left .zoom-slider-container {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.unified-timeline-left .zoom-slider-container .opacity-label {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-secondary);
-}
-
-.unified-timeline-left .zoom-slider-container .opacity-value {
-  font-size: 11px;
-  color: var(--text-primary);
-  min-width: 32px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.unified-timeline-left .zoom-slider {
-  width: 90px;
-  height: 4px;
-  cursor: pointer;
-}
-
-.unified-timeline-left .frame-rate-unit {
-  font-size: 10px;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  font-weight: 500;
-}
-
-.unified-timeline-left .frame-controls {
-  display: flex;
-  gap: 4px;
-}
-
-/* Botones de frame: más pequeños para caber en el toolbar sticky */
-.unified-timeline-left .frame-control-btn {
-  width: 26px;
-  height: 26px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--button-border);
-  background: var(--button-bg);
-  color: var(--text-secondary);
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  font-size: 11px;
-}
-
+.unified-timeline-left .control-btn:hover:not(:disabled),
+.unified-timeline-left .setting-btn:hover:not(:disabled),
+.unified-timeline-left .header-btn:hover:not(:disabled),
 .unified-timeline-left .frame-control-btn:hover:not(:disabled) {
   background: var(--button-hover);
   color: var(--text-primary);
   border-color: var(--accent-color);
 }
 
+.unified-timeline-left .control-btn:disabled,
+.unified-timeline-left .header-btn:disabled,
 .unified-timeline-left .frame-control-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-/* ---- Área scrollable derecha: frame-numbers (y futuras filas por-capa) ---- */
+/* Play/pause button destacado en el centro de los controles */
+.unified-timeline-left .play-btn {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, var(--accent-color), var(--accent-active, var(--accent-color)));
+  color: white;
+  border: none;
+  box-shadow: 0 2px 6px rgba(140, 82, 255, 0.3);
+}
+
+.unified-timeline-left .play-btn:hover {
+  background: linear-gradient(135deg, var(--accent-hover, var(--accent-color)), var(--accent-color));
+  color: white;
+  box-shadow: 0 3px 10px rgba(140, 82, 255, 0.4);
+}
+
+/* Toggle loop activo */
+.unified-timeline-left .setting-btn.active {
+  background: linear-gradient(135deg, var(--accent-color), var(--accent-active, var(--accent-color)));
+  color: white;
+  border-color: var(--accent-color);
+}
+
+/* Speed select */
+.unified-timeline-left .speed-select-overlay {
+  height: 26px;
+  padding: 0 6px;
+  font-size: 11px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Nueva Capa — botón primario compacto */
+.unified-timeline-left .add-layer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.unified-timeline-left .add-layer-btn:hover {
+  background: var(--accent-active, var(--accent-color));
+}
+
+/* Frame badge — indicador del frame actual */
+.unified-timeline-left .frame-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 6px;
+  background: var(--accent-color);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3px;
+}
+
+/* Input de duración del frame */
+.unified-timeline-left .frame-rate-input {
+  width: 48px;
+  height: 22px;
+  padding: 0 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 11px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.unified-timeline-left .frame-rate-input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(140, 82, 255, 0.2);
+}
+
+.unified-timeline-left .frame-rate-unit {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-right: 2px;
+}
+
+/* Grupo de opacidad */
+.unified-timeline-left .opacity-group {
+  gap: 6px;
+}
+
+.unified-timeline-left .opacity-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.unified-timeline-left .opacity-value {
+  min-width: 36px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.unified-timeline-left .zoom-slider {
+  width: 80px;
+  height: 4px;
+  cursor: pointer;
+  accent-color: var(--accent-color);
+}
+
+/* Focus-visible para accesibilidad de teclado */
+.animation-bar-unified button:focus-visible,
+.animation-bar-unified input:focus-visible,
+.animation-bar-unified select:focus-visible,
+.animation-bar-unified [role="switch"]:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+/* ---- CENTRO — frame-numbers strip, scrollea con el contenedor raíz ---- */
 .unified-timeline-frames {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  align-self: stretch;
+  align-items: stretch;
+  height: 100%;
   background: var(--bg-primary);
 }
 
 .unified-timeline-frames .frame-numbers {
   display: flex;
+  align-items: stretch;
   height: 100%;
-  min-height: 32px;
-  /* Cada FrameNumberCell ya tiene width 50px fijo, estos flex-row los apila. */
+  min-width: 100%;
+  /* FrameNumberCell tiene width 50px fijo; se concatenan horizontalmente */
 }
 
-/* Botón "Nueva Capa" span para el texto */
-.animation-bar-unified .add-layer-btn > span {
-  display: inline-block;
+/* La celda de frame ocupa TODA la altura de la barra — coincidencia visual */
+.unified-timeline-frames .frame-number {
+  height: 100%;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid var(--border-color);
 }
 
-@media (max-width: 720px) {
-  /* En viewports estrechos, oculta el texto "Nueva" dejando solo el ícono. */
+/* ---- STICKY-RIGHT — onion skin ---- */
+.unified-timeline-right {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 10px;
+  background: var(--bg-tertiary);
+  border-left: 1px solid var(--border-color);
+  box-shadow: -4px 0 8px -4px rgba(0, 0, 0, 0.25);
+}
+
+.unified-timeline-right .onion-skin-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition:
+    background 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.unified-timeline-right .onion-skin-toggle:hover {
+  background: var(--button-hover);
+  border-color: var(--accent-color);
+  color: var(--text-primary);
+}
+
+.unified-timeline-right .toggle-switch {
+  position: relative;
+  width: 26px;
+  height: 13px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  transition: background 0.2s, border-color 0.2s;
+  flex-shrink: 0;
+}
+
+.unified-timeline-right .toggle-switch.active {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.unified-timeline-right .toggle-slider {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 9px;
+  height: 9px;
+  background: white;
+  border-radius: 50%;
+  transition: left 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.unified-timeline-right .toggle-switch.active .toggle-slider {
+  left: 14px;
+}
+
+.unified-timeline-right .config-button {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--button-bg);
+  border: 1px solid var(--button-border);
+  border-radius: 5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.unified-timeline-right .config-button:hover {
+  background: var(--button-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-color);
+}
+
+/* ---- Responsive: en viewports estrechos colapsa el texto "Nueva" ---- */
+@media (max-width: 900px) {
   .animation-bar-unified .add-layer-btn > span {
     display: none;
   }
-  /* Controles de reproducción aún visibles, pero el resto del toolbar se
-     compacta. */
   .unified-timeline-left {
     gap: 6px;
-    padding: 6px 8px;
+    padding: 0 8px;
   }
   .unified-timeline-left .zoom-slider {
     width: 60px;
+  }
+  .unified-timeline-left .opacity-label {
+    display: none;  /* solo el slider + % en viewport estrecho */
   }
 }
