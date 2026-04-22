@@ -113,6 +113,31 @@ import { renderLayerColor } from "./container/components/memoized/memoizedLayerC
 import { renderPlayAnimation } from "./container/components/memoized/memoizedPlayAnimation";
 import { RightPanel } from "../panels/rightPanel";
 
+// Modales/paneles nuevos (features del plan ambicioso — Sprint 1–6).
+import FiltersModal from "../filters/filtersModal";
+import TextTool from "../customTool/tools/textTool";
+import ScriptRunnerPanel from "../scripting/scriptRunnerPanel";
+import { buildScriptSnapshot, applyScriptPatch } from "../scripting/api";
+import HistoryPanel from "../history/historyPanel";
+import TagsPanel from "../animation/tagsPanel";
+import KeybindingsPanel from "../settings/keybindingsPanel";
+import { useKeybindingsRegistry, useKeybindingsListener } from "../input/useKeybindings";
+import { maskFromMagicWand, countSelected } from "../selection/selectionMask";
+import { combineMasks } from "../selection/selectionOps";
+import MarchingAnts from "../overlays/marchingAnts";
+import Rulers from "../overlays/rulers";
+import TilesetPanel from "../tilemap/tilesetPanel";
+import { createTileset } from "../tilemap/tileset";
+import { serializeTileset, deserializeTileset } from "../tilemap/tilesetSerialization";
+import SlicesPanel from "../slices/slicesPanel";
+import { drawSlicesOverlay } from "../slices/sliceLayer";
+import { loadReferenceFromFile } from "../layers/referenceLayer";
+import { loadAsepriteFile, asepriteDocToPixcalli } from "../formats/aseprite";
+import { autoCrop } from "../canvas/autoCrop";
+import MagicWandTool from "../customTool/tools/magicWandTool";
+import ReferenceLayersPanel from "../layers/referenceLayersPanel";
+import StabilizerSlider from "../customTool/stabilizerSlider";
+
 // TOOLS ahora vive en ./container/constants/tools.js (import arriba).
 
 function CanvasTracker({
@@ -175,6 +200,9 @@ const [rotationAngle, setRotationAngle] = useState(0);
   const rightMirrorCornerRef = useRef(null);
   const animationLayerRef = useRef(null);
   const previewAnimationRef = useRef(null);
+  // Ref imperativo al reproductor `PlayAnimation` para disparar play/setFrame
+  // desde otros paneles (tags, atajos de teclado, etc.).
+  const playAnimationRef = useRef(null);
   const rotationHandlerRef = useRef(null);
 
 // Agregar estos refs al inicio del componente CanvasTracker
@@ -184,6 +212,49 @@ const textureRef = useRef(null);
 //PARA EXPORTAR:
 
 const [showExporter, setShowExporter] = useState(false);
+const [showSaveProject, setShowSaveProject] = useState(false);
+
+// Modales nuevos del plan ambicioso.
+const [showFiltersModal, setShowFiltersModal] = useState(false);
+const [showTextTool, setShowTextTool] = useState(false);
+const [showScriptRunner, setShowScriptRunner] = useState(false);
+
+// Estado para paneles del dock: animation tags (lista persistible a .pixcalli).
+const [animationTags, setAnimationTags] = useState([]);
+// Slices (regiones nombradas con bounds/pivot/9-slice); ver slices/sliceLayer.js.
+const [slices, setSlices] = useState([]);
+// Tileset opcional (un documento puede tener cero o un tileset global por ahora).
+const [tileset, setTileset] = useState(null);
+// Capas de referencia (imágenes bloqueadas, no exportables; solo metadata serializable).
+const [referenceLayers, setReferenceLayers] = useState([]);
+// Guías arrastradas desde las reglas.
+const [guides, setGuides] = useState([]);
+// Paletas custom del usuario (mirror del localStorage — se persisten también en .pixcalli).
+const [customPalettes, setCustomPalettes] = useState([]);
+
+// Toggle de overlays visuales (rulers / guides / slices).
+const [showRulers, setShowRulers] = useState(false);
+const [showSlicesOverlay, setShowSlicesOverlay] = useState(true);
+
+// Último cursor en coordenadas de canvas lógico — útil para las reglas.
+const [rulersCursor, setRulersCursor] = useState(null);
+
+// Magic wand: máscara de selección activa (Uint8Array wrapper).
+// Null hasta el primer click con la varita. Se combina con modifiers Shift/Alt
+// usando combineMasks para permitir add/subtract/intersect.
+const [magicWandMask, setMagicWandMask] = useState(null);
+const [magicWandParams, setMagicWandParams] = useState({
+  tolerance: 0,
+  contiguous: true,
+  matchAlpha: true,
+  booleanOp: 'replace',
+});
+
+// Registry de keybindings (compartido entre el listener global y el panel de Settings).
+// Los handlers individuales se registran con registry.register(...) más abajo
+// una vez que las funciones (undo/redo, navegación, etc.) estén en scope.
+const keybindingsRegistry = useKeybindingsRegistry();
+useKeybindingsListener(keybindingsRegistry);
 
   // Refs para inicio de herramientas
   const squareStartRef = useRef(null);
@@ -297,6 +368,8 @@ const [showExporter, setShowExporter] = useState(false);
     renameLayer,
     clearLayer,
     drawOnLayer,
+    compositeRender,
+    historyPush,
     moveViewport,
     viewportToCanvasCoords,
     drawPixelLine,
@@ -384,13 +457,12 @@ const [showExporter, setShowExporter] = useState(false);
     undo,
     redo,
     undoFrames,
-    restoreToLatest,
     clearHistory,
     canUndo,
     canRedo,
-    canRestoreToLatest,
     debugInfo,
     history,
+    commitShapeWithHistory,
 
     //exportacion/importacion:
     exportLayersAndFrames,
@@ -420,8 +492,11 @@ const [showExporter, setShowExporter] = useState(false);
   applyOnionFramesPreset,
   clearTintCache,
 
+  // Restauración desde formato .pixcalli v2
+  restoreFromProjectData,
+
     //gestión del aislamiento de pixeles:
-   
+
   } = useLayerManager({
     width: totalWidth,
     height: totalHeight,
@@ -431,6 +506,198 @@ const [showExporter, setShowExporter] = useState(false);
     isPressed,
     isolatedPixels
   });
+
+  // Registrar keybindings centralizados. Los handlers cierran sobre las fns de
+  // useLayerManager y las setters de modales. El listener global ya está montado
+  // (línea arriba) — esto solo puebla el registry para que el panel de Settings
+  // los muestre y permita rebindar.
+  // Refs estables para los handlers de undo/redo — el registry captura una
+  // cerradura en su callback al ejecutarse el useEffect, y necesitamos que
+  // siempre llame a la última versión (que incluye cache invalidation).
+  const handleUndoRef = useRef(() => undo?.());
+  const handleRedoRef = useRef(() => redo?.());
+
+  useEffect(() => {
+    // Nota: los Ctrl+Z / Ctrl+Y también están enganchados via listener keydown
+    // directo más abajo. Ambos caminos van a través de handleUndo/handleRedo
+    // que invalidan `cachedImageDataRef` tras el undo, evitando el bug de
+    // "pixels fantasma reaparecen al repintar sobre el trazo deshecho".
+    keybindingsRegistry.register('editor.undo',          ['ctrl+z', 'meta+z'],          () => handleUndoRef.current(),          'Deshacer');
+    keybindingsRegistry.register('editor.redo',          ['ctrl+y', 'ctrl+shift+z'],    () => handleRedoRef.current(),          'Rehacer');
+    keybindingsRegistry.register('editor.save',          ['ctrl+s', 'meta+s'],          () => setShowSaveProject(true),                              'Guardar proyecto');
+    keybindingsRegistry.register('editor.filters',       ['ctrl+f'],                    () => setShowFiltersModal(true),                             'Abrir filtros');
+    keybindingsRegistry.register('editor.text',          ['t'],                         () => setShowTextTool(true),                                 'Insertar texto');
+    keybindingsRegistry.register('editor.scripts',       ['ctrl+shift+s'],              () => setShowScriptRunner((v) => !v),                        'Abrir script runner');
+    keybindingsRegistry.register('editor.export',        ['ctrl+e'],                    () => setShowExporter((v) => !v),                            'Exportar animación');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // --- Importar .aseprite/.ase ---
+  // Abre file picker, parsea con loadAsepriteFile y lo convierte al formato interno.
+  // Por ahora solo cargamos paleta, tags y slices al estado del workspace; el
+  // reemplazo completo de frames/capas requiere `restoreFromProjectData` con un
+  // proyecto construido desde el asepriteDoc (siguiente paso).
+  const handleImportAseprite = useCallback(async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.ase,.aseprite';
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const doc = await loadAsepriteFile(file);
+        const pixcalliLike = asepriteDocToPixcalli(doc);
+        // Por el momento populamos solo los campos aditivos (las extensions);
+        // la restauración completa de frames/capas requiere un handleProjectLoaded
+        // dedicado que todavía no está escrito para el formato importado.
+        if (Array.isArray(doc.tags) && doc.tags.length) {
+          setAnimationTags(doc.tags.map((t, i) => ({
+            id: `tag_imported_${i}`,
+            name: t.name || `tag_${i}`,
+            from: t.from,
+            to: t.to,
+            direction: t.direction,
+            color: t.color || '#4a90e2',
+            repeat: 0,
+          })));
+        }
+        if (Array.isArray(doc.slices) && doc.slices.length) {
+          setSlices(doc.slices.map((s, i) => ({
+            id: `slice_imported_${i}`,
+            name: s.name,
+            color: '#ffcc44',
+            bounds: s.bounds,
+            ...(s.center ? { center: s.center } : {}),
+            ...(s.pivot ? { pivot: s.pivot } : {}),
+          })));
+        }
+        console.log(
+          `[aseprite] Import OK — ${doc.framesCount} frames, ${doc.layers.length} capas, ` +
+          `${doc.palette?.length ?? 0} colores de paleta, ${doc.tags.length} tags, ${doc.slices.length} slices. ` +
+          `(Nota: frames/capas todavía no se inyectan al canvas.)`
+        );
+        alert(
+          `Parseado: ${doc.framesCount} frames × ${doc.layers.length} capas.\n` +
+          `Tags y slices importados al panel lateral. ` +
+          `El renderizado completo del documento sobre el canvas requiere un import handler dedicado.`
+        );
+        void pixcalliLike; // snapshot disponible para quien quiera usarlo
+      } catch (err) {
+        console.error('Error importando .aseprite:', err);
+        alert(`No se pudo importar el archivo: ${err.message}`);
+      }
+    };
+    input.click();
+  }, []);
+
+  // --- Importar imagen como capa de referencia ---
+  // PNG/JPEG → ReferenceLayer (bloqueada, opacidad 0.5, no exportable).
+  // El objeto completo (incluyendo el canvas HTML) se guarda en `referenceLayers`.
+  // Al persistir el proyecto, el serializador filtra props no-serializables
+  // (el canvas pesa demasiado para el JSON por ahora — futuro: dataURL opcional).
+  const handleImportReferenceImage = useCallback(async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/png,image/jpeg,image/webp';
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const layer = await loadReferenceFromFile(file);
+        setReferenceLayers((prev) => [...prev, layer]);
+      } catch (err) {
+        console.error('Error cargando referencia:', err);
+        alert(`No se pudo cargar la imagen: ${err.message ?? err}`);
+      }
+    };
+    input.click();
+  }, []);
+
+  // --- Auto-crop: recorta el documento al bounding box opaco de todas las capas ---
+  // Solo sugiere las nuevas dimensiones (no muta el documento automáticamente)
+  // porque el resize requiere actualizar tamaño del canvas del hook, lo cual
+  // no está expuesto todavía. Si el usuario acepta, se hace un manual override.
+  const handleAutoCrop = useCallback(() => {
+    const canvases = [];
+    for (const frame of Object.values(frames ?? {})) {
+      for (const canvas of Object.values(frame?.canvases ?? {})) {
+        if (canvas && canvas.width && canvas.height) canvases.push(canvas);
+      }
+    }
+    if (canvases.length === 0) {
+      alert('No hay capas con contenido para recortar.');
+      return;
+    }
+    const result = autoCrop(canvases, { padding: 0 });
+    if (!result) {
+      alert('Todas las capas están vacías. No hay nada que recortar.');
+      return;
+    }
+    alert(
+      `Auto-crop sugerido: ${result.width}×${result.height} px ` +
+      `(desde ${totalWidth}×${totalHeight}).\n\n` +
+      `Implementación completa del resize pendiente — requiere exponer setDocumentSize ` +
+      `en useLayerManager para actualizar todos los frames/capas en una transacción.`
+    );
+  }, [frames, totalWidth, totalHeight]);
+
+  // ---- Callback de carga de proyecto (.pixcalli v2) ----
+  const handleProjectLoaded = useCallback(async ({ success, projectData, restoredCanvases }) => {
+    if (!success || !projectData) return;
+
+    // Restaurar canvas y estado del editor a través del hook
+    await restoreFromProjectData(projectData, restoredCanvases ?? {});
+
+    // Restaurar viewport
+    if (projectData.viewport?.zoom != null) {
+      setZoom(projectData.viewport.zoom);
+    }
+    if (projectData.viewport?.panOffset) {
+      setPanOffset(projectData.viewport.panOffset);
+    }
+
+    // Restaurar colores
+    if (projectData.palette) {
+      const p = projectData.palette;
+      if (p.foreground) {
+        setForegroundColor(p.foreground);
+        setToolParameters(prev => ({ ...prev, foregroundColor: p.foreground }));
+      }
+      if (p.background) {
+        setBackgroundColor(p.background);
+        setToolParameters(prev => ({ ...prev, backgroundColor: p.background }));
+      }
+      if (p.fillColor) {
+        setFillColor(p.fillColor);
+        setToolParameters(prev => ({ ...prev, fillColor: p.fillColor }));
+      }
+      if (p.borderColor) {
+        setBorderColor(p.borderColor);
+        setToolParameters(prev => ({ ...prev, borderColor: p.borderColor }));
+      }
+    }
+
+    // Restaurar extensions v2.1 (paletas custom, tags, slices, referenceLayers, guides, tileset).
+    // Todo es opcional — parsers viejos no tenían este campo.
+    const ext = projectData.extensions;
+    if (ext) {
+      if (Array.isArray(ext.customPalettes)) setCustomPalettes(ext.customPalettes);
+      if (Array.isArray(ext.animationTags))  setAnimationTags(ext.animationTags);
+      if (Array.isArray(ext.slices))         setSlices(ext.slices);
+      if (Array.isArray(ext.referenceLayers)) setReferenceLayers(ext.referenceLayers);
+      if (Array.isArray(ext.guides))         setGuides(ext.guides);
+      if (ext.tilesets) {
+        // Rehidratar canvases desde dataURL. Puede tardar con tilesets grandes,
+        // pero corre en paralelo (Promise.all).
+        deserializeTileset(ext.tilesets).then((ts) => {
+          if (ts) setTileset(ts);
+        }).catch((err) => {
+          console.warn('No se pudo restaurar el tileset:', err);
+        });
+      }
+    }
+  }, [restoreFromProjectData, setZoom, setPanOffset,
+      setForegroundColor, setBackgroundColor, setFillColor, setBorderColor, setToolParameters]);
 
   // Hook para rastreo del puntero
 
@@ -2708,6 +2975,61 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
   
   const cachedImageDataRef = useRef(null);
 const cacheValidRef = useRef(false);
+const webglFallbackWarnedRef = useRef(false);
+
+// Dirty-rect tracking para cachedImageDataRef.
+// Los tools que escriben en el ImageData cacheado pueden reportar el bbox tocado
+// via markCachedImageDataDirty(). Al flushear con flushCachedImageDataToCanvas(),
+// si hay un bbox válido, usamos ctx.putImageData(imgData, 0, 0, dx, dy, dw, dh) —
+// el navegador solo sube esa sub-región a GPU, en vez de los ~67MB del canvas
+// completo (4096²).
+// Si el tool no reporta nada, el helper cae a putImageData(imgData, 0, 0) como
+// antes — backward compatible.
+const cachedImageDataDirtyRectRef = useRef(null);
+
+const resetCachedImageDataDirtyRect = useCallback(() => {
+  cachedImageDataDirtyRectRef.current = null;
+}, []);
+
+const markCachedImageDataDirty = useCallback((x, y, w, h) => {
+  if (w <= 0 || h <= 0) return;
+  const rect = cachedImageDataDirtyRectRef.current;
+  const endX = x + w - 1;
+  const endY = y + h - 1;
+  if (!rect) {
+    cachedImageDataDirtyRectRef.current = { minX: x, minY: y, maxX: endX, maxY: endY };
+    return;
+  }
+  if (x < rect.minX) rect.minX = x;
+  if (y < rect.minY) rect.minY = y;
+  if (endX > rect.maxX) rect.maxX = endX;
+  if (endY > rect.maxY) rect.maxY = endY;
+}, []);
+
+const flushCachedImageDataToCanvas = useCallback((ctx) => {
+  const imgData = cachedImageDataRef.current;
+  if (!imgData) return;
+  const canvas = ctx.canvas;
+  const rect = cachedImageDataDirtyRectRef.current;
+
+  if (rect) {
+    // Clamp al canvas real
+    const dx = Math.max(0, rect.minX);
+    const dy = Math.max(0, rect.minY);
+    const dEndX = Math.min(canvas.width - 1, rect.maxX);
+    const dEndY = Math.min(canvas.height - 1, rect.maxY);
+    const dw = dEndX - dx + 1;
+    const dh = dEndY - dy + 1;
+    if (dw > 0 && dh > 0) {
+      // putImageData con dirty rect: solo sube la sub-región a GPU.
+      ctx.putImageData(imgData, 0, 0, dx, dy, dw, dh);
+    }
+  } else {
+    // Fallback: tool no reportó bbox, subimos todo como antes.
+    ctx.putImageData(imgData, 0, 0);
+  }
+  cachedImageDataDirtyRectRef.current = null;
+}, []);
 
 // Helpers WebGL delegados a ./container/utils/webglRenderer.js.
 const initializeWebGLImageRenderer = useCallback(
@@ -2762,6 +3084,21 @@ const initializeImageDataCacheOptimized = (ctx) => {
     gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(buf.buffer));
     cachedImageDataRef.current = new ImageData(buf, w, h);
   } else {
+    // Fallback sin WebGL: ctx.getImageData completo es O(w*h) síncrono en main thread.
+    // En canvas grandes (>2048²) bloquea visiblemente. Avisamos una sola vez por
+    // sesión para que el usuario sepa que el rendimiento se degradará.
+    if (!webglFallbackWarnedRef.current) {
+      webglFallbackWarnedRef.current = true;
+      const megaPx = (canvas.width * canvas.height) / 1_000_000;
+      if (megaPx >= 2) {
+        console.warn(
+          `[PixCalli] WebGL no disponible. Canvas de ${canvas.width}×${canvas.height} ` +
+          `(${megaPx.toFixed(1)} MP): cada operación usará getImageData completo ` +
+          `(~${(canvas.width * canvas.height * 4 / 1024 / 1024).toFixed(0)} MB síncrono). ` +
+          `Si notás lag, bajá el tamaño del canvas o habilitá aceleración por GPU.`
+        );
+      }
+    }
     cachedImageDataRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
   }
 
@@ -2794,6 +3131,7 @@ useEffect(() => {
 // 10. FUNCIÓN PARA INVALIDAR CACHE WEBGL
 const invalidateImageDataCacheOptimized = useCallback(() => {
   cacheValidRef.current = false;
+  cachedImageDataDirtyRectRef.current = null;
 }, []);
 
 // Invalidar solo cuando la composición externa del canvas pudo cambiar.
@@ -2974,6 +3312,52 @@ useEffect(() => {
       return;
     }
 
+    // Magic Wand (plan ambicioso, Sprint 2).
+    // Genera una máscara de selección basada en similitud de color. Contiguo
+    // (flood 4-vecinos) o global según params. Combina con máscara previa usando
+    // Shift/Alt/Shift+Alt para add/subtract/intersect.
+    if (tool === TOOLS.magicWand) {
+      if (isPressed && lastPixelRef.current === null) {
+        const viewportPixelCoords = getPixelCoordinates(relativeToTarget);
+        const canvasCoords = viewportToCanvasCoords(
+          viewportPixelCoords.x,
+          viewportPixelCoords.y
+        );
+        const layerCanvas =
+          frames?.[currentFrame]?.canvases?.[activeLayerId] ?? null;
+        if (layerCanvas) {
+          const newMask = maskFromMagicWand(
+            layerCanvas,
+            canvasCoords.x,
+            canvasCoords.y,
+            {
+              tolerance: magicWandParams.tolerance,
+              contiguous: magicWandParams.contiguous,
+              matchAlpha: magicWandParams.matchAlpha,
+            }
+          );
+          // Modifier keys: Shift/Alt/Shift+Alt se inspeccionan del último evento
+          // global. Por ahora usamos el booleanOp del panel como default.
+          const op =
+            magicWandMask && magicWandParams.booleanOp !== 'replace'
+              ? magicWandParams.booleanOp
+              : 'replace';
+          const combined =
+            op === 'replace' || !magicWandMask
+              ? newMask
+              : combineMasks(magicWandMask, newMask, op);
+          setMagicWandMask(combined);
+          console.log(
+            `🪄 Magic Wand: ${countSelected(combined)} píxeles seleccionados (${op})`
+          );
+        }
+        lastPixelRef.current = viewportPixelCoords;
+      } else if (!isPressed && lastPixelRef.current !== null) {
+        lastPixelRef.current = null;
+      }
+      return;
+    }
+
     if (isSpacePressed) {
       return;
     }
@@ -3046,7 +3430,24 @@ useEffect(() => {
                 ? toolParameters.backgroundColor
                 : toolParameters.foregroundColor; // fallback
 
-            drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
+            // bbox de la curva cuadrática: cubre los 3 puntos (start/end/control).
+            // Una curva de Bézier siempre queda dentro del bbox de sus puntos de
+            // control, así que ese bbox + padding del pincel es suficiente.
+            const curveBrushW = toolParameters.width || 1;
+            const curvePad = Math.ceil(curveBrushW) + 2;
+            let curveBbox;
+            if (mirrorState.vertical || mirrorState.horizontal) {
+              // Con mirror, los reflejos pueden caer lejos — usamos el drawable completo.
+              curveBbox = { x: 0, y: 0, w: drawableWidth, h: drawableHeight };
+            } else {
+              const cMinX = Math.min(start.x, end.x, control.x) - curvePad;
+              const cMinY = Math.min(start.y, end.y, control.y) - curvePad;
+              const cMaxX = Math.max(start.x, end.x, control.x) + curvePad;
+              const cMaxY = Math.max(start.y, end.y, control.y) + curvePad;
+              curveBbox = { x: cMinX, y: cMinY, w: cMaxX - cMinX, h: cMaxY - cMinY };
+            }
+
+            commitShapeWithHistory(activeLayerId, currentFrame, curveBbox, withIsolationCheck((ctx) => {
               // Configurar el color seleccionado
               ctx.fillStyle = `rgba(${selectedColor.r}, ${selectedColor.g}, ${selectedColor.b}, ${selectedColor.a})`;
 
@@ -3142,7 +3543,7 @@ useEffect(() => {
             viewportPixelCoords.x,
             viewportPixelCoords.y
           );
-    
+
           // Usar la referencia guardada (no isPressed actual)
           const selectedColor =
             lineButton.current === "left"
@@ -3150,8 +3551,26 @@ useEffect(() => {
               : lineButton.current === "right"
               ? toolParameters.backgroundColor
               : toolParameters.foregroundColor; // fallback a foreground
-    
-          drawOnLayer(activeLayerId, (ctx) => {
+
+          // bbox de la línea: extremos + padding del pincel (cubre blur/width y mirrors básicos).
+          const lineBrushW = toolParameters?.width || 1;
+          const linePad = Math.ceil(lineBrushW) + 2;
+          const lsx = lineStartRef.current.x, lsy = lineStartRef.current.y;
+          const lineBbox = {
+            x: Math.min(lsx, endCoords.x) - linePad,
+            y: Math.min(lsy, endCoords.y) - linePad,
+            w: Math.abs(endCoords.x - lsx) + linePad * 2,
+            h: Math.abs(endCoords.y - lsy) + linePad * 2,
+          };
+          // Ampliar bbox cuando hay mirror activo — los reflejos pueden caer lejos.
+          if (mirrorState.vertical || mirrorState.horizontal) {
+            lineBbox.x = 0;
+            lineBbox.y = 0;
+            lineBbox.w = drawableWidth;
+            lineBbox.h = drawableHeight;
+          }
+
+          commitShapeWithHistory(activeLayerId, currentFrame, lineBbox, (ctx) => {
             const canvas = ctx.canvas;
             const width = toolParameters?.width || 1;
             const blur = toolParameters.blur || 0;
@@ -3413,17 +3832,26 @@ useEffect(() => {
             viewportPixelCoords.y
           );
 
-          drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
+          const borderColor = toolParameters.borderColor || null;
+          const fillColor = toolParameters.fillColor || color;
+          const borderWidth = toolParameters.borderWidth || 0;
+          const borderRadius = toolParameters.borderRadius || 0;
+
+          // bbox de la figura para undo/redo: cubre rectángulo completo + borde
+          const pad = Math.max(borderWidth, 1) + 2;
+          const sx = squareStartRef.current.x, sy = squareStartRef.current.y;
+          const bbox = {
+            x: Math.min(sx, endCoords.x) - pad,
+            y: Math.min(sy, endCoords.y) - pad,
+            w: Math.abs(endCoords.x - sx) + pad * 2,
+            h: Math.abs(endCoords.y - sy) + pad * 2,
+          };
+
+          commitShapeWithHistory(activeLayerId, currentFrame, bbox, withIsolationCheck((ctx) => {
             ctx.globalCompositeOperation = "source-over";
 
             const width = endCoords.x - squareStartRef.current.x;
             const height = endCoords.y - squareStartRef.current.y;
-
-            // Obtener colores y configuración de los parámetros de la herramienta
-            const borderColor = toolParameters.borderColor || null;
-            const fillColor = toolParameters.fillColor || color; // Usar color principal como fallback
-            const borderWidth = toolParameters.borderWidth || 0;
-            const borderRadius = toolParameters.borderRadius || 0;
 
             drawRoundedRect(
               ctx,
@@ -3462,14 +3890,21 @@ useEffect(() => {
             viewportPixelCoords.y
           );
 
-          drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
+          const borderColor = toolParameters.borderColor || null;
+          const fillColor = toolParameters.fillColor || color;
+          const borderWidth = toolParameters.borderWidth || 0;
+
+          const pad = Math.max(borderWidth, 1) + 2;
+          const sx = triangleStartRef.current.x, sy = triangleStartRef.current.y;
+          const bbox = {
+            x: Math.min(sx, endCoords.x) - pad,
+            y: Math.min(sy, endCoords.y) - pad,
+            w: Math.abs(endCoords.x - sx) + pad * 2,
+            h: Math.abs(endCoords.y - sy) + pad * 2,
+          };
+
+          commitShapeWithHistory(activeLayerId, currentFrame, bbox, withIsolationCheck((ctx) => {
             ctx.globalCompositeOperation = "source-over";
-
-            // Obtener colores y configuración de los parámetros de la herramienta
-            const borderColor = toolParameters.borderColor || null;
-            const fillColor = toolParameters.fillColor || color; // Usar color principal como fallback
-            const borderWidth = toolParameters.borderWidth || 0;
-
             drawTriangle(
               ctx,
               triangleStartRef.current,
@@ -3505,29 +3940,26 @@ useEffect(() => {
             viewportPixelCoords.y
           );
 
-          drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
+          const deltaX = endCoords.x - circleStartRef.current.x;
+          const deltaY = endCoords.y - circleStartRef.current.y;
+          const radius = Math.round(Math.sqrt(deltaX * deltaX + deltaY * deltaY));
+
+          const borderColor = toolParameters.borderColor || null;
+          const fillColor = toolParameters.fillColor || color;
+          const borderWidth = toolParameters.borderWidth || 0;
+
+          const pad = Math.max(borderWidth, 1) + 2;
+          const cx = circleStartRef.current.x, cy = circleStartRef.current.y;
+          const bbox = {
+            x: cx - radius - pad,
+            y: cy - radius - pad,
+            w: radius * 2 + pad * 2,
+            h: radius * 2 + pad * 2,
+          };
+
+          commitShapeWithHistory(activeLayerId, currentFrame, bbox, withIsolationCheck((ctx) => {
             ctx.globalCompositeOperation = "source-over";
-
-            const deltaX = endCoords.x - circleStartRef.current.x;
-            const deltaY = endCoords.y - circleStartRef.current.y;
-            const radius = Math.round(
-              Math.sqrt(deltaX * deltaX + deltaY * deltaY)
-            );
-
-            // Obtener colores y configuración de los parámetros de la herramienta
-            const borderColor = toolParameters.borderColor || null;
-            const fillColor = toolParameters.fillColor || color;
-            const borderWidth = toolParameters.borderWidth || 0;
-
-            drawCircle(
-              ctx,
-              circleStartRef.current.x,
-              circleStartRef.current.y,
-              radius,
-              borderWidth,
-              borderColor,
-              fillColor
-            );
+            drawCircle(ctx, cx, cy, radius, borderWidth, borderColor, fillColor);
           }));
 
           circleStartRef.current = null;
@@ -3553,18 +3985,25 @@ useEffect(() => {
             viewportPixelCoords.y
           );
 
-          drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
+          const borderColor = toolParameters.borderColor || null;
+          const fillColor = toolParameters.fillColor || color;
+          const borderWidth = toolParameters.borderWidth || 0;
+
+          const pad = Math.max(borderWidth, 1) + 2;
+          const sx = ellipseStartRef.current.x, sy = ellipseStartRef.current.y;
+          const bbox = {
+            x: Math.min(sx, endCoords.x) - pad,
+            y: Math.min(sy, endCoords.y) - pad,
+            w: Math.abs(endCoords.x - sx) + pad * 2,
+            h: Math.abs(endCoords.y - sy) + pad * 2,
+          };
+
+          commitShapeWithHistory(activeLayerId, currentFrame, bbox, withIsolationCheck((ctx) => {
             ctx.globalCompositeOperation = "source-over";
-
-            // Obtener colores y configuración de los parámetros de la herramienta
-            const borderColor = toolParameters.borderColor || null;
-            const fillColor = toolParameters.fillColor || color;
-            const borderWidth = toolParameters.borderWidth || 0;
-
             drawEllipse(
               ctx,
-              ellipseStartRef.current.x,
-              ellipseStartRef.current.y,
+              sx,
+              sy,
               endCoords.x,
               endCoords.y,
               borderWidth,
@@ -3597,23 +4036,28 @@ useEffect(() => {
             viewportPixelCoords.y
           );
 
-          drawOnLayer(activeLayerId, withIsolationCheck((ctx) => {
+          const centerX = polygonStartRef.current.x;
+          const centerY = polygonStartRef.current.y;
+          const dxP = endCoords.x - centerX;
+          const dyP = endCoords.y - centerY;
+          const radius = Math.sqrt(dxP * dxP + dyP * dyP);
+
+          const borderColor = toolParameters.borderColor || null;
+          const fillColor = toolParameters.fillColor || color;
+          const borderWidth = toolParameters.borderWidth || 0;
+          const vertices = toolParameters.vertices || 6;
+          const rotation = ((toolParameters.rotation || 0) * Math.PI) / 180;
+
+          const pad = Math.max(borderWidth, 1) + 2;
+          const bbox = {
+            x: centerX - radius - pad,
+            y: centerY - radius - pad,
+            w: radius * 2 + pad * 2,
+            h: radius * 2 + pad * 2,
+          };
+
+          commitShapeWithHistory(activeLayerId, currentFrame, bbox, withIsolationCheck((ctx) => {
             ctx.globalCompositeOperation = "source-over";
-
-            // Calcular centro y radio
-            const centerX = polygonStartRef.current.x;
-            const centerY = polygonStartRef.current.y;
-            const dx = endCoords.x - centerX;
-            const dy = endCoords.y - centerY;
-            const radius = Math.sqrt(dx * dx + dy * dy);
-
-            // Obtener parámetros de la herramienta
-            const borderColor = toolParameters.borderColor || null;
-            const fillColor = toolParameters.fillColor || color;
-            const borderWidth = toolParameters.borderWidth || 0;
-            const vertices = toolParameters.vertices || 6; // Default hexágono
-            const rotation = ((toolParameters.rotation || 0) * Math.PI) / 180; // Convertir a radianes
-
             drawPolygon(
               ctx,
               centerX,
@@ -3963,19 +4407,28 @@ useEffect(() => {
                   // Modo manual: usar ImageData cacheado
                   const data = cachedImageDataRef.current.data;
                   const canvasWidth = canvas.width;
-          
+                  let brushMinX = Infinity, brushMinY = Infinity, brushMaxX = -Infinity, brushMaxY = -Infinity;
+
                   for (const pixel of customBrushData) {
                     const pixelX = centerX + pixel.x;
                     const pixelY = centerY + pixel.y;
-          
+
                     if (pixelX < 0 || pixelX >= canvas.width || pixelY < 0 || pixelY >= canvas.height)
                       continue;
-          
+
                     const index = (pixelY * canvasWidth + pixelX) * 4;
                     data[index] = pixel.color.r;
                     data[index + 1] = pixel.color.g;
                     data[index + 2] = pixel.color.b;
                     data[index + 3] = pixel.color.a * opacity;
+
+                    if (pixelX < brushMinX) brushMinX = pixelX;
+                    if (pixelY < brushMinY) brushMinY = pixelY;
+                    if (pixelX > brushMaxX) brushMaxX = pixelX;
+                    if (pixelY > brushMaxY) brushMaxY = pixelY;
+                  }
+                  if (brushMinX !== Infinity) {
+                    markCachedImageDataDirty(brushMinX, brushMinY, brushMaxX - brushMinX + 1, brushMaxY - brushMinY + 1);
                   }
                 }
                 return true;
@@ -4050,7 +4503,7 @@ useEffect(() => {
                 ctx.globalAlpha = 1;
               } else {
                 // Para modo manual, aplicar el ImageData modificado
-                ctx.putImageData(cachedImageDataRef.current, 0, 0);
+                flushCachedImageDataToCanvas(ctx);
               }
           
               return; // Salir temprano si se usó brocha personalizada
@@ -4260,7 +4713,7 @@ useEffect(() => {
           
               const drawWithMirrors = (x, y) => {
                 drawDot(x, y);
-          
+
                 if (mirrorState.vertical) {
                   drawDot(x, reflectVertical(y));
                 }
@@ -4271,11 +4724,43 @@ useEffect(() => {
                   drawDot(reflectHorizontal(x), reflectVertical(y));
                 }
               };
-          
+
+              // Dirty-rect: bbox del path completo + reflejos + padding del pincel.
+              // Permite que flushCachedImageDataToCanvas use putImageData con dirty
+              // rect al final, evitando subir los ~67MB del canvas completo (4096²).
+              {
+                const pad = Math.ceil(maxRadius) + 1;
+                let dMinX = Infinity, dMinY = Infinity, dMaxX = -Infinity, dMaxY = -Infinity;
+                const accumPoint = (px, py) => {
+                  if (px - pad < dMinX) dMinX = px - pad;
+                  if (py - pad < dMinY) dMinY = py - pad;
+                  if (px + pad > dMaxX) dMaxX = px + pad;
+                  if (py + pad > dMaxY) dMaxY = py + pad;
+                };
+                for (let k = 0; k < pathCoordinates.length; k++) {
+                  const p = pathCoordinates[k];
+                  accumPoint(p.x, p.y);
+                  if (mirrorState.vertical) accumPoint(p.x, reflectVertical(p.y));
+                  if (mirrorState.horizontal) accumPoint(reflectHorizontal(p.x), p.y);
+                  if (mirrorState.vertical && mirrorState.horizontal) {
+                    accumPoint(reflectHorizontal(p.x), reflectVertical(p.y));
+                  }
+                }
+                if (dMinX !== Infinity) {
+                  const dx = Math.max(0, Math.floor(dMinX));
+                  const dy = Math.max(0, Math.floor(dMinY));
+                  const dEndX = Math.min(canvas.width - 1, Math.ceil(dMaxX));
+                  const dEndY = Math.min(canvas.height - 1, Math.ceil(dMaxY));
+                  if (dEndX >= dx && dEndY >= dy) {
+                    markCachedImageDataDirty(dx, dy, dEndX - dx + 1, dEndY - dy + 1);
+                  }
+                }
+              }
+
               // PROCESAR TODO EL PATH
               for (let i = 0; i < pathCoordinates.length; i++) {
                 const currentPoint = pathCoordinates[i]; // Ya son coordenadas de canvas
-                
+
                 if (i === 0) {
                   // Primer punto del path
                   const gridPos = getGridPosition(currentPoint.x, currentPoint.y, true);
@@ -4285,23 +4770,23 @@ useEffect(() => {
                 } else {
                   // Puntos subsecuentes - interpolar desde el punto anterior
                   const lastPoint = pathCoordinates[i - 1];
-          
+
                   // Bresenham optimizado
                   let x0 = lastPoint.x, y0 = lastPoint.y;
                   let x1 = currentPoint.x, y1 = currentPoint.y;
                   let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
                   let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
                   let err = dx + dy;
-          
+
                   while (true) {
                     // Obtener la posición de grilla para esta coordenada
                     const gridPos = getGridPosition(x0, y0, false);
                     if (gridPos.shouldPaint) {
                       drawWithMirrors(gridPos.x, gridPos.y);
                     }
-          
+
                     if (x0 === x1 && y0 === y1) break;
-          
+
                     const e2 = 2 * err;
                     if (e2 >= dy) {
                       err += dy;
@@ -4314,9 +4799,9 @@ useEffect(() => {
                   }
                 }
               }
-          
+
               // Una sola llamada a putImageData al final
-              ctx.putImageData(cachedImageDataRef.current, 0, 0);
+              flushCachedImageDataToCanvas(ctx);
             }
           }));
     
@@ -4377,22 +4862,46 @@ useEffect(() => {
     if (tool === TOOLS.paint2) {
       drawOnLayer(activeLayerId, (ctx) => {
         const canvas = ctx.canvas;
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-  
         const width = toolParameters.width;
-        const half = Math.floor(width / 2);
-  
+        const offset = Math.floor(width / 2);
+
+        // Calcular bbox del trazo (punto actual + anterior si existe) con padding del pincel.
+        // Antes este tool leía todo el canvas con getImageData(0, 0, w, h) en cada
+        // pointer move, escalando O(w*h) con el tamaño total del proyecto.
+        const x1 = canvasCoords.x, y1 = canvasCoords.y;
+        const last = lastPixelRef.current
+          ? viewportToCanvasCoords(lastPixelRef.current.x, lastPixelRef.current.y)
+          : null;
+        const x0 = last ? last.x : x1;
+        const y0 = last ? last.y : y1;
+
+        const minPx = Math.min(x0, x1) - offset;
+        const minPy = Math.min(y0, y1) - offset;
+        const maxPx = Math.max(x0, x1) - offset + width - 1;
+        const maxPy = Math.max(y0, y1) - offset + width - 1;
+
+        const regionX = Math.max(0, minPx);
+        const regionY = Math.max(0, minPy);
+        const regionEndX = Math.min(canvas.width - 1, maxPx);
+        const regionEndY = Math.min(canvas.height - 1, maxPy);
+        const regionW = regionEndX - regionX + 1;
+        const regionH = regionEndY - regionY + 1;
+
+        if (regionW <= 0 || regionH <= 0) return;
+
+        const imageData = ctx.getImageData(regionX, regionY, regionW, regionH);
+        const data = imageData.data;
+
         const drawDot = (x, y) => {
-          const offset = Math.floor(width / 2);
           for (let dy = 0; dy < width; dy++) {
             for (let dx = 0; dx < width; dx++) {
               const px = x + dx - offset;
               const py = y + dy - offset;
-        
-              if (px < 0 || px >= canvas.width || py < 0 || py >= canvas.height) continue;
-        
-              const index = (py * canvas.width + px) * 4;
+
+              // bounds del sub-rect (no del canvas completo)
+              if (px < regionX || px > regionEndX || py < regionY || py > regionEndY) continue;
+
+              const index = ((py - regionY) * regionW + (px - regionX)) * 4;
               data[index] = color.r;
               data[index + 1] = color.g;
               data[index + 2] = color.b;
@@ -4400,17 +4909,15 @@ useEffect(() => {
             }
           }
         };
-  
-        if (!lastPixelRef.current) {
-          drawDot(canvasCoords.x, canvasCoords.y);
+
+        if (!last) {
+          drawDot(x1, y1);
         } else {
           // Bresenham's line
-          const last = viewportToCanvasCoords(lastPixelRef.current.x, lastPixelRef.current.y);
-          let x0 = last.x, y0 = last.y, x1 = canvasCoords.x, y1 = canvasCoords.y;
           let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
           let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy;
           let x = x0, y = y0;
-  
+
           while (true) {
             drawDot(x, y);
             if (x === x1 && y === y1) break;
@@ -4419,8 +4926,8 @@ useEffect(() => {
             if (e2 <= dx) { err += dx; y += sy; }
           }
         }
-  
-        ctx.putImageData(imageData, 0, 0);
+
+        ctx.putImageData(imageData, regionX, regionY);
       });
     }
 
@@ -4720,7 +5227,7 @@ useEffect(() => {
         ctx.globalAlpha = 1;
       } else {
         // Para modo manual, aplicar el ImageData modificado
-        ctx.putImageData(cachedImageDataRef.current, 0, 0);
+        flushCachedImageDataToCanvas(ctx);
       }
 
       return; // Salir temprano si se usó brocha personalizada
@@ -4850,6 +5357,46 @@ useEffect(() => {
      }
       const data = cachedImageDataRef.current.data;
       const canvasWidth = canvas.width;
+
+      // Dirty-rect: bbox del segmento + puntos reflejados + padding. Se acumula
+      // en cachedImageDataDirtyRectRef entre pointer moves; el flush al final
+      // solo sube esa región a GPU en vez de los ~67MB del canvas completo.
+      {
+        const last = lastPixelRef.current
+          ? viewportToCanvasCoords(lastPixelRef.current.x, lastPixelRef.current.y)
+          : null;
+        const px1 = finalCanvasCoords.x, py1 = finalCanvasCoords.y;
+        const px0 = last ? last.x : px1;
+        const py0 = last ? last.y : py1;
+        const pad = Math.ceil(maxRadius) + 1;
+        const pts = [[px0, py0], [px1, py1]];
+        if (mirrorState.vertical) {
+          pts.push([px0, reflectVertical(py0)], [px1, reflectVertical(py1)]);
+        }
+        if (mirrorState.horizontal) {
+          pts.push([reflectHorizontal(px0), py0], [reflectHorizontal(px1), py1]);
+        }
+        if (mirrorState.vertical && mirrorState.horizontal) {
+          pts.push(
+            [reflectHorizontal(px0), reflectVertical(py0)],
+            [reflectHorizontal(px1), reflectVertical(py1)]
+          );
+        }
+        let dMinX = Infinity, dMinY = Infinity, dMaxX = -Infinity, dMaxY = -Infinity;
+        for (const [px, py] of pts) {
+          if (px - pad < dMinX) dMinX = px - pad;
+          if (py - pad < dMinY) dMinY = py - pad;
+          if (px + pad > dMaxX) dMaxX = px + pad;
+          if (py + pad > dMaxY) dMaxY = py + pad;
+        }
+        const dx = Math.max(0, Math.floor(dMinX));
+        const dy = Math.max(0, Math.floor(dMinY));
+        const dEndX = Math.min(canvas.width - 1, Math.ceil(dMaxX));
+        const dEndY = Math.min(canvas.height - 1, Math.ceil(dMaxY));
+        if (dEndX >= dx && dEndY >= dy) {
+          markCachedImageDataDirty(dx, dy, dEndX - dx + 1, dEndY - dy + 1);
+        }
+      }
 
       // Precalcular valores para blur
       let coreRadius, blurEnabled;
@@ -4993,7 +5540,7 @@ useEffect(() => {
       }
 
       // Una sola llamada a putImageData al final
-      ctx.putImageData(cachedImageDataRef.current, 0, 0);
+      flushCachedImageDataToCanvas(ctx);
     }
   }));
 
@@ -5308,144 +5855,161 @@ useEffect(() => {
           ctx.globalCompositeOperation = originalComposite;
           ctx.globalAlpha = 1;
         } else {
-          // MODO MANUAL ULTRA-OPTIMIZADO Y CORREGIDO
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const data = imageData.data;
-          const canvasWidth = canvas.width;
+          // MODO MANUAL ULTRA-OPTIMIZADO Y CORREGIDO (dirty rect)
+          // Antes leía todo el canvas en cada pointer move con getImageData(0, 0, w, h),
+          // lo que escalaba O(w*h) con el tamaño total del proyecto. Ahora calculamos
+          // el bbox del segmento + puntos reflejados por mirror, con padding del pincel,
+          // y solo leemos/escribimos esa sub-región.
+          const x1 = canvasCoords.x, y1 = canvasCoords.y;
+          const last = lastPixelRef.current
+            ? viewportToCanvasCoords(lastPixelRef.current.x, lastPixelRef.current.y)
+            : null;
+          const x0 = last ? last.x : x1;
+          const y0 = last ? last.y : y1;
 
-          // Precalcular valores para blur
-          let coreRadius, blurEnabled;
-          if (blur > 0) {
-            coreRadius = Math.max(0.5, (1 - blur) * maxRadius);
-            blurEnabled = true;
-          } else {
-            blurEnabled = false;
+          const bboxPoints = [[x0, y0], [x1, y1]];
+          if (mirrorState.vertical) {
+            bboxPoints.push([x0, reflectVertical(y0)], [x1, reflectVertical(y1)]);
           }
-
-          const drawDot = (x, y) => {
-            // Validar que esté dentro del canvas completo, no solo del viewport
-            if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height)
-              return;
-
-            const startX = x - halfWidth;
-            const startY = y - halfWidth;
-
-            if (!blurEnabled) {
-              // Sin blur: optimización máxima con loop desenrollado cuando es posible
-              const endX = Math.min(startX + width, canvas.width);
-              const endY = Math.min(startY + width, canvas.height);
-              const actualStartX = Math.max(startX, 0);
-              const actualStartY = Math.max(startY, 0);
-
-              for (let py = actualStartY; py < endY; py++) {
-                const rowIndex = py * canvasWidth * 4;
-                for (let px = actualStartX; px < endX; px++) {
-                  const index = rowIndex + px * 4;
-                  data[index] = selectedColor.r;
-                  data[index + 1] = selectedColor.g;
-                  data[index + 2] = selectedColor.b;
-                  data[index + 3] = selectedColor.a * 255;
-                }
-              }
-            } else {
-              // Con blur: optimizado con precálculos
-              const maxRadiusSquared = maxRadius * maxRadius;
-              const coreRadiusSquared = coreRadius * coreRadius;
-              const blurRange = maxRadius - coreRadius;
-              const minAlpha = selectedColor.a * 0.1;
-              const alphaRange = selectedColor.a - minAlpha;
-
-              for (let dy = 0; dy < width; dy++) {
-                for (let dx = 0; dx < width; dx++) {
-                  const px = startX + dx;
-                  const py = startY + dy;
-
-                  if (
-                    px < 0 ||
-                    px >= canvas.width ||
-                    py < 0 ||
-                    py >= canvas.height
-                  )
-                    continue;
-
-                  // Calcular distancia al cuadrado (evitar sqrt cuando sea posible)
-                  const deltaX = px - x;
-                  const deltaY = py - y;
-                  const distanceSquared = deltaX * deltaX + deltaY * deltaY;
-
-                  if (distanceSquared > maxRadiusSquared) continue;
-
-                  let alpha;
-                  if (distanceSquared <= coreRadiusSquared) {
-                    alpha = selectedColor.a;
-                  } else {
-                    const distance = Math.sqrt(distanceSquared);
-                    const blurProgress = (distance - coreRadius) / blurRange;
-                    alpha = selectedColor.a * (1 - blurProgress * 0.9); // 0.9 = (1 - 0.1)
-                  }
-
-                  const index = (py * canvasWidth + px) * 4;
-                  data[index] = selectedColor.r;
-                  data[index + 1] = selectedColor.g;
-                  data[index + 2] = selectedColor.b;
-                  data[index + 3] = alpha * 255;
-                }
-              }
-            }
-          };
-
-          const drawWithMirrors = (x, y) => {
-            // Siempre dibujar todos los puntos, la validación se hace en drawDot
-            drawDot(x, y);
-
-            if (mirrorState.vertical) {
-              drawDot(x, reflectVertical(y));
-            }
-            if (mirrorState.horizontal) {
-              drawDot(reflectHorizontal(x), y);
-            }
-            if (mirrorState.vertical && mirrorState.horizontal) {
-              drawDot(reflectHorizontal(x), reflectVertical(y));
-            }
-          };
-
-          if (!lastPixelRef.current) {
-            drawWithMirrors(canvasCoords.x, canvasCoords.y);
-          } else {
-            const last = viewportToCanvasCoords(
-              lastPixelRef.current.x,
-              lastPixelRef.current.y
+          if (mirrorState.horizontal) {
+            bboxPoints.push([reflectHorizontal(x0), y0], [reflectHorizontal(x1), y1]);
+          }
+          if (mirrorState.vertical && mirrorState.horizontal) {
+            bboxPoints.push(
+              [reflectHorizontal(x0), reflectVertical(y0)],
+              [reflectHorizontal(x1), reflectVertical(y1)]
             );
-
-            // Bresenham optimizado
-            let x0 = last.x,
-              y0 = last.y;
-            let x1 = canvasCoords.x,
-              y1 = canvasCoords.y;
-            let dx = Math.abs(x1 - x0),
-              dy = -Math.abs(y1 - y0);
-            let sx = x0 < x1 ? 1 : -1,
-              sy = y0 < y1 ? 1 : -1;
-            let err = dx + dy;
-
-            while (true) {
-              drawWithMirrors(x0, y0);
-              if (x0 === x1 && y0 === y1) break;
-
-              const e2 = 2 * err;
-              if (e2 >= dy) {
-                err += dy;
-                x0 += sx;
-              }
-              if (e2 <= dx) {
-                err += dx;
-                y0 += sy;
-              }
-            }
           }
 
-          // Una sola llamada a putImageData al final
-          ctx.putImageData(imageData, 0, 0);
+          // padding = maxRadius (cubre blur) + 1 por seguridad en redondeos
+          const padding = Math.ceil(maxRadius) + 1;
+          let minPx = Infinity, minPy = Infinity, maxPx = -Infinity, maxPy = -Infinity;
+          for (const [px, py] of bboxPoints) {
+            if (px - padding < minPx) minPx = px - padding;
+            if (py - padding < minPy) minPy = py - padding;
+            if (px + padding > maxPx) maxPx = px + padding;
+            if (py + padding > maxPy) maxPy = py + padding;
+          }
+
+          const regionX = Math.max(0, Math.floor(minPx));
+          const regionY = Math.max(0, Math.floor(minPy));
+          const regionEndX = Math.min(canvas.width - 1, Math.ceil(maxPx));
+          const regionEndY = Math.min(canvas.height - 1, Math.ceil(maxPy));
+          const regionW = regionEndX - regionX + 1;
+          const regionH = regionEndY - regionY + 1;
+
+          if (regionW > 0 && regionH > 0) {
+            const imageData = ctx.getImageData(regionX, regionY, regionW, regionH);
+            const data = imageData.data;
+
+            // Precalcular valores para blur
+            let coreRadius, blurEnabled;
+            if (blur > 0) {
+              coreRadius = Math.max(0.5, (1 - blur) * maxRadius);
+              blurEnabled = true;
+            } else {
+              blurEnabled = false;
+            }
+
+            const drawDot = (x, y) => {
+              const startX = x - halfWidth;
+              const startY = y - halfWidth;
+
+              if (!blurEnabled) {
+                // Clamp al sub-rect
+                const endX = Math.min(startX + width, regionEndX + 1);
+                const endY = Math.min(startY + width, regionEndY + 1);
+                const actualStartX = Math.max(startX, regionX);
+                const actualStartY = Math.max(startY, regionY);
+
+                for (let py = actualStartY; py < endY; py++) {
+                  const rowIndex = (py - regionY) * regionW * 4;
+                  for (let px = actualStartX; px < endX; px++) {
+                    const index = rowIndex + (px - regionX) * 4;
+                    data[index] = selectedColor.r;
+                    data[index + 1] = selectedColor.g;
+                    data[index + 2] = selectedColor.b;
+                    data[index + 3] = selectedColor.a * 255;
+                  }
+                }
+              } else {
+                const maxRadiusSquared = maxRadius * maxRadius;
+                const coreRadiusSquared = coreRadius * coreRadius;
+                const blurRange = maxRadius - coreRadius;
+
+                for (let dy = 0; dy < width; dy++) {
+                  for (let dx = 0; dx < width; dx++) {
+                    const px = startX + dx;
+                    const py = startY + dy;
+
+                    if (px < regionX || px > regionEndX || py < regionY || py > regionEndY) continue;
+
+                    const deltaX = px - x;
+                    const deltaY = py - y;
+                    const distanceSquared = deltaX * deltaX + deltaY * deltaY;
+
+                    if (distanceSquared > maxRadiusSquared) continue;
+
+                    let alpha;
+                    if (distanceSquared <= coreRadiusSquared) {
+                      alpha = selectedColor.a;
+                    } else {
+                      const distance = Math.sqrt(distanceSquared);
+                      const blurProgress = (distance - coreRadius) / blurRange;
+                      alpha = selectedColor.a * (1 - blurProgress * 0.9); // 0.9 = (1 - 0.1)
+                    }
+
+                    const index = ((py - regionY) * regionW + (px - regionX)) * 4;
+                    data[index] = selectedColor.r;
+                    data[index + 1] = selectedColor.g;
+                    data[index + 2] = selectedColor.b;
+                    data[index + 3] = alpha * 255;
+                  }
+                }
+              }
+            };
+
+            const drawWithMirrors = (x, y) => {
+              drawDot(x, y);
+              if (mirrorState.vertical) {
+                drawDot(x, reflectVertical(y));
+              }
+              if (mirrorState.horizontal) {
+                drawDot(reflectHorizontal(x), y);
+              }
+              if (mirrorState.vertical && mirrorState.horizontal) {
+                drawDot(reflectHorizontal(x), reflectVertical(y));
+              }
+            };
+
+            if (!last) {
+              drawWithMirrors(x1, y1);
+            } else {
+              // Bresenham optimizado
+              let cx = x0, cy = y0;
+              let dx = Math.abs(x1 - cx), dy = -Math.abs(y1 - cy);
+              let sx = cx < x1 ? 1 : -1, sy = cy < y1 ? 1 : -1;
+              let err = dx + dy;
+
+              while (true) {
+                drawWithMirrors(cx, cy);
+                if (cx === x1 && cy === y1) break;
+
+                const e2 = 2 * err;
+                if (e2 >= dy) {
+                  err += dy;
+                  cx += sx;
+                }
+                if (e2 <= dx) {
+                  err += dx;
+                  cy += sy;
+                }
+              }
+            }
+
+            // Una sola llamada a putImageData al final, con offset del sub-rect
+            ctx.putImageData(imageData, regionX, regionY);
+          }
         }
       }));
     }
@@ -5752,144 +6316,161 @@ useEffect(() => {
           ctx.globalCompositeOperation = originalComposite;
           ctx.globalAlpha = 1;
         } else {
-          // MODO MANUAL ULTRA-OPTIMIZADO Y CORREGIDO
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const data = imageData.data;
-          const canvasWidth = canvas.width;
+          // MODO MANUAL ULTRA-OPTIMIZADO Y CORREGIDO (dirty rect)
+          // Antes leía todo el canvas en cada pointer move con getImageData(0, 0, w, h),
+          // lo que escalaba O(w*h) con el tamaño total del proyecto. Ahora calculamos
+          // el bbox del segmento + puntos reflejados por mirror, con padding del pincel,
+          // y solo leemos/escribimos esa sub-región.
+          const x1 = canvasCoords.x, y1 = canvasCoords.y;
+          const last = lastPixelRef.current
+            ? viewportToCanvasCoords(lastPixelRef.current.x, lastPixelRef.current.y)
+            : null;
+          const x0 = last ? last.x : x1;
+          const y0 = last ? last.y : y1;
 
-          // Precalcular valores para blur
-          let coreRadius, blurEnabled;
-          if (blur > 0) {
-            coreRadius = Math.max(0.5, (1 - blur) * maxRadius);
-            blurEnabled = true;
-          } else {
-            blurEnabled = false;
+          const bboxPoints = [[x0, y0], [x1, y1]];
+          if (mirrorState.vertical) {
+            bboxPoints.push([x0, reflectVertical(y0)], [x1, reflectVertical(y1)]);
           }
-
-          const drawDot = (x, y) => {
-            // Validar que esté dentro del canvas completo, no solo del viewport
-            if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height)
-              return;
-
-            const startX = x - halfWidth;
-            const startY = y - halfWidth;
-
-            if (!blurEnabled) {
-              // Sin blur: optimización máxima con loop desenrollado cuando es posible
-              const endX = Math.min(startX + width, canvas.width);
-              const endY = Math.min(startY + width, canvas.height);
-              const actualStartX = Math.max(startX, 0);
-              const actualStartY = Math.max(startY, 0);
-
-              for (let py = actualStartY; py < endY; py++) {
-                const rowIndex = py * canvasWidth * 4;
-                for (let px = actualStartX; px < endX; px++) {
-                  const index = rowIndex + px * 4;
-                  data[index] = selectedColor.r;
-                  data[index + 1] = selectedColor.g;
-                  data[index + 2] = selectedColor.b;
-                  data[index + 3] = selectedColor.a * 255;
-                }
-              }
-            } else {
-              // Con blur: optimizado con precálculos
-              const maxRadiusSquared = maxRadius * maxRadius;
-              const coreRadiusSquared = coreRadius * coreRadius;
-              const blurRange = maxRadius - coreRadius;
-              const minAlpha = selectedColor.a * 0.1;
-              const alphaRange = selectedColor.a - minAlpha;
-
-              for (let dy = 0; dy < width; dy++) {
-                for (let dx = 0; dx < width; dx++) {
-                  const px = startX + dx;
-                  const py = startY + dy;
-
-                  if (
-                    px < 0 ||
-                    px >= canvas.width ||
-                    py < 0 ||
-                    py >= canvas.height
-                  )
-                    continue;
-
-                  // Calcular distancia al cuadrado (evitar sqrt cuando sea posible)
-                  const deltaX = px - x;
-                  const deltaY = py - y;
-                  const distanceSquared = deltaX * deltaX + deltaY * deltaY;
-
-                  if (distanceSquared > maxRadiusSquared) continue;
-
-                  let alpha;
-                  if (distanceSquared <= coreRadiusSquared) {
-                    alpha = selectedColor.a;
-                  } else {
-                    const distance = Math.sqrt(distanceSquared);
-                    const blurProgress = (distance - coreRadius) / blurRange;
-                    alpha = selectedColor.a * (1 - blurProgress * 0.9); // 0.9 = (1 - 0.1)
-                  }
-
-                  const index = (py * canvasWidth + px) * 4;
-                  data[index] = selectedColor.r;
-                  data[index + 1] = selectedColor.g;
-                  data[index + 2] = selectedColor.b;
-                  data[index + 3] = alpha * 255;
-                }
-              }
-            }
-          };
-
-          const drawWithMirrors = (x, y) => {
-            // Siempre dibujar todos los puntos, la validación se hace en drawDot
-            drawDot(x, y);
-
-            if (mirrorState.vertical) {
-              drawDot(x, reflectVertical(y));
-            }
-            if (mirrorState.horizontal) {
-              drawDot(reflectHorizontal(x), y);
-            }
-            if (mirrorState.vertical && mirrorState.horizontal) {
-              drawDot(reflectHorizontal(x), reflectVertical(y));
-            }
-          };
-
-          if (!lastPixelRef.current) {
-            drawWithMirrors(canvasCoords.x, canvasCoords.y);
-          } else {
-            const last = viewportToCanvasCoords(
-              lastPixelRef.current.x,
-              lastPixelRef.current.y
+          if (mirrorState.horizontal) {
+            bboxPoints.push([reflectHorizontal(x0), y0], [reflectHorizontal(x1), y1]);
+          }
+          if (mirrorState.vertical && mirrorState.horizontal) {
+            bboxPoints.push(
+              [reflectHorizontal(x0), reflectVertical(y0)],
+              [reflectHorizontal(x1), reflectVertical(y1)]
             );
-
-            // Bresenham optimizado
-            let x0 = last.x,
-              y0 = last.y;
-            let x1 = canvasCoords.x,
-              y1 = canvasCoords.y;
-            let dx = Math.abs(x1 - x0),
-              dy = -Math.abs(y1 - y0);
-            let sx = x0 < x1 ? 1 : -1,
-              sy = y0 < y1 ? 1 : -1;
-            let err = dx + dy;
-
-            while (true) {
-              drawWithMirrors(x0, y0);
-              if (x0 === x1 && y0 === y1) break;
-
-              const e2 = 2 * err;
-              if (e2 >= dy) {
-                err += dy;
-                x0 += sx;
-              }
-              if (e2 <= dx) {
-                err += dx;
-                y0 += sy;
-              }
-            }
           }
 
-          // Una sola llamada a putImageData al final
-          ctx.putImageData(imageData, 0, 0);
+          // padding = maxRadius (cubre blur) + 1 por seguridad en redondeos
+          const padding = Math.ceil(maxRadius) + 1;
+          let minPx = Infinity, minPy = Infinity, maxPx = -Infinity, maxPy = -Infinity;
+          for (const [px, py] of bboxPoints) {
+            if (px - padding < minPx) minPx = px - padding;
+            if (py - padding < minPy) minPy = py - padding;
+            if (px + padding > maxPx) maxPx = px + padding;
+            if (py + padding > maxPy) maxPy = py + padding;
+          }
+
+          const regionX = Math.max(0, Math.floor(minPx));
+          const regionY = Math.max(0, Math.floor(minPy));
+          const regionEndX = Math.min(canvas.width - 1, Math.ceil(maxPx));
+          const regionEndY = Math.min(canvas.height - 1, Math.ceil(maxPy));
+          const regionW = regionEndX - regionX + 1;
+          const regionH = regionEndY - regionY + 1;
+
+          if (regionW > 0 && regionH > 0) {
+            const imageData = ctx.getImageData(regionX, regionY, regionW, regionH);
+            const data = imageData.data;
+
+            // Precalcular valores para blur
+            let coreRadius, blurEnabled;
+            if (blur > 0) {
+              coreRadius = Math.max(0.5, (1 - blur) * maxRadius);
+              blurEnabled = true;
+            } else {
+              blurEnabled = false;
+            }
+
+            const drawDot = (x, y) => {
+              const startX = x - halfWidth;
+              const startY = y - halfWidth;
+
+              if (!blurEnabled) {
+                // Clamp al sub-rect
+                const endX = Math.min(startX + width, regionEndX + 1);
+                const endY = Math.min(startY + width, regionEndY + 1);
+                const actualStartX = Math.max(startX, regionX);
+                const actualStartY = Math.max(startY, regionY);
+
+                for (let py = actualStartY; py < endY; py++) {
+                  const rowIndex = (py - regionY) * regionW * 4;
+                  for (let px = actualStartX; px < endX; px++) {
+                    const index = rowIndex + (px - regionX) * 4;
+                    data[index] = selectedColor.r;
+                    data[index + 1] = selectedColor.g;
+                    data[index + 2] = selectedColor.b;
+                    data[index + 3] = selectedColor.a * 255;
+                  }
+                }
+              } else {
+                const maxRadiusSquared = maxRadius * maxRadius;
+                const coreRadiusSquared = coreRadius * coreRadius;
+                const blurRange = maxRadius - coreRadius;
+
+                for (let dy = 0; dy < width; dy++) {
+                  for (let dx = 0; dx < width; dx++) {
+                    const px = startX + dx;
+                    const py = startY + dy;
+
+                    if (px < regionX || px > regionEndX || py < regionY || py > regionEndY) continue;
+
+                    const deltaX = px - x;
+                    const deltaY = py - y;
+                    const distanceSquared = deltaX * deltaX + deltaY * deltaY;
+
+                    if (distanceSquared > maxRadiusSquared) continue;
+
+                    let alpha;
+                    if (distanceSquared <= coreRadiusSquared) {
+                      alpha = selectedColor.a;
+                    } else {
+                      const distance = Math.sqrt(distanceSquared);
+                      const blurProgress = (distance - coreRadius) / blurRange;
+                      alpha = selectedColor.a * (1 - blurProgress * 0.9); // 0.9 = (1 - 0.1)
+                    }
+
+                    const index = ((py - regionY) * regionW + (px - regionX)) * 4;
+                    data[index] = selectedColor.r;
+                    data[index + 1] = selectedColor.g;
+                    data[index + 2] = selectedColor.b;
+                    data[index + 3] = alpha * 255;
+                  }
+                }
+              }
+            };
+
+            const drawWithMirrors = (x, y) => {
+              drawDot(x, y);
+              if (mirrorState.vertical) {
+                drawDot(x, reflectVertical(y));
+              }
+              if (mirrorState.horizontal) {
+                drawDot(reflectHorizontal(x), y);
+              }
+              if (mirrorState.vertical && mirrorState.horizontal) {
+                drawDot(reflectHorizontal(x), reflectVertical(y));
+              }
+            };
+
+            if (!last) {
+              drawWithMirrors(x1, y1);
+            } else {
+              // Bresenham optimizado
+              let cx = x0, cy = y0;
+              let dx = Math.abs(x1 - cx), dy = -Math.abs(y1 - cy);
+              let sx = cx < x1 ? 1 : -1, sy = cy < y1 ? 1 : -1;
+              let err = dx + dy;
+
+              while (true) {
+                drawWithMirrors(cx, cy);
+                if (cx === x1 && cy === y1) break;
+
+                const e2 = 2 * err;
+                if (e2 >= dy) {
+                  err += dy;
+                  cx += sx;
+                }
+                if (e2 <= dx) {
+                  err += dx;
+                  cy += sy;
+                }
+              }
+            }
+
+            // Una sola llamada a putImageData al final, con offset del sub-rect
+            ctx.putImageData(imageData, regionX, regionY);
+          }
         }
       }));
     }
@@ -9445,12 +10026,16 @@ const cutSelection = useCallback(() => {
         saveCurrentFrameState,
         getFramesInfo,
         renameFrame,
+        syncWithCurrentFrame,
         toggleLayerVisibilityInFrame,
         getLayerVisibility,
         toggleOnionSkin,
         setOnionSkinConfig,
+        setOnionSkinFrameConfig,
         getOnionSkinFrameConfig,
+        getOnionSkinPresets,
         applyOnionSkinPreset,
+        getOnionSkinInfo,
         onionSkinEnabled,
         showOnionSkinForLayer,
         clearOnionSkinLayerFilter,
@@ -9483,18 +10068,30 @@ const cutSelection = useCallback(() => {
         clearTintCache,
       }),
     [
+      // `frozenProps` ya cubre currentFrame/activeLayerId/frameCount/layers/frames
+      // (con el pin-durante-drawing via isPressed). Lo demás son valores
+      // reactivos que SÍ consume el builder y antes no estaban — su ausencia
+      // causaba UI stale (preview no refrescaba dimensiones al cambiar zoom/
+      // viewport, onion-skin no se actualizaba al togglear, etc.).
       frozenProps,
       isPlaying,
       viewportOffset,
+      viewportWidth,
+      viewportHeight,
       zoom,
       framesResume,
       selectedPixels,
+      selectionActive,
+      pixelGroups,
+      selectedGroup,
       dragOffset,
       layers,
       eyeDropperColor,
       initialHeight,
       initialWidth,
       onionFramesConfig,
+      onionSkinEnabled,
+      onionSkinSettings,
     ]
   );
 
@@ -9552,12 +10149,16 @@ const cutSelection = useCallback(() => {
         saveCurrentFrameState,
         getFramesInfo,
         renameFrame,
+        syncWithCurrentFrame,
         toggleLayerVisibilityInFrame,
         getLayerVisibility,
         toggleOnionSkin,
         setOnionSkinConfig,
+        setOnionSkinFrameConfig,
         getOnionSkinFrameConfig,
+        getOnionSkinPresets,
         applyOnionSkinPreset,
+        getOnionSkinInfo,
         onionSkinEnabled,
         showOnionSkinForLayer,
         clearOnionSkinLayerFilter,
@@ -9581,17 +10182,26 @@ const cutSelection = useCallback(() => {
         eyeDropperColor,
       }),
     [
+      // Mismas deps que MemoizedLayerAnimation: ambos builders consumen el
+      // mismo conjunto de props reactivas (el wrapper es un espejo).
       frozenProps,
       isPlaying,
       viewportOffset,
+      viewportWidth,
+      viewportHeight,
       zoom,
       framesResume,
       selectedPixels,
+      selectionActive,
+      pixelGroups,
+      selectedGroup,
       dragOffset,
       layers,
       eyeDropperColor,
       initialHeight,
       initialWidth,
+      onionSkinEnabled,
+      onionSkinSettings,
     ]
   );
 
@@ -9628,10 +10238,36 @@ const cutSelection = useCallback(() => {
     [tool, toolParameters, currentFrame, activeLayerId]
   );
 
+  // PlayAnimation (miniatura) maneja su propio `isPlaying` internamente — es
+  // un reproductor independiente del panel LayerAnimation. Dar play en el
+  // panel NO arranca la miniatura y viceversa; comparten el código de motor
+  // (`useAnimationPlayer`) pero cada instancia tiene su propio loop RAF y
+  // estado de play.
+  // `onPlayTag` dispara solo este reproductor miniatura vía `playAnimationRef`.
   const MemoizedPlayAnimation = useMemo(
-    () => renderPlayAnimation({ frames }),
+    () => renderPlayAnimation({
+      frames,
+      playerRef: playAnimationRef,
+    }),
     [frames]
   );
+
+  // `onPlayTag` del panel de tags: configura rango + modo del reproductor
+  // y arranca la reproducción usando el API imperativo expuesto por PlayAnimation.
+  // Mapeo de direcciones de tag → playbackMode soportado. `pingpong-reverse`
+  // no existe en el reproductor (es `pingpong` con primer paso inverso); por
+  // ahora se degrada a `pingpong`.
+  const handlePlayTag = useCallback((tag) => {
+    const api = playAnimationRef.current;
+    if (!api || !tag) return;
+    const mode = tag.direction === 'reverse' ? 'reverse'
+               : tag.direction === 'pingpong' || tag.direction === 'pingpong-reverse' ? 'pingpong'
+               : 'forward';
+    api.setFrameRange?.({ start: tag.from, end: tag.to });
+    api.setPlaybackMode?.(mode);
+    api.setFrame?.(mode === 'reverse' ? tag.to : tag.from);
+    api.play?.();
+  }, []);
 
  
  
@@ -9742,6 +10378,47 @@ const cutSelection = useCallback(() => {
     pastePixels
   ]);
 
+  // Wrappers centralizados de undo/redo.
+  // CRÍTICO: tras deshacer/rehacer hay que invalidar `cachedImageDataRef`, el
+  // buffer de ImageData que el pipeline de trazo reutiliza entre pinceladas.
+  // Si no se invalida, el próximo trazo lee pixels "fantasma" del estado
+  // anterior al undo y los rescribe al hacer flush — los pixels deshechos
+  // reaparecen al pintar encima. Los botones del toolbar ya lo hacían inline;
+  // estos wrappers unifican la lógica para teclado + registry + botones.
+  const handleUndo = useCallback(() => {
+    undo();
+    invalidateImageDataCacheOptimized();
+  }, [undo, invalidateImageDataCacheOptimized]);
+
+  const handleRedo = useCallback(() => {
+    redo();
+    invalidateImageDataCacheOptimized();
+  }, [redo, invalidateImageDataCacheOptimized]);
+
+  // Mantener sincronizadas las refs que usa el keybindings registry (ver arriba).
+  useEffect(() => { handleUndoRef.current = handleUndo; }, [handleUndo]);
+  useEffect(() => { handleRedoRef.current = handleRedo; }, [handleRedo]);
+
+  // Ctrl+Z → undo  /  Ctrl+Y o Ctrl+Shift+Z → redo
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+      const isCtrl = e.ctrlKey || e.metaKey;
+      if (!isCtrl) return;
+      const key = e.key.toLowerCase();
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      } else if (key === 'y' || (key === 'z' && e.shiftKey)) {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo]);
+
   //gESTION DE LAS BROCHAS PERSONALIZADAS
 // estas seran un array de brochas [{}]
 // GESTIÓN DE LAS BROCHAS PERSONALIZADAS
@@ -9752,7 +10429,7 @@ useEffect(() => {
   const handleKeyDown = (e) => {
     // Verificar si se está presionando Ctrl (o Cmd en Mac)
     const isCtrlPressed = e.ctrlKey || e.metaKey;
-    
+
     // Solo procesar Ctrl+B
     if (!isCtrlPressed || e.key.toLowerCase() !== 'b') return;
     
@@ -10078,82 +10755,188 @@ handleRotSprite(rotationAngleSelection, true);
        <TopToolbar companyName="Argánion">
      
        
-        <div className="worspace-actual-layername">
+        <div className="workspace-actual-layername">
           <p className="layer-name-label">
             Capa actual:
           </p>
           <p className="actual-layername">{getActiveLayerName()}</p>
-          
+
 
         </div>
         <div className="tools">
           {/* Grupo: Historial */}
           <div className="tools-group">
-            <div
+            <button
+              type="button"
               className="grid-control active"
-              onClick={() => { undo(); invalidateImageDataCacheOptimized(); }}
+              title="Deshacer (Ctrl+Z)"
+              aria-label="Deshacer"
+              onClick={handleUndo}
             >
-              <LuUndo />
+              <LuUndo aria-hidden="true" />
               <p>Undo</p>
-            </div>
-            <div
+            </button>
+            <button
+              type="button"
               className="grid-control active"
-              onClick={() => { redo(); invalidateImageDataCacheOptimized(); }}
+              title="Rehacer (Ctrl+Y)"
+              aria-label="Rehacer"
+              onClick={handleRedo}
             >
-              <LuRedo />
+              <LuRedo aria-hidden="true" />
               <p>Redo</p>
-            </div>
+            </button>
           </div>
 
           <div className="tools-divider" />
 
           {/* Grupo: Herramientas avanzadas */}
           <div className="tools-group">
-            <div
+            <button
+              type="button"
               className="grid-control active"
+              title="Generador con IA"
+              aria-label="Generador con IA"
+              aria-pressed={activeAI}
               onClick={() => { setActiveAI(!activeAI); }}
             >
-              <LuBrainCircuit />
+              <LuBrainCircuit aria-hidden="true" />
               <p>Gen. IA</p>
-            </div>
-            <div
+            </button>
+            <button
+              type="button"
               className="grid-control active"
+              title="Visualizador 3D"
+              aria-label="Visualizador 3D"
+              aria-pressed={threeJsVisualizer}
               onClick={() => { setThreeJsVisualizer(!threeJsVisualizer); }}
             >
-              <LuBox />
+              <LuBox aria-hidden="true" />
               <p>3D</p>
-            </div>
+            </button>
+          </div>
+
+          <div className="tools-divider" />
+
+          {/* Grupo: Filtros y utilidades del plan ambicioso */}
+          <div className="tools-group">
+            <button
+              type="button"
+              className="grid-control active"
+              title="Filtros (Replace Color / Outline / Hue-Sat)"
+              aria-label="Filtros"
+              onClick={() => setShowFiltersModal(true)}
+            >
+              <MdGradient aria-hidden="true" />
+              <p>Filtros</p>
+            </button>
+            <button
+              type="button"
+              className="grid-control active"
+              title="Insertar texto bitmap"
+              aria-label="Insertar texto"
+              onClick={() => setShowTextTool(true)}
+            >
+              <span aria-hidden="true" style={{ fontWeight: 700, fontFamily: 'monospace' }}>T</span>
+              <p>Texto</p>
+            </button>
+            <button
+              type="button"
+              className="grid-control active"
+              title="Script runner (JS + sandbox)"
+              aria-label="Scripts"
+              onClick={() => setShowScriptRunner((v) => !v)}
+            >
+              <span aria-hidden="true" style={{ fontWeight: 700, fontFamily: 'monospace' }}>{'{}'}</span>
+              <p>Script</p>
+            </button>
+          </div>
+
+          <div className="tools-divider" />
+
+          {/* Grupo: Import / Utilidades del plan ambicioso */}
+          <div className="tools-group">
+            <button
+              type="button"
+              className="grid-control active"
+              title="Importar .ase / .aseprite"
+              aria-label="Importar Aseprite"
+              onClick={handleImportAseprite}
+            >
+              <span aria-hidden="true" style={{ fontWeight: 700, fontFamily: 'monospace' }}>.ase</span>
+              <p>.ase</p>
+            </button>
+            <button
+              type="button"
+              className="grid-control active"
+              title="Importar imagen como capa de referencia"
+              aria-label="Importar referencia"
+              onClick={handleImportReferenceImage}
+            >
+              <span aria-hidden="true" style={{ fontWeight: 700, fontFamily: 'monospace' }}>IMG</span>
+              <p>Ref</p>
+            </button>
+            <button
+              type="button"
+              className="grid-control active"
+              title="Auto-crop al bounding box opaco"
+              aria-label="Auto-crop"
+              onClick={handleAutoCrop}
+            >
+              <GrTopCorner aria-hidden="true" />
+              <p>Crop</p>
+            </button>
+            <button
+              type="button"
+              className={`grid-control${showRulers ? ' active' : ''}`}
+              title="Mostrar reglas y guías"
+              aria-label="Toggle rulers"
+              aria-pressed={showRulers}
+              onClick={() => setShowRulers((v) => !v)}
+            >
+              <span aria-hidden="true" style={{ fontWeight: 700, fontFamily: 'monospace' }}>┼</span>
+              <p>Reglas</p>
+            </button>
           </div>
 
           <div className="tools-divider" />
 
           {/* Grupo: Acciones de archivo */}
           <div className="tools-group">
-            <div
+            <button
+              type="button"
               className="grid-control active"
+              title="Exportar animacion"
+              aria-label="Exportar animacion"
               onClick={() => { setShowExporter(!showExporter); }}
             >
-              <LuUpload />
+              <LuUpload aria-hidden="true" />
               <p>Exportar</p>
-            </div>
-            <div
+            </button>
+            <button
+              type="button"
               className="grid-control active grid-control--save"
-              onClick={() => { handleExport(); }}
+              title="Guardar proyecto (Ctrl+S)"
+              aria-label="Guardar proyecto"
+              onClick={() => setShowSaveProject(true)}
             >
-              <LuSave />
+              <LuSave aria-hidden="true" />
               <p>Guardar</p>
-            </div>
+            </button>
           </div>
 
           {/* Salir de aislamiento (condicional) */}
           {isolatedPixels && (
-            <div
+            <button
+              type="button"
               className="grid-control active grid-control--danger"
+              title="Salir del modo aislamiento"
+              aria-label="Salir del modo aislamiento"
               onClick={() => { setIsolatedPixels(null); }}
             >
-              <FaFileExport />
+              <FaFileExport aria-hidden="true" />
               <p>Salir</p>
-            </div>
+            </button>
           )}
         </div>
         <ReflexMode
@@ -10284,6 +11067,71 @@ handleRotSprite(rotationAngleSelection, true);
                 willChange: "transform",
               }}
             >
+              {/* Overlay Rulers (reglas + guías arrastrables).
+                  Se monta como sibling del artboard pero solo cuando el toggle
+                  está activado, para que el artboard quede completamente limpio
+                  cuando el usuario solo quiere pintar. */}
+              {showRulers && (
+                <Rulers
+                  width={Math.round(viewportWidth * zoom)}
+                  height={Math.round(viewportHeight * zoom)}
+                  zoom={zoom}
+                  panOffset={{ x: 0, y: 0 }}
+                  guides={guides}
+                  onGuidesChange={setGuides}
+                  cursorPos={rulersCursor}
+                />
+              )}
+
+              {/* Overlay de Slices: canvas pointer-events:none que dibuja el rect
+                  y la etiqueta de cada slice con drawSlicesOverlay. */}
+              {showSlicesOverlay && slices.length > 0 && (
+                <SlicesCanvasOverlay
+                  slices={slices}
+                  zoom={zoom}
+                  width={Math.round(viewportWidth * zoom)}
+                  height={Math.round(viewportHeight * zoom)}
+                />
+              )}
+
+              {/* Overlay de Reference Layers: cada capa de referencia visible se
+                  dibuja con su transform propio (x/y/scale/rotation/opacity).
+                  Ninguna bloquea el pointer (pointer-events: none). */}
+              {referenceLayers.some((l) => l.visible) && (
+                <ReferenceLayersOverlay
+                  layers={referenceLayers.filter((l) => l.visible)}
+                  zoom={zoom}
+                  width={Math.round(viewportWidth * zoom)}
+                  height={Math.round(viewportHeight * zoom)}
+                />
+              )}
+
+              {/* Overlay marching ants (Magic Wand). Se monta como sibling del
+                  artboard para compartir las mismas coordenadas de viewport y zoom.
+                  No bloquea el pointer (pointer-events: none en el canvas interno). */}
+              {magicWandMask && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    width: Math.round(viewportWidth * zoom),
+                    height: Math.round(viewportHeight * zoom),
+                    pointerEvents: 'none',
+                    zIndex: 100,
+                  }}
+                >
+                  <MarchingAnts
+                    mask={magicWandMask}
+                    zoom={zoom}
+                    offset={{
+                      x: -Math.round(viewportOffset.x * zoom),
+                      y: -Math.round(viewportOffset.y * zoom),
+                    }}
+                    canvasWidth={viewportWidth}
+                    canvasHeight={viewportHeight}
+                  />
+                </div>
+              )}
+
               <div
                 className="artboard"
                 ref={artboardRef}
@@ -10456,25 +11304,321 @@ handleRotSprite(rotationAngleSelection, true);
            viewportNavigator: MemoizedViewportNavigator,
            layerColor: MemoizedLayerColor,
            playAnimation: MemoizedPlayAnimation,
+           history: (
+             <HistoryPanel
+               history={history ?? []}
+               currentIndex={(history?.length ?? 0) - 1}
+               onJumpTo={() => {
+                 // Jump arbitrario requiere que useLayerManager exponga setHistoryIndex.
+                 // Hasta que exista, sólo mostramos la lista; undo/redo cubren la navegación.
+               }}
+               onClear={() => { if (typeof clearHistory === 'function') clearHistory(); }}
+             />
+           ),
+           tags: (
+             <TagsPanel
+               tags={animationTags}
+               onChange={setAnimationTags}
+               frameCount={Object.keys(frames ?? {}).length || 1}
+               onPlayTag={handlePlayTag}
+             />
+           ),
+           keybindings: <KeybindingsPanel registry={keybindingsRegistry} />,
+           tileset: tileset ? (
+             <TilesetPanel
+               tileset={tileset}
+               activeTileId={null}
+               onSelectTile={() => { /* wiring a tileTool: pendiente */ }}
+               onTilesetChange={setTileset}
+             />
+           ) : (
+             <div style={{ padding: 10, fontSize: 11, color: '#8a8a95' }}>
+               Sin tileset activo.{' '}
+               <button
+                 type="button"
+                 onClick={() => setTileset(createTileset(16, 16))}
+                 style={{
+                   background: '#3a3a45', color: '#e7e7ea',
+                   border: '1px solid #4a4a55', borderRadius: 3,
+                   padding: '3px 8px', fontSize: 11, cursor: 'pointer', marginLeft: 6,
+                 }}
+               >
+                 Crear 16×16
+               </button>
+             </div>
+           ),
+           slices: (
+             <SlicesPanel
+               slices={slices}
+               onChange={setSlices}
+               canvasWidth={totalWidth}
+               canvasHeight={totalHeight}
+             />
+           ),
+           references: (
+             <ReferenceLayersPanel
+               layers={referenceLayers}
+               onChange={setReferenceLayers}
+             />
+           ),
+           magicWand: (
+             <MagicWandTool
+               parameters={magicWandParams}
+               onChange={setMagicWandParams}
+             />
+           ),
+           stabilizer: (
+             <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+               <StabilizerSlider
+                 value={toolParameters?.stabilizerLevel ?? 0}
+                 onChange={(v) => setToolParameters((prev) => ({ ...prev, stabilizerLevel: v }))}
+               />
+               <div style={{ fontSize: 10, color: '#8a8a95', fontStyle: 'italic' }}>
+                 Suaviza el trazo al pintar con pencil/line/curve. 0 = fiel al input,
+                 100 = líneas casi rectas. Motor:{' '}
+                 <code style={{ background: '#2a2a33', padding: '1px 4px', borderRadius: 2 }}>
+                   strokeSmoothing.js
+                 </code>
+                 .
+               </div>
+             </div>
+           ),
          }}
        />
-        {false && (
+        {showSaveProject && (
           <SaveProject
             frames={frames}
             currentFrame={currentFrame}
             framesResume={framesResume}
-            onProjectLoaded={""}
-            projectMetadata={{
-              author: "Tu Nombre",
-              description: "Mi proyecto de pixel art",
-              tags: ["pixel-art", "animación"],
-            }}
+            layers={layers}
+            zoom={zoom}
+            panOffset={panOffset}
+            activeLayerId={activeLayerId}
+            toolParameters={toolParameters}
+            onionSkinSettings={onionSkinSettings}
+            onionFramesConfig={onionFramesConfig}
+            onionSkinEnabled={onionSkinEnabled}
+            onProjectLoaded={handleProjectLoaded}
+            onClose={() => setShowSaveProject(false)}
+            canvasWidth={totalWidth}
+            canvasHeight={totalHeight}
+            // Extensions del plan ambicioso (aditivas en .pixcalli v2.1).
+            customPalettes={customPalettes}
+            animationTags={animationTags}
+            slices={slices}
+            // Tilesets → dataURL por tile (canvases DOM no serializables directo).
+            tilesets={tileset ? serializeTileset(tileset) : null}
+            // Solo metadata serializable (sin el canvas); hasta que persistamos bitmap.
+            referenceLayerMeta={referenceLayers.map(({ id, name, opacity, x, y, scale, rotation, visible, locked }) =>
+              ({ id, name, opacity, x, y, scale, rotation, visible, locked })
+            )}
+            guides={guides}
           />
+        )}
+
+        {/* Filtros (Replace Color / Outline / Hue-Sat) */}
+        <FiltersModal
+          isOpen={showFiltersModal}
+          onClose={() => setShowFiltersModal(false)}
+          sourceCanvas={frames?.[currentFrame]?.canvases?.[activeLayerId] ?? null}
+          initialFrom={toolParameters?.foregroundColor}
+          initialTo={toolParameters?.backgroundColor}
+          onApply={(resultCanvas) => {
+            const target = frames?.[currentFrame]?.canvases?.[activeLayerId];
+            if (!target || !resultCanvas) return;
+            // Snapshot ANTES del cambio para que un undo pueda restaurarlo.
+            const beforeCanvas = document.createElement('canvas');
+            beforeCanvas.width = target.width;
+            beforeCanvas.height = target.height;
+            beforeCanvas.getContext('2d').drawImage(target, 0, 0);
+
+            const ctx = target.getContext('2d');
+            ctx.clearRect(0, 0, target.width, target.height);
+            ctx.drawImage(resultCanvas, 0, 0);
+
+            if (typeof historyPush === 'function') {
+              historyPush({
+                type: 'frame_state',
+                label: 'Filtro aplicado',
+                timestamp: Date.now(),
+                layerId: activeLayerId,
+                frameId: currentFrame,
+                beforeCanvas,
+                afterCanvas: resultCanvas,
+              });
+            }
+            // Invalidar cachedImageDataRef: igual que con undo/redo, el pipeline
+            // de trazo reutiliza un buffer ImageData entre pinceladas. Si tras
+            // un filtro masivo no lo invalidamos, la próxima pincelada restaura
+            // pixels "fantasma" anteriores al filtro.
+            invalidateImageDataCacheOptimized();
+            if (typeof compositeRender === 'function') compositeRender();
+          }}
+        />
+
+        {/* Insertar texto bitmap */}
+        <TextTool
+          isOpen={showTextTool}
+          onClose={() => setShowTextTool(false)}
+          color={toolParameters?.foregroundColor}
+          canvasWidth={totalWidth}
+          canvasHeight={totalHeight}
+          onInsert={(textCanvas, x, y) => {
+            const target = frames?.[currentFrame]?.canvases?.[activeLayerId];
+            if (!target || !textCanvas) return;
+            const beforeCanvas = document.createElement('canvas');
+            beforeCanvas.width = target.width;
+            beforeCanvas.height = target.height;
+            beforeCanvas.getContext('2d').drawImage(target, 0, 0);
+
+            const ctx = target.getContext('2d');
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(textCanvas, x, y);
+
+            if (typeof historyPush === 'function') {
+              historyPush({
+                type: 'frame_state',
+                label: 'Insertar texto',
+                timestamp: Date.now(),
+                layerId: activeLayerId,
+                frameId: currentFrame,
+                beforeCanvas,
+              });
+            }
+            invalidateImageDataCacheOptimized();
+            if (typeof compositeRender === 'function') compositeRender();
+          }}
+        />
+
+        {/* Script runner (API JS con sandbox Worker) */}
+        {showScriptRunner && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 60,
+              right: 20,
+              width: 540,
+              maxHeight: '80vh',
+              zIndex: 9999,
+              boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+              borderRadius: 8,
+              overflow: 'hidden',
+            }}
+          >
+            <ScriptRunnerPanel
+              onClose={() => setShowScriptRunner(false)}
+              snapshotBuilder={() =>
+                buildScriptSnapshot({
+                  width: totalWidth,
+                  height: totalHeight,
+                  palette: [],
+                  frames,
+                  layers,
+                  activeFrame: currentFrame,
+                  activeLayerId,
+                })
+              }
+              onApplyPatch={(patch) => {
+                applyScriptPatch(frames, patch);
+                if (typeof historyPush === 'function') {
+                  historyPush({
+                    type: 'frame_state',
+                    label: 'Script aplicado',
+                    timestamp: Date.now(),
+                    affectedEntries: patch?.length ?? 0,
+                  });
+                }
+                invalidateImageDataCacheOptimized();
+                if (typeof compositeRender === 'function') compositeRender();
+              }}
+            />
+          </div>
         )}
       </div>
 
 
     </div>
+  );
+}
+
+// ReferenceLayersOverlay — dibuja todas las capas de referencia visibles sobre
+// el artboard. Respeta x/y/scale/rotation/opacity por layer. Se re-renderiza
+// cuando cambian las capas, el zoom o el tamaño del viewport.
+function ReferenceLayersOverlay({ layers, zoom, width, height }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = false;
+
+    for (const layer of layers) {
+      if (!layer.canvas) continue;
+      const w = layer.canvas.width * layer.scale;
+      const h = layer.canvas.height * layer.scale;
+      ctx.save();
+      ctx.globalAlpha = layer.opacity ?? 0.5;
+      ctx.translate((layer.x + w / 2) * zoom, (layer.y + h / 2) * zoom);
+      if (layer.rotation) ctx.rotate((layer.rotation * Math.PI) / 180);
+      ctx.drawImage(
+        layer.canvas,
+        (-w / 2) * zoom,
+        (-h / 2) * zoom,
+        w * zoom,
+        h * zoom
+      );
+      ctx.restore();
+    }
+  }, [layers, zoom, width, height]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        width,
+        height,
+        pointerEvents: 'none',
+        zIndex: 80,
+      }}
+    />
+  );
+}
+
+// SlicesCanvasOverlay — canvas overlay que redibuja los slices cada vez que
+// cambian. No interactivo (pointer-events: none); las ediciones pasan por el
+// SlicesPanel del dock.
+function SlicesCanvasOverlay({ slices, zoom, width, height }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = false;
+    drawSlicesOverlay(ctx, { slices }, { zoom, showPivot: true, showCenter: true });
+  }, [slices, zoom, width, height]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        width,
+        height,
+        pointerEvents: 'none',
+        zIndex: 90,
+      }}
+    />
   );
 }
 

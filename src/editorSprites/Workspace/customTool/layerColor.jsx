@@ -6,6 +6,7 @@ import { PiMouseLeftClickFill } from "react-icons/pi";
 import { PiMouseRightClickFill } from "react-icons/pi";
 import CustomSelect from "./customSelect";
 import SimpleEyedropper from "./simpleEyeDropper";
+import PaletteManager from "../palette/paletteManager";
 // Al inicio del componente, después de los otros imports
 
 import './layerColor.css'
@@ -58,6 +59,8 @@ const LayerColor = ({ tool, toolParameters, setToolParameters, getLayerPixelData
   // Estados para la paleta de colores
   const [utilColors, setUtilColors] = useState([{"r":0,"g":0,"b":0,"a":1},{"r":255,"g":255,"b":255,"a":1},{"r":255,"g":0,"b":0,"a":0}]);
   const [actualPalette, setActualPalette] = useState([]);
+  // Panel de paletas predefinidas (DB16, PICO-8, ...): oculto por defecto.
+  const [showPaletteManager, setShowPaletteManager] = useState(false);
   const [showPalettePicker, setShowPalettePicker] = useState(false);
   const [editingColorIndex, setEditingColorIndex] = useState(null);
   const [isEditingPalette, setIsEditingPalette] = useState(false);
@@ -1106,13 +1109,47 @@ const addToRecentColors = (color) => {
     >
       <div className="layer-color-header">
         <h3 className="layer-color-title">Colores</h3>
-        
 
-    
+
         <div className="header-controls">
-          
+          <button
+            type="button"
+            onClick={() => setShowPaletteManager((v) => !v)}
+            title="Paletas predefinidas y custom"
+            style={{
+              background: showPaletteManager ? '#4a90e2' : 'transparent',
+              color: showPaletteManager ? '#fff' : '#bbb',
+              border: '1px solid #3a3a45',
+              borderRadius: 4,
+              padding: '4px 8px',
+              cursor: 'pointer',
+              fontSize: 11,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <LuPalette size={12} />
+            Paletas
+          </button>
         </div>
       </div>
+
+      {showPaletteManager && (
+        <PaletteManager
+          activeColor={toolParameters?.foregroundColor ?? foregroundColor}
+          onColorPick={(rgba) => {
+            const withAlpha = { ...rgba, a: 255 };
+            setForegroundColor(withAlpha);
+            setHexForeground(
+              `#${withAlpha.r.toString(16).padStart(2, '0')}${withAlpha.g
+                .toString(16)
+                .padStart(2, '0')}${withAlpha.b.toString(16).padStart(2, '0')}`
+            );
+            setToolParameters?.((prev) => ({ ...prev, foregroundColor: withAlpha }));
+          }}
+        />
+      )}
 
       <div className="layer-color-content">
         {/* Mostrar colores normales o editor de gradiente según el modo */}
@@ -1146,12 +1183,11 @@ const addToRecentColors = (color) => {
 
               <div className="layer-util-colors">
                     {utilColors.map((color,index)=>(
-                     
-                    <div className="util-color-overlay">
+
+                    <div key={`util-color-${index}`} className="util-color-overlay">
                         <button
-                      key={`util-color-${index}` }
                       className="util-color-button"
-                      
+
                       onMouseDown={(e)=>handlePaletteColorClick(color, index, e)}
                       style={{
                         background:`rgba(${color.r},${color.g},${color.b},${color.a})`
