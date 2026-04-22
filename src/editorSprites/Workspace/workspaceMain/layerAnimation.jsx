@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import './layerAnimation.css'
 
 import { useAnimationPlayer } from '../hooks/useAnimationPlayer';
+import LayerRow from './layerRow';
 import ConfigOnionSkin from './configOnionSkin';
 import { CgArrowLongRightC } from "react-icons/cg";
 import { BsDashCircleDotted } from "react-icons/bs";
@@ -49,12 +50,12 @@ const LayerAnimation = ({
   layers,
   addLayer,
   deleteLayer,
-  moveLayerUp, // eslint-disable-line no-unused-vars
-  moveLayerDown, // eslint-disable-line no-unused-vars
-  duplicateLayer, // eslint-disable-line no-unused-vars
+  moveLayerUp,
+  moveLayerDown,
+  duplicateLayer,
   toggleLayerVisibility,
   renameLayer,
-  clearLayer, // eslint-disable-line no-unused-vars
+  clearLayer,
   activeLayerId,
   setActiveLayerId,
 
@@ -71,15 +72,15 @@ const LayerAnimation = ({
   selectAllCanvas,
 
   // Frames
-  createFrame, // eslint-disable-line no-unused-vars
+  createFrame,
   frames,
   currentFrame,
   setActiveFrame,
   deleteFrame,
-  duplicateFrame, // eslint-disable-line no-unused-vars
+  duplicateFrame,
   saveCurrentFrameState,
   toggleLayerVisibilityInFrame,
-  getLayerVisibility, // eslint-disable-line no-unused-vars
+  getLayerVisibility,
 
   // Onion skin
   onionSkinEnabled,
@@ -88,7 +89,7 @@ const LayerAnimation = ({
 
   // Duración / opacidad
   setFrameDuration,
-  getFrameDuration, // eslint-disable-line no-unused-vars
+  getFrameDuration,
   setFrameOpacity,
   getFrameOpacity,
 
@@ -96,8 +97,8 @@ const LayerAnimation = ({
   framesResume,
 
   // Callbacks de sincronización (no usados directamente pero conservados por API)
-  onTimeUpdate, // eslint-disable-line no-unused-vars
-  onFrameChange, // eslint-disable-line no-unused-vars
+  onTimeUpdate,
+  onFrameChange,
 
   // Viewport / canvas externo
   externalCanvasRef,
@@ -1019,7 +1020,7 @@ const stableRowHandlers = useMemo(() => ({
 // Actualmente NO se invoca desde el árbol JSX activo — está preparado para
 // re-habilitar la vista de filas por capa debajo del header cuando se desee.
 // eslint-disable-next-line no-unused-vars
-const renderLayerWithTimeline = (layer, depth = 0) => { // eslint-disable-line no-unused-vars
+const renderLayerWithTimeline = (layer) => {
   const children = getGroupLayersForParent(layer.id);
   const isExpanded = !!expandedLayers[layer.id];
   const hasChildren = children.length > 0;
@@ -1031,7 +1032,6 @@ const renderLayerWithTimeline = (layer, depth = 0) => { // eslint-disable-line n
     <LayerRow
       key={layer.id}
       layer={layer}
-      depth={depth}
       isExpanded={isExpanded}
       hasChildren={hasChildren}
       layerGroupsCount={layerGroups.length}
@@ -1054,7 +1054,7 @@ const renderLayerWithTimeline = (layer, depth = 0) => { // eslint-disable-line n
     children
       .sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0))
       .forEach(childLayer => {
-        elementsToRender.push(...renderLayerWithTimeline(childLayer, depth + 1));
+        elementsToRender.push(...renderLayerWithTimeline(childLayer));
       });
   }
 
@@ -1398,282 +1398,5 @@ const FrameNumberCell = React.memo(function FrameNumberCell({
   );
 });
 
-// `LayerRow` — componente único memoizado que absorbe layer-info (parte
-// izquierda) + timeline-frames (parte derecha). Antes existían por separado
-// `renderLayerWithTimeline` (función generadora) + `LayerTimelineCell`
-// (componente por celda); esta versión los fusiona.
-//
-// Contrato con el padre:
-//   - Toda la data reactiva llega como props planas (layer, currentFrame,
-//     activeLayerId, framesResume, selectedFrames, etc.).
-//   - Los handlers se reciben como bundle `handlers` con identidad estable
-//     durante toda la vida del componente (latest-ref pattern en el padre).
-//
-// Por qué el cambio de `currentFrame` NO causa re-render errors:
-//   - React.memo compara shallowly los props. `currentFrame` cambia ~60Hz
-//     durante playback → el row se re-renderea, sí, pero es un re-render
-//     puro (sin setState en render, sin mutación de refs en render).
-//   - Los handlers no cambian identidad (vienen de `stableRowHandlers`
-//     del padre), así que no arrastran re-renders extra.
-//   - Las celdas internas se regeneran como vDOM pero React reconcilia y
-//     solo muta `className` de las celdas cuyo flag realmente cambió.
-//   - No hay "too many re-renders" porque no hay setState durante el render
-//     que dependa de props derivadas del propio render.
-const LayerRow = React.memo(function LayerRow({
-  layer,
-  // `depth` se recibe pero no se usa actualmente; el indentado lo maneja CSS
-  // por `.group-layer` (layer hijo). Si se necesita en el futuro (p.ej.
-  // para `paddingLeft: depth * N`), se agrega aquí.
-  isExpanded,
-  hasChildren,
-  layerGroupsCount,
-  layersLength,
-  frameNumbers,
-  currentFrame,
-  activeLayerId,
-  editingLayerId,
-  editingName,
-  selectedFrames,
-  selectedPixels,
-  framesResume,
-  onionSkinEnabled,
-  onionSkinSettings,
-  handlers,
-}) {
-  const isGroup = !!layer.isGroupLayer;
-  const isLayerActive = activeLayerId === layer.id;
-  const isEditing = editingLayerId === layer.id;
-
-  // --- Handlers locales (binding del layer.id + event) ---
-  const onRowContextMenu = (e) => handlers.onLayerContextMenu(e, layer.id);
-  const onRowClick = () => handlers.onLayerClick(layer.id);
-  const onNameDoubleClick = (e) => handlers.onStartEditing(layer, e);
-  const onNameInputChange = (e) => handlers.onEditingNameChange(e.target.value);
-  const onNameInputKeyDown = (e) => handlers.onLayerKeyDown(e);
-  const onNameInputClick = (e) => e.stopPropagation();
-  const onExpandClick = (e) => {
-    e.stopPropagation();
-    handlers.onToggleExpand(layer.id);
-  };
-  const onSelectContentClick = (e) => {
-    e.stopPropagation();
-    handlers.onSelectContent(layer.id);
-  };
-  const onToggleGroupCreateClick = (e) => {
-    e.stopPropagation();
-    handlers.onToggleGroupCreate(layer.id);
-  };
-  const onToggleLayerVisibilityClick = (e) => {
-    e.stopPropagation();
-    handlers.onToggleLayerVisibility(layer.id);
-  };
-  const onDeleteLayerClick = (e) => {
-    e.stopPropagation();
-    handlers.onDeleteLayer(layer);
-  };
-
-  // --- Clases derivadas del layer-info ---
-  const layerInfoClass =
-    `layer-info ${layer.visible ? 'visible' : 'hidden'}` +
-    ` ${isLayerActive ? 'selected' : ''}`;
-  const groupCreateDisabled = !selectedPixels?.length;
-  const deleteDisabled = !isGroup && layersLength <= 1;
-
-  return (
-    <div className={`animation-layer-row ${isGroup ? 'group-layer' : ''}`}>
-      {/* --- Parte izquierda: info de la capa / grupo --- */}
-      <div
-        onContextMenu={onRowContextMenu}
-        className={layerInfoClass}
-        style={{ paddingLeft: '0px' }}
-        onClick={onRowClick}
-      >
-        <div className="layer-content">
-          {isEditing ? (
-            <input
-              type="text"
-              value={editingName}
-              onChange={onNameInputChange}
-              onBlur={handlers.onSaveLayerName}
-              onKeyDown={onNameInputKeyDown}
-              autoFocus
-              className="layer-name-input"
-              onClick={onNameInputClick}
-            />
-          ) : (
-            <div
-              className="layer-name"
-              onDoubleClick={onNameDoubleClick}
-              title="Doble clic para editar"
-            >
-              {isGroup ? (
-                <>
-                  <LuGroup className="group-icon" />
-                  {layer.name}
-                </>
-              ) : (
-                <>
-                  {layer.name}
-                  {layerGroupsCount > 0 && (
-                    <span className="group-count">({layerGroupsCount})</span>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {hasChildren && (
-            <button
-              className="expand-toggle"
-              onClick={onExpandClick}
-              title={isExpanded ? 'Colapsar' : 'Expandir'}
-            >
-              {isExpanded ? <LuChevronDown /> : <LuChevronRight />}
-            </button>
-          )}
-        </div>
-
-        <div className="layer-actions">
-          <button
-            onClick={onSelectContentClick}
-            title={isGroup ? 'Seleccionar grupo' : 'Seleccionar contenido de la capa'}
-            className="layer-btn select-content-btn"
-          >
-            <LuMousePointer />
-          </button>
-
-          {!isGroup && (
-            <button
-              onClick={onToggleGroupCreateClick}
-              title="Crear grupo"
-              className={`layer-btn ${selectedPixels?.length ? 'has-selection' : ''}`}
-              disabled={groupCreateDisabled}
-            >
-              <LuGroup />
-            </button>
-          )}
-
-          <button
-            onClick={onToggleLayerVisibilityClick}
-            title={layer.visible ? 'Ocultar' : 'Mostrar'}
-            className="layer-btn"
-          >
-            {layer.visible ? <LuEye /> : <LuEyeOff />}
-          </button>
-
-          <button
-            onClick={onDeleteLayerClick}
-            title="Eliminar"
-            className="layer-btn delete-btn"
-            disabled={deleteDisabled}
-          >
-            <LuTrash2 />
-          </button>
-
-          <button><BsDashCircleDotted /></button>
-        </div>
-      </div>
-
-      {/* --- Parte derecha: celdas del timeline para esta capa --- */}
-      <div className="timeline-frames">
-        {frameNumbers.map((frameNumber) => {
-          const resolvedFrame = framesResume?.computed?.resolvedFrames?.[frameNumber];
-          const directFrame = framesResume?.frames?.[frameNumber];
-          const frameData = resolvedFrame || directFrame;
-
-          const isEmpty = !(frameData?.layerHasContent?.[layer.id] ?? false);
-          const isVisibleInFrame = frameData?.layerVisibility?.[layer.id] ?? true;
-          const hasGroups = !!directFrame?.pixelGroups?.[layer.id] &&
-            Object.keys(directFrame.pixelGroups[layer.id]).length > 0;
-          const layerOpacity = frameData?.layerOpacity?.[layer.id] ?? 1.0;
-
-          const isCurrent = currentFrame === frameNumber;
-          const isActive = isLayerActive && isCurrent;
-          const isSelectedGlobal = selectedFrames.includes(frameNumber);
-          const isSelectedInActiveLayer = isSelectedGlobal && isLayerActive;
-          const isKeyframe =
-            framesResume?.computed?.keyframes?.[layer.id]?.includes(frameNumber) ?? false;
-
-          const showOnionOverlay =
-            onionSkinEnabled &&
-            isLayerActive &&
-            currentFrame !== frameNumber &&
-            (
-              (frameNumber < currentFrame &&
-                currentFrame - frameNumber <= onionSkinSettings.previousFrames) ||
-              (frameNumber > currentFrame &&
-                frameNumber - currentFrame <= onionSkinSettings.nextFrames)
-            );
-
-          const className =
-            `timeline-frame ${isGroup ? 'group-frame' : ''}` +
-            ` ${isEmpty && !hasGroups ? 'empty' : 'filled'}` +
-            ` ${isVisibleInFrame ? 'visible' : 'hidden'}` +
-            ` ${isSelectedInActiveLayer ? 'current selected-frame' : ''}` +
-            ` ${isActive ? 'active' : ''}` +
-            ` ${isKeyframe ? 'keyframe' : ''}`;
-
-          // El convenio original es pasar `frameIndex = frameNumber - 1`
-          // a onFrameMouseDown. Lo respetamos para no cambiar semántica.
-          const onCellContextMenu = (e) => {
-            handlers.onFrameContextMenu(e, 'frame');
-            if (!isSelectedInActiveLayer) {
-              handlers.onFrameMouseDown(layer.id, frameNumber - 1, e);
-            }
-          };
-          const onCellClick = (e) => e.stopPropagation();
-          const onCellMouseDown = (e) => {
-            handlers.onFrameMouseDown(layer.id, frameNumber - 1, e);
-          };
-          const onCellMouseEnter = () => handlers.onFrameMouseEnter(frameNumber);
-          const onCellToggleVisibility = (e) => {
-            e.stopPropagation();
-            handlers.onToggleFrameVisibility(layer.id, frameNumber);
-          };
-
-          return (
-            <div
-              key={`${layer.id}_frame_${frameNumber}`}
-              onContextMenu={onCellContextMenu}
-              className={className}
-              style={{ opacity: isVisibleInFrame ? layerOpacity : 0.3 }}
-              onClick={onCellClick}
-              onMouseDown={onCellMouseDown}
-              onMouseEnter={onCellMouseEnter}
-              title={`Frame ${frameNumber} - ${isEmpty && !hasGroups ? 'Vacío' : 'Con contenido'}${isKeyframe ? ' (Keyframe)' : ''}`}
-            >
-              <div className="frame-content">
-                {isEmpty && !hasGroups ? (
-                  <div className="empty-indicator" />
-                ) : (
-                  <div className="filled-indicator">
-                    {hasGroups && <div className="groups-indicator" />}
-                    {isKeyframe && <div className="keyframe-indicator" />}
-                  </div>
-                )}
-              </div>
-
-              {isSelectedInActiveLayer && <div className="frame-selection-indicator" />}
-
-              {showOnionOverlay && (
-                <div className="onion-skin">
-                  <p>{frameNumber}</p>
-                </div>
-              )}
-
-              <button
-                className="frame-visibility-btn"
-                onClick={onCellToggleVisibility}
-                title={isVisibleInFrame ? 'Ocultar frame' : 'Mostrar frame'}
-              >
-                {isVisibleInFrame ? <LuEye size={12} /> : <LuEyeOff size={12} />}
-              </button>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-});
 
 export default LayerAnimation;
