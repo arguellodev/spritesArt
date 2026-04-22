@@ -204,7 +204,8 @@ const handlePause = useCallback(() => {
 
 const [loopEnabled, setLoopEnabled] = useState(true);
 
-const [isOnionActive, setIsOnionActive] = useState(false);
+// (Eliminado: `isOnionActive` useState — el estado real es `onionFramesConfig.enabled`
+// del padre; este local solo se usaba en el antiguo toggle del topbar.)
 //
 
 const [openOnion, setOpenOnion] = useState(false);
@@ -1102,47 +1103,46 @@ const renderLayerWithTimeline = (layer) => {
   applyOnionFramesPreset={applyOnionFramesPreset}
   clearTintCache={clearTintCache}
 />
-      {/* Header con controles de animación */}
-      <>
-      <div className="animation-header">
-        
-    
-        <div className="header-center">
-          {/* Controles de reproducción */}
+      {/* Barra de animación unificada: top-bar (global, no scroll) + timeline-scroll
+          (scroll horizontal único con toolbar sticky a la izquierda). */}
+      <div className="animation-bar-unified">
+
+        {/* --- Top bar: controles globales (play/pause/speed/loop, onion skin) --- */}
+        <div className="unified-top-bar">
           <div className="playback-controls">
-            <button 
+            <button
               onClick={handleFirstFrame}
               title="Primer frame"
               className="control-btn"
             >
               <LuSkipBack />
             </button>
-            
-            <button 
+
+            <button
               onClick={handlePrevFrame}
               title="Frame anterior"
               className="control-btn"
             >
               <LuStepBack />
             </button>
-            
-            <button 
-  onClick={isPlaying ? handlePause : handlePlay}  // ✅ Lógica condicional correcta
-  title={isPlaying ? 'Pausar' : 'Reproducir'}
-  className="control-btn play-btn"
->
-  {isPlaying ? <LuPause /> : <LuPlay />}
-</button>
-            
-            <button 
+
+            <button
+              onClick={isPlaying ? handlePause : handlePlay}
+              title={isPlaying ? 'Pausar' : 'Reproducir'}
+              className="control-btn play-btn"
+            >
+              {isPlaying ? <LuPause /> : <LuPlay />}
+            </button>
+
+            <button
               onClick={handleNextFrame}
               title="Siguiente frame"
               className="control-btn"
             >
               <LuStepForward />
             </button>
-            
-            <button 
+
+            <button
               onClick={handleLastFrame}
               title="Último frame"
               className="control-btn"
@@ -1154,186 +1154,156 @@ const renderLayerWithTimeline = (layer) => {
               onClick={() => setLoopEnabled(!loopEnabled)}
               title={loopEnabled ? 'Desactivar bucle' : 'Activar bucle'}
               className={`setting-btn ${loopEnabled ? 'active' : ''}`}
-              style={{marginLeft:'10px'}}
+              style={{ marginLeft: '8px' }}
             >
               <LuRotateCcw />
             </button>
+
             <div className="speed-control-overlay">
-                <select 
-                  value={playbackSpeed} 
-                  onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
-                  className="speed-select-overlay"
-                  title="Velocidad de reproducción"
-                >
-                  <option value={0.25}>0.25x</option>
-                  <option value={0.5}>0.5x</option>
-                  <option value={0.75}>0.75x</option>
-                  <option value={1}>1x</option>
-                  <option value={1.25}>1.25x</option>
-                  <option value={1.5}>1.5x</option>
-                  <option value={2}>2x</option>
-                  <option value={4}>4x</option>
-                </select>
-              </div>
-          </div>
-
-          {/* Configuración de reproducción */}
-          <div className="playback-settings">
-            <div className="frame-rate-control">
-              <label>Frame Options:</label>
-              <p className='playback-current-framerate'>{currentFrame}</p>
-              <input
-                type="number"
-                min="10"
-                max="1000"
-                step="10"
-                value={frames[currentFrame.toString()]?.frameDuration}
-                onChange={(e) => setFrameDuration(currentFrame, Number(e.target.value))}
-                className="frame-rate-input"
-              />
-              
-              <span>ms</span>
-            </div>
-            
-            <div className="frame-controls">
-              
-              
-              <button
-                onClick={addFrame}
-                title="Añadir frame"
-                className="frame-control-btn"
+              <select
+                value={playbackSpeed}
+                onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
+                className="speed-select-overlay"
+                title="Velocidad de reproducción"
               >
-                <LuPlus />
+                <option value={0.25}>0.25x</option>
+                <option value={0.5}>0.5x</option>
+                <option value={0.75}>0.75x</option>
+                <option value={1}>1x</option>
+                <option value={1.25}>1.25x</option>
+                <option value={1.5}>1.5x</option>
+                <option value={2}>2x</option>
+                <option value={4}>4x</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="unified-top-right">
+            <div className="onion-skin-container">
+              <div
+                className="onion-skin-toggle"
+                onClick={() => { toggleOnionFrames(); }}
+              >
+                <div className="onion-icon">
+                  <LuLayers />
+                </div>
+                <span className="onion-text">Onion Skin</span>
+                <div className={`toggle-switch ${onionFramesConfig.enabled ? 'active' : ''}`}>
+                  <div className="toggle-slider"></div>
+                </div>
+              </div>
+
+              <button className="config-button" onClick={() => { setOpenOnion(true); }}>
+                <LuSettings />
               </button>
+            </div>
+          </div>
+        </div>
+
+        {/* --- Timeline unificado: sticky-left (toolbar de capa y frame actual)
+              + scroll horizontal compartido (frame-numbers + futuras filas). --- */}
+        <div className="unified-timeline-scroll">
+          <div className="unified-timeline-left">
+            {/* Acciones de capa */}
+            <div className="layer-manager-actions">
               <button
-  onClick={() => duplicateFrameHandler(currentFrame)}
-  title="Duplicar frame actual"
-  className="frame-control-btn"
->
-  <LuCopy />
-</button>
-<button
-          className="frame-control-btn"
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleLayerVisibilityInFrame(activeLayerId, currentFrame);
-          }}
-          //title={isVisibleInFrame ? 'Ocultar frame' : 'Mostrar frame'}
-        >
-         <LuEye size={12} /> 
-        </button>
-<button
-  onClick={() => deleteFrameHandler(currentFrame)}
-  title="Eliminar frame actual"
-  className="frame-control-btn"
-  disabled={frameCount <= 1}
->
-  <LuTrash2 />
-</button>
- 
-            </div>
-            <div className="zoom-slider-container">
-              <p>Opacidad: {localOpacity}%</p>
-            
-              <input
-    type="range"
-    min="0"
-    max="100"
-    step="10"
-    value={localOpacity}
-    onChange={(e) => {
-      const val = Number(e.target.value);
-      setLocalOpacity(val); // solo cambia el estado local del slider
-    }}
-    onMouseUp={() => {
-      setFrameOpacity(activeLayerId,currentFrame,localOpacity / 100); // solo cuando termina el cambio, se actualiza el estado global
-    }}
-    className="zoom-slider"
-  />
-
-          </div>
-           
-          </div>
-
-          
-        </div>
-
-        <div className='header-right'>
-        
-
-          <div className="onion-skin-container">
-      <div className="onion-skin-toggle" onClick={()=>{toggleOnionFrames();
-        setIsOnionActive(!isOnionActive);
-      }}>
-        <div className="onion-icon">
-          <LuLayers/>
-        </div>
-        <span className="onion-text">Onion Skin</span>
-        <div className={`toggle-switch ${onionFramesConfig.enabled ? 'active' : ''}`}>
-          <div className="toggle-slider"></div>
-        </div>
-      </div>
-      
-      <button className="config-button" onClick={()=>{setOpenOnion(true)}}>
-       <LuSettings/>
-      </button>
+                className="add-layer-btn"
+                onClick={() => { clearCurrentSelection(); addLayer(); }}
+                title="Añadir nueva capa"
+              >
+                <BiSolidLayerPlus />
+                <span>Nueva</span>
+              </button>
+              <div className="layer-move-actions">
+                <button
+                  onClick={handleMoveActiveLayerUp}
+                  title="Mover capa activa arriba"
+                  className="header-btn"
+                  disabled={!canMoveActiveLayerUp()}
+                >
+                  <LuArrowUp />
+                </button>
+                <button
+                  onClick={handleMoveActiveLayerDown}
+                  title="Mover capa activa abajo"
+                  className="header-btn"
+                  disabled={!canMoveActiveLayerDown()}
+                >
+                  <LuArrowDown />
+                </button>
+              </div>
             </div>
 
+            <div className="unified-divider" aria-hidden />
 
-            
-        </div>
-        
-       
-      </div>
-      <div className="timeline-header">
-          <div className="layers-header">
-            
-            <div className="layer-actions-container">
-          {/* Controles de capas */}
-          <div className='layer-manager-actions'>
-      
-          
-          <button 
-            className="add-layer-btn" 
-            onClick={()=>{
-              clearCurrentSelection();
-              addLayer();
-            }}
-            title="Añadir nueva capa"
-          >
-            Nueva Capa <BiSolidLayerPlus />
-          </button>
-          <div className='layer-move-actions'>
-         <button 
-            onClick={handleMoveActiveLayerUp}
-            title="Mover capa activa arriba"
-            className="header-btn"
-            disabled={!canMoveActiveLayerUp()}
-          >
-            <LuArrowUp />
-          </button>
-          
-          <button 
-            onClick={handleMoveActiveLayerDown}
-            title="Mover capa activa abajo"
-            className="header-btn"
-            disabled={!canMoveActiveLayerDown()}
-          >
-            <LuArrowDown />
-          </button>
+            {/* Ajustes del frame actual */}
+            <div className="current-frame-tools">
+              <div className="frame-rate-control">
+                <p className="playback-current-framerate">{currentFrame}</p>
+                <input
+                  type="number"
+                  min="10"
+                  max="1000"
+                  step="10"
+                  value={frames[currentFrame.toString()]?.frameDuration}
+                  onChange={(e) => setFrameDuration(currentFrame, Number(e.target.value))}
+                  className="frame-rate-input"
+                  title="Duración del frame (ms)"
+                />
+                <span className="frame-rate-unit">ms</span>
+              </div>
 
-         </div>
+              <div className="frame-controls">
+                <button onClick={addFrame} title="Añadir frame" className="frame-control-btn">
+                  <LuPlus />
+                </button>
+                <button
+                  onClick={() => duplicateFrameHandler(currentFrame)}
+                  title="Duplicar frame actual"
+                  className="frame-control-btn"
+                >
+                  <LuCopy />
+                </button>
+                <button
+                  className="frame-control-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleLayerVisibilityInFrame(activeLayerId, currentFrame);
+                  }}
+                  title="Alternar visibilidad del frame"
+                >
+                  <LuEye size={12} />
+                </button>
+                <button
+                  onClick={() => deleteFrameHandler(currentFrame)}
+                  title="Eliminar frame actual"
+                  className="frame-control-btn"
+                  disabled={frameCount <= 1}
+                >
+                  <LuTrash2 />
+                </button>
+              </div>
+
+              <div className="zoom-slider-container" title="Opacidad de la capa en el frame actual">
+                <label className="opacity-label">Opacidad</label>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="10"
+                  value={localOpacity}
+                  onChange={(e) => setLocalOpacity(Number(e.target.value))}
+                  onMouseUp={() => {
+                    setFrameOpacity(activeLayerId, currentFrame, localOpacity / 100);
+                  }}
+                  className="zoom-slider"
+                />
+                <span className="opacity-value">{localOpacity}%</span>
+              </div>
+            </div>
           </div>
-          
-          
 
-        </div>
-
-
-          </div>
-          <div className="frames-header">
-            {/*AQui puede ir la seccion de tag para ver los nombres de los tags de varios frames */}
-           
+          <div className="unified-timeline-frames">
             <div className="frame-numbers">
               {frameNumbers.map((frameNumber) => {
                 const isSelected = selectedFrames.includes(frameNumber);
@@ -1353,11 +1323,9 @@ const renderLayerWithTimeline = (layer) => {
                 );
               })}
             </div>
-            
           </div>
         </div>
-
-      </>
+      </div>
     
 
 
