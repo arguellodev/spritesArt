@@ -97,14 +97,12 @@ const FramesTimeline = ({
   animationTickFrame,  // frameNumber que el motor de animación está mostrando
 }) => {
 
-  // `frameNumbers` memoizado: identidad estable mientras framesResume no cambie.
-  // Seguro de usar ahora que `useLayerManager` hace updates inmutables con
-  // Immer (`produce()` en checkIfCanvasIsPaintedViaBlob, addLayer, createFrame):
-  // cuando el top-level ref de framesResume cambia, los sub-objetos TOCADOS
-  // también cambian ref → LayerRow.memo detecta el cambio y re-renderea con
-  // la data actualizada. Durante playback, framesResume es estable →
-  // frameNumbers estable → LayerRow.memo skippea → solo las 2 header cells
-  // afectadas se re-renderean por tick de animación.
+  // `frameNumbers` memoizado sobre `framesResume.frames`. Nota: con Immer,
+  // cada pincelada crea un nuevo ref de `framesResume.frames`, por lo que el
+  // array resultante TAMBIÉN será nuevo ref (aunque las keys sean idénticas).
+  // El comparador custom de `LayerRow` sabe esto: en vez de fallar por ref,
+  // compara `frameNumbers` por CONTENIDO — así pintar no invalida rows de
+  // capas no tocadas.
   const { frameNumbers, frameCount } = useMemo(() => {
     if (!framesResume?.frames) return { frameNumbers: [], frameCount: 0 };
     const arr = Object.keys(framesResume.frames).map(Number).sort((a, b) => a - b);

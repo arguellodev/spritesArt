@@ -7,13 +7,21 @@
 //   - `timeline.jsx` (FramesTimeline, renderizado activamente).
 //
 // Diseño:
-//   - `React.memo` shallow. Todos los props deben ser primitivos o referencias
-//     estables para que el skip funcione.
+//   - `React.memo` con COMPARADOR CUSTOM (ver `arePropsEqual` abajo). El
+//     shallow memo no era suficiente: `framesResume` recibe un ref nuevo en
+//     cada pincelada (Immer `produce()` genera nuevo root ref por structural
+//     sharing), lo que haría re-renderear TODAS las capas aunque solo una
+//     cambió. El comparador revisa únicamente la SLICE específica de esta
+//     capa (layerHasContent[id], layerVisibility[id], layerOpacity[id],
+//     pixelGroups[id], keyframes[id]). Resultado: pintar en capa A no
+//     re-renderea capa B, C, D...
 //   - `handlers` es un bundle con identidad fija (latest-ref pattern en el
-//     padre); no rompe la memo aunque cambien los closures subyacentes.
-//   - Cambios de `currentFrame` durante playback (60fps) invalidan la memo
-//     de CADA fila (es esperado: los flags `isCurrent`/`isActive` cambian).
-//     React reconcilia y muta solo el `className` de las celdas afectadas.
+//     padre); se compara por referencia (siempre estable).
+//   - Cambios de `currentFrame` invalidan la memo de CADA fila (esperado: los
+//     flags `isCurrent`/`isActive` cambian). React reconcilia y muta solo el
+//     `className` de las 2 celdas afectadas. Durante playback puro,
+//     `currentFrame` NO cambia (solo cambia `animationTickFrame`, que solo
+//     recibe el header) → las LayerRow se quedan estables.
 //   - No hay setState durante render ni mutación de refs en render.
 //
 // Visibility button por celda:
@@ -32,6 +40,108 @@ import {
   LuTrash2,
 } from 'react-icons/lu';
 import { BsDashCircleDotted } from 'react-icons/bs';
+
+// Comparador custom: `true` = skip re-render, `false` = re-render.
+//
+// Orden de checks: primero los props escalares/ref-baratos (fast-path), luego
+// la inspección por-capa de `framesResume`. Cualquier check que devuelva
+// `false` corta la comparación.
+function arePropsEqual(prev, next) {
+  // --- 1. Refs / escalares simples ---
+  if (
+    prev.layer !== next.layer ||
+    prev.isExpanded !== next.isExpanded ||
+    prev.hasChildren !== next.hasChildren ||
+    prev.layerGroupsCount !== next.layerGroupsCount ||
+    prev.layersLength !== next.layersLength ||
+    prev.currentFrame !== next.currentFrame ||
+    prev.selectedFrames !== next.selectedFrames ||
+    prev.selectedPixels !== next.selectedPixels ||
+    prev.onionSkinEnabled !== next.onionSkinEnabled ||
+    prev.onionSkinSettings !== next.onionSkinSettings ||
+    prev.handlers !== next.handlers
+  ) {
+    return false;
+  }
+
+  // --- 1b. frameNumbers: ref cambia en cada pincelada (useMemo invalidado
+  //         por framesResume), pero las KEYS casi nunca cambian. Comparar por
+  //         contenido: si el conjunto de frames es el mismo, no re-renderear
+  //         por este motivo. ---
+  if (prev.frameNumbers !== next.frameNumbers) {
+    if (prev.frameNumbers.length !== next.frameNumbers.length) return false;
+    for (let i = 0; i < prev.frameNumbers.length; i++) {
+      if (prev.frameNumbers[i] !== next.frameNumbers[i]) return false;
+    }
+  }
+
+  const layerId = next.layer.id;
+
+  // --- 2. activeLayerId: solo importa si ESTA capa ganó o perdió el foco ---
+  if (prev.activeLayerId !== next.activeLayerId) {
+    if (prev.activeLayerId === layerId || next.activeLayerId === layerId) {
+      return false;
+    }
+  }
+
+  // --- 3. editingLayerId / editingName: solo importa si esta capa es la que
+  //     se está editando (pasada o presente) ---
+  if (prev.editingLayerId !== next.editingLayerId) {
+    if (prev.editingLayerId === layerId || next.editingLayerId === layerId) {
+      return false;
+    }
+  }
+  if (prev.editingName !== next.editingName && next.editingLayerId === layerId) {
+    return false;
+  }
+
+  // --- 4. framesResume: si ref idéntico, nada cambió ---
+  if (prev.framesResume === next.framesResume) return true;
+
+  // --- 5. framesResume cambió: inspeccionar solo la slice de esta capa ---
+  const pfFrames = prev.framesResume?.frames;
+  const nfFrames = next.framesResume?.frames;
+  const pResolved = prev.framesResume?.computed?.resolvedFrames;
+  const nResolved = next.framesResume?.computed?.resolvedFrames;
+
+  // Keyframes por capa: Immer comparte el mismo array ref cuando no se mutó
+  const pk = prev.framesResume?.computed?.keyframes?.[layerId];
+  const nk = next.framesResume?.computed?.keyframes?.[layerId];
+  if (pk !== nk) return false;
+
+  // Para cada frame visible, comparar la slice de esta capa. Aprovechamos
+  // structural sharing: si `frames[fn]` mantiene el ref, todos sus layers lo
+  // hacen también; solo entramos al check granular cuando el frame cambió.
+  const frames = next.frameNumbers;
+  for (let i = 0; i < frames.length; i++) {
+    const fn = frames[i];
+    const pf = pfFrames?.[fn];
+    const nf = nfFrames?.[fn];
+    if (pf !== nf) {
+      if (
+        pf?.layerHasContent?.[layerId] !== nf?.layerHasContent?.[layerId] ||
+        pf?.layerVisibility?.[layerId] !== nf?.layerVisibility?.[layerId] ||
+        pf?.layerOpacity?.[layerId] !== nf?.layerOpacity?.[layerId] ||
+        pf?.pixelGroups?.[layerId] !== nf?.pixelGroups?.[layerId]
+      ) {
+        return false;
+      }
+    }
+    const prf = pResolved?.[fn];
+    const nrf = nResolved?.[fn];
+    if (prf !== nrf) {
+      if (
+        prf?.layerHasContent?.[layerId] !== nrf?.layerHasContent?.[layerId] ||
+        prf?.layerVisibility?.[layerId] !== nrf?.layerVisibility?.[layerId] ||
+        prf?.layerOpacity?.[layerId] !== nrf?.layerOpacity?.[layerId]
+      ) {
+        return false;
+      }
+    }
+  }
+
+  return true; // La slice de esta capa no cambió → skip render
+}
 
 const LayerRow = React.memo(function LayerRow({
   layer,
@@ -295,7 +405,7 @@ const LayerRow = React.memo(function LayerRow({
       </div>
     </div>
   );
-});
+}, arePropsEqual);
 
 export default LayerRow;
 
