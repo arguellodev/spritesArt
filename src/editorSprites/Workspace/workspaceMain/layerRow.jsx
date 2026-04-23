@@ -298,3 +298,31 @@ const LayerRow = React.memo(function LayerRow({
 });
 
 export default LayerRow;
+
+// FrameNumberCell — celda del strip de números de frame (header del timeline).
+// Hoisted + memoizada por los mismos motivos que LayerRow: evitar remontar
+// TODAS las celdas en cada render del padre. Se usa tanto en layerAnimation
+// (si se re-habilita ahí) como en timeline.jsx (header row del grid).
+export const FrameNumberCell = React.memo(function FrameNumberCell({
+  frameNumber,
+  isCurrent,
+  isSelected,
+  onMouseDown,
+  onMouseEnter,
+}) {
+  const handleMouseDown = (e) => onMouseDown(frameNumber, e);
+  const handleMouseEnter = () => onMouseEnter(frameNumber);
+  return (
+    <div
+      className={`frame-number ${isCurrent ? 'current' : ''} ${isSelected ? 'selected' : ''}`}
+      onMouseDown={handleMouseDown}
+      onMouseEnter={handleMouseEnter}
+      style={{ userSelect: 'none' }}
+      title={`Frame ${frameNumber}\nArrastrar para seleccionar múltiples`}
+    >
+      {frameNumber}
+      {isSelected && !isCurrent && <div className="selection-indicator" />}
+    </div>
+  );
+});
+

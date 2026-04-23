@@ -1749,6 +1749,127 @@ margin-right: 20px;
 /* Estilo para indicar que se puede hacer selección múltiple */
 
 /* ============================================================================
+   GRID TIMELINE — variable global de anchura de la columna de capas.
+   Compartida por `.layer-info` (cada LayerRow) y `.timeline-header-left-placeholder`
+   (fila de frame-numbers del FramesTimeline). Esta igualdad es lo que hace que
+   la celda #N del header quede EXACTAMENTE encima de la celda #N de cada capa.
+   ============================================================================ */
+:root {
+  --layer-info-width: 220px;
+  --frame-cell-width: 50px;
+}
+
+/* Forzamos el ancho de layer-info para alineación columnar. */
+.animation-layer-row .layer-info {
+  width: var(--layer-info-width);
+  min-width: var(--layer-info-width);
+  max-width: var(--layer-info-width);
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+/* Fila header de FramesTimeline: placeholder de capas + strip de frames */
+.timeline-header-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  height: 28px;
+  background: var(--bg-tertiary);
+  border-bottom: 2px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.timeline-header-left-placeholder {
+  width: var(--layer-info-width);
+  min-width: var(--layer-info-width);
+  max-width: var(--layer-info-width);
+  flex-shrink: 0;
+  background: var(--bg-tertiary);
+  border-right: 1px solid var(--border-color);
+}
+
+.timeline-header-frames {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.timeline-header-frames .frame-number {
+  width: var(--frame-cell-width);
+  min-width: var(--frame-cell-width);
+  max-width: var(--frame-cell-width);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-right: 1px solid var(--border-color);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+              color 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.timeline-header-frames .frame-number:hover {
+  background: var(--button-hover);
+  color: var(--text-primary);
+}
+
+.timeline-header-frames .frame-number.current {
+  background: var(--accent-color);
+  color: white;
+  box-shadow: inset 0 -2px 0 var(--accent-active, var(--accent-color));
+}
+
+.timeline-header-frames .frame-number.selected {
+  background: color-mix(in srgb, var(--accent-color) 25%, transparent);
+  color: var(--text-primary);
+}
+
+.timeline-header-frames .frame-number .selection-indicator {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 2px;
+  background: var(--accent-color);
+  border-radius: 1px;
+}
+
+/* Contenedor padre del grid de filas por capa */
+.timeline-container {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg-primary);
+}
+
+.timeline-layers {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Las celdas de frame en cada LayerRow usan el mismo ancho que el header */
+.animation-layer-row .timeline-frames .timeline-frame {
+  width: var(--frame-cell-width);
+  min-width: var(--frame-cell-width);
+  max-width: var(--frame-cell-width);
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+/* ============================================================================
    ANIMATION BAR UNIFIED — una sola fila, misma altura, mismo contenedor.
 
    Layout horizontal en un único elemento:
@@ -1762,28 +1883,28 @@ margin-right: 20px;
    ============================================================================ */
 
 .animation-bar-unified {
-  --anim-bar-h: 44px;             /* altura unificada de TODO */
-  --sticky-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
+  --anim-bar-h: 44px;             /* altura unificada */
 
   display: flex;
   flex-direction: row;
-  align-items: stretch;            /* todo se estira a la misma altura */
+  align-items: stretch;
+  justify-content: space-between;  /* toolbar izq + spacer + onion der */
   height: var(--anim-bar-h);
   min-height: var(--anim-bar-h);
   max-height: var(--anim-bar-h);
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 8px 8px 0 0;       /* bordes redondeados solo arriba; pega al grid de abajo */
   box-shadow: var(--panel-shadow);
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: visible;                /* el grid maneja su propio scroll */
   position: relative;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
 
-  /* Scroll suave con fallback a no-motion */
-  scroll-behavior: smooth;
-  scrollbar-width: thin;
-  scrollbar-color: var(--accent-color) transparent;
+/* Spacer flexible entre toolbar izq y onion skin der */
+.animation-bar-unified .unified-timeline-spacer {
+  flex: 1;
+  min-width: 0;
 }
 
 .animation-bar-unified::-webkit-scrollbar {
@@ -1816,11 +1937,9 @@ margin-right: 20px;
   }
 }
 
-/* ---- STICKY-LEFT — toolbar completa pegada a la izquierda ---- */
+/* ---- Toolbar izquierda del animation-bar (ya no sticky: la barra ya no
+       scrollea; los frame-numbers se movieron al header del FramesTimeline). ---- */
 .unified-timeline-left {
-  position: sticky;
-  left: 0;
-  z-index: 2;
   flex-shrink: 0;
   display: flex;
   flex-direction: row;
@@ -1830,8 +1949,6 @@ margin-right: 20px;
   padding: 0 10px;
   background: var(--bg-tertiary);
   border-right: 1px solid var(--border-color);
-  /* Sombra que sugiere que hay contenido detrás/debajo al scrollear */
-  box-shadow: 4px 0 8px -4px rgba(0, 0, 0, 0.25);
 }
 
 /* Grupos de controles dentro del toolbar */
@@ -2060,11 +2177,8 @@ margin-right: 20px;
   border-right: 1px solid var(--border-color);
 }
 
-/* ---- STICKY-RIGHT — onion skin ---- */
+/* ---- Parte derecha del animation-bar: onion skin (ya no sticky) ---- */
 .unified-timeline-right {
-  position: sticky;
-  right: 0;
-  z-index: 2;
   flex-shrink: 0;
   display: flex;
   flex-direction: row;
@@ -2074,7 +2188,6 @@ margin-right: 20px;
   padding: 0 10px;
   background: var(--bg-tertiary);
   border-left: 1px solid var(--border-color);
-  box-shadow: -4px 0 8px -4px rgba(0, 0, 0, 0.25);
 }
 
 .unified-timeline-right .onion-skin-toggle {

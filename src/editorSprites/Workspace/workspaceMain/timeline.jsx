@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import './layerAnimation.css'
 
-import LayerRow from './layerRow';
+import LayerRow, { FrameNumberCell } from './layerRow';
 import ConfigOnionSkin from './configOnionSkin';
 import { CgArrowLongRightC } from "react-icons/cg";
 import { BsDashCircleDotted } from "react-icons/bs";
@@ -90,6 +90,10 @@ const FramesTimeline = ({
 
   // Resumen de frames (data consolidada)
   framesResume,
+
+  // Playback state (del padre): para iluminar el frame en animación.
+  isPlaying,
+  animationTickFrame,  // frameNumber que el motor de animación está mostrando
 }) => {
 
   const getFramesInfo = useCallback(() => {
@@ -782,6 +786,89 @@ const stableRowHandlers = useMemo(() => ({
   onFrameMouseEnter: (...args) => rowHandlersRef.current?.onFrameMouseEnter(...args),
 }), []);
 
+// --- Handlers para el HEADER ROW de frame-numbers (top-level, sin layer) ---
+// Aquí la selección es "global" (afecta a `selectedFrames`), no por capa.
+// Click = seleccionar un frame. Shift+click = rango. Ctrl/Cmd = toggle múltiple.
+// Drag (con mousedown + mouseenter mientras isDraggingHeader) = seleccionar varios.
+const [isDraggingHeader, setIsDraggingHeader] = useState(false);
+
+function handleHeaderFrameSelection(frameNumber, event) {
+  const { ctrlKey, metaKey, shiftKey } = event;
+  const isCtrlOrCmd = ctrlKey || metaKey;
+  if (shiftKey && selectedFrames.length > 0) {
+    const lastSelected = Math.max(...selectedFrames);
+    const start = Math.min(lastSelected, frameNumber);
+    const end = Math.max(lastSelected, frameNumber);
+    const range = Array.from({ length: end - start + 1 }, (_, i) => start + i);
+    setSelectedFrames(range);
+    setActiveFrame(Math.max(...range));
+  } else if (isCtrlOrCmd) {
+    const newSelection = selectedFrames.includes(frameNumber)
+      ? selectedFrames.filter(f => f !== frameNumber)
+      : [...selectedFrames, frameNumber].sort((a, b) => a - b);
+    setSelectedFrames(newSelection);
+    if (newSelection.length > 0) setActiveFrame(Math.max(...newSelection));
+  } else {
+    setSelectedFrames([frameNumber]);
+    setActiveFrame(frameNumber);
+  }
+}
+
+function handleHeaderFrameMouseDown(frameNumber, event) {
+  clearCurrentSelection();
+  const { ctrlKey, metaKey, shiftKey } = event;
+  const isCtrlOrCmd = ctrlKey || metaKey;
+  if (shiftKey || isCtrlOrCmd) {
+    handleHeaderFrameSelection(frameNumber, event);
+    setIsDraggingHeader(false);
+  } else {
+    setIsDraggingHeader(true);
+    setSelectedFrames([frameNumber]);
+    setActiveFrame(frameNumber);
+  }
+}
+
+const handleHeaderFrameMouseEnter = (frameNumber) => {
+  if (isDraggingHeader) {
+    setSelectedFrames(prev => {
+      const next = prev.includes(frameNumber)
+        ? prev
+        : [...prev, frameNumber].sort((a, b) => a - b);
+      if (next.length > 0) setActiveFrame(Math.max(...next));
+      return next;
+    });
+  }
+};
+
+// Mouseup global para terminar el drag del header.
+useEffect(() => {
+  const onUp = () => { if (isDraggingHeader) setIsDraggingHeader(false); };
+  document.addEventListener('mouseup', onUp);
+  document.addEventListener('mouseleave', onUp);
+  return () => {
+    document.removeEventListener('mouseup', onUp);
+    document.removeEventListener('mouseleave', onUp);
+  };
+}, [isDraggingHeader]);
+
+// Latest-ref pattern para pasar handlers estables a FrameNumberCell
+// (sin invalidar su React.memo al cambiar estado no relacionado).
+const headerHandlersRef = useRef(null);
+useEffect(() => {
+  headerHandlersRef.current = {
+    onMouseDown: handleHeaderFrameMouseDown,
+    onMouseEnter: handleHeaderFrameMouseEnter,
+  };
+});
+const stableHeaderFrameMouseDown = useCallback(
+  (frameNumber, event) => headerHandlersRef.current?.onMouseDown(frameNumber, event),
+  []
+);
+const stableHeaderFrameMouseEnter = useCallback(
+  (frameNumber) => headerHandlersRef.current?.onMouseEnter(frameNumber),
+  []
+);
+
 
 // Builder recursivo para `LayerRow`: devuelve array plano con la fila de la
 // capa y, si está expandida, los rows de sus hijos. `LayerRow` (hoisted abajo)
@@ -875,20 +962,44 @@ const renderLayerWithTimeline = (layer) => {
 
 
 
-      {/* Timeline principal */}
+      {/* Timeline principal: GRID con header-row (frame-numbers) + layer rows.
+          Todos comparten el mismo layout de columnas vía `--layer-info-width`
+          aplicado tanto al `.timeline-header-left-placeholder` como al
+          `.layer-info` de cada LayerRow. De esa forma el frame-number #N en
+          la fila superior queda EXACTAMENTE encima de la celda #N en cada
+          capa de abajo. */}
       <div className="timeline-container">
-        {/* Header de frames */}
-        
+        {/* Header row: frame-numbers strip column-aligned con las filas de capas */}
+        <div className="timeline-header-row">
+          <div className="timeline-header-left-placeholder" aria-hidden />
+          <div className="timeline-header-frames">
+            {frameNumbers.map((frameNumber) => {
+              const isSelected = selectedFrames.includes(frameNumber);
+              // Durante playback: iluminar el frame que el motor de animación
+              // está mostrando. Cuando no hay playback: iluminar el frame
+              // seleccionado por el usuario.
+              const isCurrent = isPlaying && animationTickFrame != null
+                ? animationTickFrame === frameNumber
+                : currentFrame === frameNumber;
+              return (
+                <FrameNumberCell
+                  key={frameNumber}
+                  frameNumber={frameNumber}
+                  isCurrent={isCurrent}
+                  isSelected={isSelected}
+                  onMouseDown={stableHeaderFrameMouseDown}
+                  onMouseEnter={stableHeaderFrameMouseEnter}
+                />
+              );
+            })}
+          </div>
+        </div>
 
-        {/* Layers con timeline */}
+        {/* Layer rows: cada una con su LayerRow (layer-info + timeline-frames) */}
         <div className="timeline-layers">
-  {getOrderedLayers().map(layer => renderLayerWithTimeline(layer)).flat()}
-</div>
+          {getOrderedLayers().map(layer => renderLayerWithTimeline(layer)).flat()}
+        </div>
       </div>
-
-      {/* Información de selección */}
-     
-
     </>
   );
 };

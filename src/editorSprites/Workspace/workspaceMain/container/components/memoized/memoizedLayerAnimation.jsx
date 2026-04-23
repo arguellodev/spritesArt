@@ -90,6 +90,7 @@ export function renderLayerAnimation(props) {
       zoom={props.zoom}
       isPlaying={props.isPlaying}
       setIsPlaying={props.setIsPlaying}
+      onFrameChange={props.onFrameChange}
       eyeDropperColor={props.eyeDropperColor}
       onionFramesConfig={props.onionFramesConfig}
       setOnionFramesConfig={props.setOnionFramesConfig}

@@ -182,6 +182,14 @@ const [myBrushes, setMyBrushes] = useState(null);
 const [rotationAngle, setRotationAngle] = useState(0);
   //Reproduccion:
   const [isPlaying, setIsPlaying] = useState(false);
+  // Frame actualmente mostrado por el motor de animación durante playback.
+  // Emitido por `useAnimationPlayer` en `layerAnimation.jsx` vía `onFrameChange`
+  // y propagado a `FramesTimeline` para que su header-row ilumine el frame
+  // activo (la celda que "se enciende" al darle play).
+  const [animationTickFrame, setAnimationTickFrame] = useState(null);
+  const handleAnimationFrameChange = useCallback((_frameIndex, frameNumber) => {
+    setAnimationTickFrame(frameNumber);
+  }, []);
   // estado especial para manejo de gradiente editable
   const [gradientPixels, setGradientPixels] = useState(null);
   //Estados de la inteligencia artificial:
@@ -507,6 +515,11 @@ useKeybindingsListener(keybindingsRegistry);
     isolatedPixels
   });
 
+  // Sincronizar compositeRenderRef (declarada más arriba) con la fn real
+  // del hook. Necesario para que los handlers definidos antes de la
+  // declaración final (handleImportAseprite, handleAutoCrop) puedan invocarla.
+  useEffect(() => { compositeRenderRef.current = compositeRender; }, [compositeRender]);
+
   // Registrar keybindings centralizados. Los handlers cierran sobre las fns de
   // useLayerManager y las setters de modales. El listener global ya está montado
   // (línea arriba) — esto solo puebla el registry para que el panel de Settings
@@ -516,6 +529,12 @@ useKeybindingsListener(keybindingsRegistry);
   // siempre llame a la última versión (que incluye cache invalidation).
   const handleUndoRef = useRef(() => undo?.());
   const handleRedoRef = useRef(() => redo?.());
+
+  // Ref wrappers para funciones que se declaran más abajo en el componente
+  // pero necesitan ser referenciadas por handlers definidos aquí (TDZ guard).
+  // Se sincronizan vía useEffect tras la declaración real (ver más abajo).
+  const invalidateCacheRef = useRef(() => {});
+  const compositeRenderRef = useRef(() => {});
 
   useEffect(() => {
     // Nota: los Ctrl+Z / Ctrl+Y también están enganchados via listener keydown
@@ -532,116 +551,10 @@ useKeybindingsListener(keybindingsRegistry);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --- Importar .aseprite/.ase ---
-  // Abre file picker, parsea con loadAsepriteFile y lo convierte al formato interno.
-  // Por ahora solo cargamos paleta, tags y slices al estado del workspace; el
-  // reemplazo completo de frames/capas requiere `restoreFromProjectData` con un
-  // proyecto construido desde el asepriteDoc (siguiente paso).
-  const handleImportAseprite = useCallback(async () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.ase,.aseprite';
-    input.onchange = async (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      try {
-        const doc = await loadAsepriteFile(file);
-        const pixcalliLike = asepriteDocToPixcalli(doc);
-        // Por el momento populamos solo los campos aditivos (las extensions);
-        // la restauración completa de frames/capas requiere un handleProjectLoaded
-        // dedicado que todavía no está escrito para el formato importado.
-        if (Array.isArray(doc.tags) && doc.tags.length) {
-          setAnimationTags(doc.tags.map((t, i) => ({
-            id: `tag_imported_${i}`,
-            name: t.name || `tag_${i}`,
-            from: t.from,
-            to: t.to,
-            direction: t.direction,
-            color: t.color || '#4a90e2',
-            repeat: 0,
-          })));
-        }
-        if (Array.isArray(doc.slices) && doc.slices.length) {
-          setSlices(doc.slices.map((s, i) => ({
-            id: `slice_imported_${i}`,
-            name: s.name,
-            color: '#ffcc44',
-            bounds: s.bounds,
-            ...(s.center ? { center: s.center } : {}),
-            ...(s.pivot ? { pivot: s.pivot } : {}),
-          })));
-        }
-        console.log(
-          `[aseprite] Import OK — ${doc.framesCount} frames, ${doc.layers.length} capas, ` +
-          `${doc.palette?.length ?? 0} colores de paleta, ${doc.tags.length} tags, ${doc.slices.length} slices. ` +
-          `(Nota: frames/capas todavía no se inyectan al canvas.)`
-        );
-        alert(
-          `Parseado: ${doc.framesCount} frames × ${doc.layers.length} capas.\n` +
-          `Tags y slices importados al panel lateral. ` +
-          `El renderizado completo del documento sobre el canvas requiere un import handler dedicado.`
-        );
-        void pixcalliLike; // snapshot disponible para quien quiera usarlo
-      } catch (err) {
-        console.error('Error importando .aseprite:', err);
-        alert(`No se pudo importar el archivo: ${err.message}`);
-      }
-    };
-    input.click();
-  }, []);
-
-  // --- Importar imagen como capa de referencia ---
-  // PNG/JPEG → ReferenceLayer (bloqueada, opacidad 0.5, no exportable).
-  // El objeto completo (incluyendo el canvas HTML) se guarda en `referenceLayers`.
-  // Al persistir el proyecto, el serializador filtra props no-serializables
-  // (el canvas pesa demasiado para el JSON por ahora — futuro: dataURL opcional).
-  const handleImportReferenceImage = useCallback(async () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/png,image/jpeg,image/webp';
-    input.onchange = async (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      try {
-        const layer = await loadReferenceFromFile(file);
-        setReferenceLayers((prev) => [...prev, layer]);
-      } catch (err) {
-        console.error('Error cargando referencia:', err);
-        alert(`No se pudo cargar la imagen: ${err.message ?? err}`);
-      }
-    };
-    input.click();
-  }, []);
-
-  // --- Auto-crop: recorta el documento al bounding box opaco de todas las capas ---
-  // Solo sugiere las nuevas dimensiones (no muta el documento automáticamente)
-  // porque el resize requiere actualizar tamaño del canvas del hook, lo cual
-  // no está expuesto todavía. Si el usuario acepta, se hace un manual override.
-  const handleAutoCrop = useCallback(() => {
-    const canvases = [];
-    for (const frame of Object.values(frames ?? {})) {
-      for (const canvas of Object.values(frame?.canvases ?? {})) {
-        if (canvas && canvas.width && canvas.height) canvases.push(canvas);
-      }
-    }
-    if (canvases.length === 0) {
-      alert('No hay capas con contenido para recortar.');
-      return;
-    }
-    const result = autoCrop(canvases, { padding: 0 });
-    if (!result) {
-      alert('Todas las capas están vacías. No hay nada que recortar.');
-      return;
-    }
-    alert(
-      `Auto-crop sugerido: ${result.width}×${result.height} px ` +
-      `(desde ${totalWidth}×${totalHeight}).\n\n` +
-      `Implementación completa del resize pendiente — requiere exponer setDocumentSize ` +
-      `en useLayerManager para actualizar todos los frames/capas en una transacción.`
-    );
-  }, [frames, totalWidth, totalHeight]);
-
-  // ---- Callback de carga de proyecto (.pixcalli v2) ----
+  // --- Callback de carga de proyecto (.pixcalli v2) ---
+  // Declarado ANTES que handleImportAseprite / handleAutoCrop porque esos dos
+  // lo usan en sus deps de useCallback. En TDZ, una const declarada abajo no
+  // puede referenciarse arriba aunque el handler se ejecute más tarde.
   const handleProjectLoaded = useCallback(async ({ success, projectData, restoredCanvases }) => {
     if (!success || !projectData) return;
 
@@ -678,17 +591,36 @@ useKeybindingsListener(keybindingsRegistry);
     }
 
     // Restaurar extensions v2.1 (paletas custom, tags, slices, referenceLayers, guides, tileset).
-    // Todo es opcional — parsers viejos no tenían este campo.
     const ext = projectData.extensions;
     if (ext) {
       if (Array.isArray(ext.customPalettes)) setCustomPalettes(ext.customPalettes);
       if (Array.isArray(ext.animationTags))  setAnimationTags(ext.animationTags);
       if (Array.isArray(ext.slices))         setSlices(ext.slices);
-      if (Array.isArray(ext.referenceLayers)) setReferenceLayers(ext.referenceLayers);
+      if (Array.isArray(ext.referenceLayers)) {
+        Promise.all(
+          ext.referenceLayers.map(
+            (r) =>
+              new Promise((resolve) => {
+                if (!r.dataURL) {
+                  resolve({ ...r });
+                  return;
+                }
+                const img = new Image();
+                img.onload = () => {
+                  const canvas = document.createElement('canvas');
+                  canvas.width = r.width || img.naturalWidth;
+                  canvas.height = r.height || img.naturalHeight;
+                  canvas.getContext('2d').drawImage(img, 0, 0);
+                  resolve({ ...r, canvas });
+                };
+                img.onerror = () => resolve({ ...r });
+                img.src = r.dataURL;
+              })
+          )
+        ).then((restored) => setReferenceLayers(restored));
+      }
       if (Array.isArray(ext.guides))         setGuides(ext.guides);
       if (ext.tilesets) {
-        // Rehidratar canvases desde dataURL. Puede tardar con tilesets grandes,
-        // pero corre en paralelo (Promise.all).
         deserializeTileset(ext.tilesets).then((ts) => {
           if (ts) setTileset(ts);
         }).catch((err) => {
@@ -699,6 +631,278 @@ useKeybindingsListener(keybindingsRegistry);
   }, [restoreFromProjectData, setZoom, setPanOffset,
       setForegroundColor, setBackgroundColor, setFillColor, setBorderColor, setToolParameters]);
 
+  // --- Importar .aseprite/.ase ---
+  // Abre file picker, parsea con loadAsepriteFile y aplica el documento al
+  // canvas mediante `restoreFromProjectData` (mismo camino que cargar un
+  // .pixcalli). Adicionalmente importa tags/slices al estado del workspace.
+  const handleImportAseprite = useCallback(async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.ase,.aseprite';
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const doc = await loadAsepriteFile(file);
+        const pix = asepriteDocToPixcalli(doc);
+
+        // Construir el payload con la shape que restoreFromProjectData espera.
+        // - framesResume: metadata por frame (duration, tags)
+        // - layers: definición de capas
+        // - restoredCanvases: mapa plano "frame_N_layerId" → HTMLCanvasElement
+        const framesResumeShape = {
+          frames: {},
+          metadata: { defaultFrameDuration: 100, frameRate: 10 },
+          computed: { frameSequence: [] },
+        };
+        const restoredCanvases = {};
+
+        for (const [frameKeyStr, frameData] of Object.entries(pix.frames)) {
+          const frameN = Number(frameKeyStr);
+          framesResumeShape.frames[frameN] = {
+            duration: frameData.duration ?? 100,
+            tags: [],
+          };
+          framesResumeShape.computed.frameSequence.push(frameN);
+          // Para cada capa del frame, añadir un canvas al tamaño del doc.
+          for (const layer of pix.layers) {
+            const celCanvas = frameData.canvases[layer.id];
+            // Si la capa no tiene cel en este frame, crear uno vacío del tamaño
+            // del documento para mantener consistencia.
+            if (celCanvas) {
+              restoredCanvases[`frame_${frameN}_${layer.id}`] = celCanvas;
+            } else {
+              const empty = document.createElement('canvas');
+              empty.width = pix.width;
+              empty.height = pix.height;
+              restoredCanvases[`frame_${frameN}_${layer.id}`] = empty;
+            }
+          }
+        }
+
+        const projectData = {
+          format: { name: 'PixCalli Studio', version: '2.0.0', migratedFrom: 'aseprite' },
+          metadata: { title: file.name.replace(/\.(ase|aseprite)$/i, '') },
+          viewport: {
+            zoom: 1,
+            panOffset: { x: 0, y: 0 },
+            activeLayerId: pix.layers[0]?.id ?? null,
+            currentFrame: framesResumeShape.computed.frameSequence[0] ?? 1,
+          },
+          animation: { defaultFrameDuration: 100, frameRate: 10, loop: true },
+          framesResume: framesResumeShape,
+          layers: pix.layers.map((l) => ({
+            id: l.id,
+            name: l.name,
+            visible: l.visible,
+            opacity: l.opacity ?? 1,
+            zIndex: l.zIndex ?? 0,
+            blendMode: l.blendMode ?? 'normal',
+            isGroupLayer: false,
+            parentLayerId: null,
+          })),
+          canvases: {},
+          palette: {
+            foreground: { r: 0, g: 0, b: 0, a: 255 },
+            background: { r: 255, g: 255, b: 255, a: 255 },
+            fillColor: { r: 0, g: 0, b: 0, a: 255 },
+            borderColor: { r: 0, g: 0, b: 0, a: 255 },
+            recentColors: [],
+          },
+          onionSkin: { enabled: false, settings: null, framesConfig: null },
+          dimensions: { width: pix.width, height: pix.height },
+        };
+
+        // Delegar al handler de proyecto existente (restaura canvas + metadata).
+        await handleProjectLoaded({ success: true, projectData, restoredCanvases });
+
+        // Tags y slices importados (ya estaban funcionando).
+        if (Array.isArray(doc.tags) && doc.tags.length) {
+          setAnimationTags(doc.tags.map((t, i) => ({
+            id: `tag_imported_${i}`,
+            name: t.name || `tag_${i}`,
+            from: t.from,
+            to: t.to,
+            direction: t.direction,
+            color: t.color || '#4a90e2',
+            repeat: 0,
+          })));
+        }
+        if (Array.isArray(doc.slices) && doc.slices.length) {
+          setSlices(doc.slices.map((s, i) => ({
+            id: `slice_imported_${i}`,
+            name: s.name,
+            color: '#ffcc44',
+            bounds: s.bounds,
+            ...(s.center ? { center: s.center } : {}),
+            ...(s.pivot ? { pivot: s.pivot } : {}),
+          })));
+        }
+
+        // Tras aplicar canvases, asegurar que el pipeline no use cache stale.
+        invalidateCacheRef.current?.();
+        compositeRenderRef.current?.();
+
+        console.log(
+          `[aseprite] Import OK — ${doc.framesCount} frames × ${doc.layers.length} capas, ` +
+          `${doc.palette?.length ?? 0} colores, ${doc.tags.length} tags, ${doc.slices.length} slices.`
+        );
+      } catch (err) {
+        console.error('Error importando .aseprite:', err);
+        alert(`No se pudo importar el archivo: ${err.message}`);
+      }
+    };
+    input.click();
+  }, [handleProjectLoaded]);
+
+  // --- Importar imagen como capa de referencia ---
+  // PNG/JPEG → ReferenceLayer (bloqueada, opacidad 0.5, no exportable).
+  // El objeto completo (incluyendo el canvas HTML) se guarda en `referenceLayers`.
+  // Al persistir el proyecto, el serializador filtra props no-serializables
+  // (el canvas pesa demasiado para el JSON por ahora — futuro: dataURL opcional).
+  const handleImportReferenceImage = useCallback(async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/png,image/jpeg,image/webp';
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const layer = await loadReferenceFromFile(file);
+        setReferenceLayers((prev) => [...prev, layer]);
+      } catch (err) {
+        console.error('Error cargando referencia:', err);
+        alert(`No se pudo cargar la imagen: ${err.message ?? err}`);
+      }
+    };
+    input.click();
+  }, []);
+
+  // --- Auto-crop mutativo ---
+  // Calcula el bounding box opaco global, recorta cada canvas de cada capa de
+  // cada frame al mismo rect, y reconstruye el proyecto con las nuevas
+  // dimensiones vía handleProjectLoaded (mismo camino que cargar un .pixcalli).
+  // Pide confirmación porque es destructivo (los píxeles fuera del bbox se pierden).
+  const handleAutoCrop = useCallback(async () => {
+    // Unir canvases de todos los frames y capas.
+    const allCanvases = [];
+    for (const frame of Object.values(frames ?? {})) {
+      for (const canvas of Object.values(frame?.canvases ?? {})) {
+        if (canvas && canvas.width && canvas.height) allCanvases.push(canvas);
+      }
+    }
+    if (allCanvases.length === 0) {
+      alert('No hay capas con contenido para recortar.');
+      return;
+    }
+    const result = autoCrop(allCanvases, { padding: 0 });
+    if (!result) {
+      alert('Todas las capas están vacías. No hay nada que recortar.');
+      return;
+    }
+    if (result.width === totalWidth && result.height === totalHeight) {
+      alert('El documento ya está recortado — no hay margen opaco que quitar.');
+      return;
+    }
+    const confirmed = confirm(
+      `Auto-crop: ${totalWidth}×${totalHeight} → ${result.width}×${result.height} px.\n\n` +
+      `Esto recorta TODOS los frames y capas al mismo rect. Los píxeles fuera del bbox ` +
+      `se perderán. ¿Continuar?`
+    );
+    if (!confirmed) return;
+
+    // Reutilizamos los bounds calculados por computeUnionBounds dentro de autoCrop.
+    // `autoCrop` devuelve `result.bounds` { minX, minY, maxX, maxY }.
+    const { minX, minY } = result.bounds;
+    const newW = result.width;
+    const newH = result.height;
+
+    // Construir un nuevo set de canvases recortados por (frame, layer).
+    // Nota: NO usamos result.canvases porque esa lista es plana (no preserva
+    // la asociación (frame, layer)) — volvemos a recortar individualmente.
+    const restoredCanvases = {};
+    const framesResumeShape = {
+      frames: {},
+      metadata: { defaultFrameDuration: 100, frameRate: 10 },
+      computed: { frameSequence: [] },
+    };
+    const frameKeys = Object.keys(frames ?? {}).sort((a, b) => Number(a) - Number(b));
+    for (const frameKey of frameKeys) {
+      const frame = frames[frameKey];
+      if (!frame) continue;
+      const frameN = Number(frameKey);
+      framesResumeShape.frames[frameN] = {
+        duration: frame.frameDuration ?? 100,
+        tags: frame.tags ?? [],
+      };
+      framesResumeShape.computed.frameSequence.push(frameN);
+      for (const [layerId, canvas] of Object.entries(frame.canvases ?? {})) {
+        const cropped = document.createElement('canvas');
+        cropped.width = newW;
+        cropped.height = newH;
+        cropped.getContext('2d').drawImage(canvas, minX, minY, newW, newH, 0, 0, newW, newH);
+        restoredCanvases[`frame_${frameN}_${layerId}`] = cropped;
+      }
+    }
+
+    const projectData = {
+      format: { name: 'PixCalli Studio', version: '2.0.0' },
+      metadata: { title: 'auto-crop' },
+      viewport: {
+        zoom,
+        panOffset,
+        activeLayerId,
+        currentFrame,
+      },
+      animation: { defaultFrameDuration: 100, frameRate: 10, loop: true },
+      framesResume: framesResumeShape,
+      layers,
+      canvases: {},
+      palette: {
+        foreground: toolParameters?.foregroundColor ?? { r: 0, g: 0, b: 0, a: 255 },
+        background: toolParameters?.backgroundColor ?? { r: 255, g: 255, b: 255, a: 255 },
+        fillColor: toolParameters?.fillColor ?? { r: 0, g: 0, b: 0, a: 255 },
+        borderColor: toolParameters?.borderColor ?? { r: 0, g: 0, b: 0, a: 255 },
+        recentColors: [],
+      },
+      onionSkin: { enabled: onionSkinEnabled, settings: onionSkinSettings, framesConfig: onionFramesConfig },
+      dimensions: { width: newW, height: newH },
+    };
+
+    await handleProjectLoaded({ success: true, projectData, restoredCanvases });
+
+    // Reajustar slices y guías al nuevo origen: todo se corre (-minX, -minY).
+    if (slices.length && (minX !== 0 || minY !== 0)) {
+      setSlices((prev) =>
+        prev.map((s) => ({
+          ...s,
+          bounds: {
+            x: Math.max(0, s.bounds.x - minX),
+            y: Math.max(0, s.bounds.y - minY),
+            w: s.bounds.w,
+            h: s.bounds.h,
+          },
+        }))
+      );
+    }
+    if (guides.length && (minX !== 0 || minY !== 0)) {
+      setGuides((prev) =>
+        prev.map((g) => ({
+          ...g,
+          position: Math.max(0, g.position - (g.axis === 'x' ? minX : minY)),
+        }))
+      );
+    }
+
+    invalidateCacheRef.current?.();
+    compositeRenderRef.current?.();
+  }, [
+    frames, totalWidth, totalHeight, layers, zoom, panOffset, activeLayerId,
+    currentFrame, toolParameters, onionSkinEnabled, onionSkinSettings,
+    onionFramesConfig, slices, guides, handleProjectLoaded,
+  ]);
+
+  // ---- Callback de carga de proyecto (.pixcalli v2) ----
   // Hook para rastreo del puntero
 
 
@@ -3133,6 +3337,10 @@ const invalidateImageDataCacheOptimized = useCallback(() => {
   cacheValidRef.current = false;
   cachedImageDataDirtyRectRef.current = null;
 }, []);
+// Sincroniza la ref declarada arriba (usada por handlers del plan ambicioso
+// que se declaran ANTES que esta función y no pueden tenerla en deps — TDZ).
+// eslint-disable-next-line react-hooks/rules-of-hooks
+useEffect(() => { invalidateCacheRef.current = invalidateImageDataCacheOptimized; }, [invalidateImageDataCacheOptimized]);
 
 // Invalidar solo cuando la composición externa del canvas pudo cambiar.
 // Antes dependía de isPressed → forzaba readPixels completo en cada trazo.
@@ -10056,6 +10264,11 @@ const cutSelection = useCallback(() => {
         zoom,
         isPlaying,
         setIsPlaying,
+        // onFrameChange: el motor en useAnimationPlayer llama a este callback
+        // cada vez que avanza durante playback; el padre guarda frameNumber en
+        // `animationTickFrame` y lo pasa a FramesTimeline para resaltar la
+        // celda que se enciende.
+        onFrameChange: handleAnimationFrameChange,
         eyeDropperColor,
         onionFramesConfig,
         setOnionFramesConfig,
@@ -10075,6 +10288,7 @@ const cutSelection = useCallback(() => {
       // viewport, onion-skin no se actualizaba al togglear, etc.).
       frozenProps,
       isPlaying,
+      handleAnimationFrameChange,
       viewportOffset,
       viewportWidth,
       viewportHeight,
@@ -10179,6 +10393,10 @@ const cutSelection = useCallback(() => {
         zoom,
         isPlaying,
         setIsPlaying,
+        // animationTickFrame: frameNumber que el motor de animación está
+        // mostrando en este instante durante playback. FramesTimeline lo usa
+        // en su header-row para iluminar la celda activa.
+        animationTickFrame,
         eyeDropperColor,
       }),
     [
@@ -10186,6 +10404,7 @@ const cutSelection = useCallback(() => {
       // mismo conjunto de props reactivas (el wrapper es un espejo).
       frozenProps,
       isPlaying,
+      animationTickFrame,
       viewportOffset,
       viewportWidth,
       viewportHeight,
@@ -11408,10 +11627,15 @@ handleRotSprite(rotationAngleSelection, true);
             slices={slices}
             // Tilesets → dataURL por tile (canvases DOM no serializables directo).
             tilesets={tileset ? serializeTileset(tileset) : null}
-            // Solo metadata serializable (sin el canvas); hasta que persistamos bitmap.
-            referenceLayerMeta={referenceLayers.map(({ id, name, opacity, x, y, scale, rotation, visible, locked }) =>
-              ({ id, name, opacity, x, y, scale, rotation, visible, locked })
-            )}
+            // Metadata + bitmap de cada capa codificado como dataURL (PNG).
+            // Esto hace crecer el .pixcalli por referencia (~KB/referencia) pero
+            // garantiza round-trip completo: guardar → cerrar → reabrir → sigue la imagen.
+            referenceLayerMeta={referenceLayers.map(({ id, name, opacity, x, y, scale, rotation, visible, locked, canvas }) => ({
+              id, name, opacity, x, y, scale, rotation, visible, locked,
+              dataURL: canvas?.toDataURL ? canvas.toDataURL('image/png') : null,
+              width:  canvas?.width  ?? 0,
+              height: canvas?.height ?? 0,
+            }))}
             guides={guides}
           />
         )}

@@ -595,27 +595,10 @@ const handleFrameMouseEnter = (frameNumber) => {
   }
 };
 
-// Latest-ref pattern: expone callbacks con identidad estable durante toda
-// la vida del componente, pero que invocan siempre la versión más reciente
-// del handler. Con esto, las celdas memoizadas (FrameNumberCell) solo se
-// re-renderean cuando cambian props que sí les importan (frameNumber,
-// isCurrent, isSelected) — no cuando cambia selectedFrames/isDragging.
-// La sincronización del ref va en un useEffect (no en el cuerpo del render)
-// para cumplir las reglas de React Compiler — "no mutar refs durante render".
-const handleFrameMouseDownRef = useRef(handleFrameMouseDown);
-const handleFrameMouseEnterRef = useRef(handleFrameMouseEnter);
-useEffect(() => {
-  handleFrameMouseDownRef.current = handleFrameMouseDown;
-  handleFrameMouseEnterRef.current = handleFrameMouseEnter;
-});
-const stableHandleFrameMouseDown = useCallback(
-  (frameNumber, event) => handleFrameMouseDownRef.current(frameNumber, event),
-  []
-);
-const stableHandleFrameMouseEnter = useCallback(
-  (frameNumber) => handleFrameMouseEnterRef.current(frameNumber),
-  []
-);
+// (Eliminados `stableHandleFrameMouseDown`/`stableHandleFrameMouseEnter` —
+// alimentaban el strip de frame-numbers de la animation-bar, que se movió
+// al header-row de FramesTimeline. Los handlers originales abajo siguen
+// declarados por si se re-enable el `renderLayerWithTimeline` dead code.)
 
 // useEffect para detectar cuando se suelta el mouse globalmente
 useEffect(() => {
@@ -1270,28 +1253,11 @@ const renderLayerWithTimeline = (layer) => {
           </div>
         </div>
 
-        {/* Centro scrollable: frame-numbers strip */}
-        <div className="unified-timeline-frames">
-          <div className="frame-numbers">
-            {frameNumbers.map((frameNumber) => {
-              const isSelected = selectedFrames.includes(frameNumber);
-              const isCurrent = isPlaying
-                ? currentAnimationFrame === frameNumber
-                : currentFrame === frameNumber;
-
-              return (
-                <FrameNumberCell
-                  key={frameNumber}
-                  frameNumber={frameNumber}
-                  isCurrent={isCurrent}
-                  isSelected={isSelected}
-                  onMouseDown={stableHandleFrameMouseDown}
-                  onMouseEnter={stableHandleFrameMouseEnter}
-                />
-              );
-            })}
-          </div>
-        </div>
+        {/* Spacer flexible entre la toolbar izquierda y el onion-skin derecho.
+            El strip de frame-numbers YA NO vive aquí — ahora es el header row
+            de FramesTimeline (timeline.jsx) para que column-aligne con las
+            filas de capas. */}
+        <div className="unified-timeline-spacer" aria-hidden />
 
         {/* Sticky right: onion skin */}
         <div className="unified-timeline-right">
@@ -1327,35 +1293,7 @@ const renderLayerWithTimeline = (layer) => {
   );
 };
 
-// Celda del timeline con número de frame.
-// Hoisted: si la definimos dentro del cuerpo de `LayerAnimation`, cada render
-// del padre crea un tipo nuevo y React desmonta/remontea TODAS las celdas —
-// el `React.memo` no sirve de nada. Fuera del cuerpo, la memo salta
-// re-renders salvo que cambien sus props (isCurrent / isSelected / handlers).
-// El binding de `frameNumber` a los handlers se hace aquí adentro para que
-// el padre pueda pasar callbacks estables.
-const FrameNumberCell = React.memo(function FrameNumberCell({
-  frameNumber,
-  isCurrent,
-  isSelected,
-  onMouseDown,
-  onMouseEnter,
-}) {
-  const handleMouseDown = (e) => onMouseDown(frameNumber, e);
-  const handleMouseEnter = () => onMouseEnter(frameNumber);
-  return (
-    <div
-      className={`frame-number ${isCurrent ? 'current' : ''} ${isSelected ? 'selected' : ''}`}
-      onMouseDown={handleMouseDown}
-      onMouseEnter={handleMouseEnter}
-      style={{ userSelect: 'none' }}
-      title={`Frame ${frameNumber}\nArrastrar para seleccionar múltiples`}
-    >
-      {frameNumber}
-      {isSelected && !isCurrent && <div className="selection-indicator" />}
-    </div>
-  );
-});
-
+// (FrameNumberCell movida a `./layerRow.jsx` como named export — la usa
+// ahora `timeline.jsx` en su header row del grid. Ver ese archivo.)
 
 export default LayerAnimation;

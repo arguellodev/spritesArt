@@ -88,6 +88,7 @@ export function renderFramesTimeline(props) {
       zoom={props.zoom}
       isPlaying={props.isPlaying}
       setIsPlaying={props.setIsPlaying}
+      animationTickFrame={props.animationTickFrame}
       eyeDropperColor={props.eyeDropperColor}
     />
   );
