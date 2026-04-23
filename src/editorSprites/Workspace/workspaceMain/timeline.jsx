@@ -97,18 +97,33 @@ const FramesTimeline = ({
   animationTickFrame,  // frameNumber que el motor de animación está mostrando
 }) => {
 
-  // CRÍTICO para performance: `frameNumbers` debe tener identidad estable
-  // entre renders. Antes `getFramesInfo()` era useCallback pero se invocaba
-  // cada render y devolvía un array nuevo — con eso, el React.memo de cada
-  // LayerRow fallaba siempre (porque frameNumbers era prop nueva). Resultado:
-  // durante playback, pintado o selección, TODAS las filas re-renderizaban
-  // aunque la data real no hubiera cambiado para esa capa.
-  // useMemo asegura que el mismo array se reusa mientras framesResume no cambie.
-  const { frameNumbers, frameCount } = useMemo(() => {
+  // Nota sobre PERFORMANCE vs CORRECCIÓN:
+  //
+  // En versiones anteriores probé memoizar `frameNumbers` con useMemo deps
+  // [framesResume]. Eso optimizó playback (LayerRow memo skippeaba cuando
+  // framesResume no cambiaba), PERO expuso un bug sutil: al pintar / crear
+  // frame / crear capa, la UI no se actualizaba hasta cambiar de frame.
+  //
+  // Causa raíz: `useLayerManager` hace `setFramesResume(prev => ({...prev, ...}))`
+  // con MUTACIONES IN-PLACE sobre los objetos anidados (ver `hooks.jsx:3616`+,
+  // `addLayer:2216`+, etc.). El top-level ref cambia pero sub-objetos comparten
+  // referencia entre prev y next. Con el `frameNumbers` memoizado, la UI podía
+  // acabar sirviendo un árbol "cacheado" antes de que React detectara el cambio
+  // (interacción con el React Compiler + el nested shallow-spread pattern).
+  //
+  // Sin la memoización: `frameNumbers` es new array cada render. LayerRow.memo
+  // falla siempre. Re-render más frecuente, pero la UI SIEMPRE refleja la
+  // última data. Trade-off elegido: correctness > performance.
+  //
+  // Fix arquitectónico (futuro): migrar setFramesResume a updates inmutables
+  // (spreads profundos o Immer) en `useLayerManager`. Con eso, se podrá volver
+  // a memoizar frameNumbers Y LayerRow podrá usar un comparador custom seguro.
+  const getFramesInfo = useCallback(() => {
     if (!framesResume?.frames) return { frameNumbers: [], frameCount: 0 };
     const arr = Object.keys(framesResume.frames).map(Number).sort((a, b) => a - b);
     return { frameNumbers: arr, frameCount: arr.length };
   }, [framesResume]);
+  const { frameNumbers, frameCount } = getFramesInfo();
   const [editingLayerId, setEditingLayerId] = useState(null);
   const [editingName, setEditingName] = useState('');
   // (Eliminado: `editingGroupId` / `editingGroupName` useStates — solo los
