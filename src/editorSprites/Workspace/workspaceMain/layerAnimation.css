@@ -1867,55 +1867,47 @@ margin-right: 20px;
   }
 }
 
-/* --- Resizer de la columna de capas ------------------------------------- */
-
-/* Wrapper sticky: 0×0, solo hospeda el grip absolutamente posicionado.
-   Queda pegado arriba-izquierda del viewport scrollable; el grip se coloca
-   a `--layer-info-width` desde el borde, así siempre marca la frontera. */
-.layers-column-resizer-sticky {
-  position: sticky;
-  top: 0;
-  left: 0;
-  width: 0;
-  height: 0;
-  z-index: 15;
-  pointer-events: none;
-}
-
+/* --- Resizer de la columna de capas -------------------------------------
+   Grip directo `position: absolute` dentro de `.timeline-container`
+   (position: relative + overflow: auto): el grip se posiciona relativo al
+   padding box del contenedor — efectivamente fijo al viewport del scroll.
+   Así queda siempre en la frontera `--layer-info-width` sin importar cuánto
+   se scrollee. ---------------------------------------------------------- */
 .layers-column-resizer-grip {
   position: absolute;
   top: 0;
-  /* Altura = altura visible del contenedor de scroll.
-     100vh es "suficiente" para cualquier panel práctico; el overflow del
-     padre lo recorta. */
-  height: 100vh;
-  width: 10px;
-  /* Centrado sobre el borde: 3px hacia dentro para dar área de agarre amplia
-     sin desplazar visualmente. */
-  left: calc(var(--layer-info-width) - 5px);
+  bottom: 0;                                     /* ocupa toda la altura visible */
+  width: 10px;                                   /* área de agarre amplia */
+  left: calc(var(--layer-info-width) - 5px);    /* centrado sobre la frontera */
   cursor: col-resize;
-  pointer-events: auto;
+  z-index: 15;
   background: transparent;
-  /* Una línea sutil visible solo en hover / drag */
   transition: background 0.12s ease;
 }
 
+/* Línea fina visible en hover / drag — la barra de agarre es transparente
+   para no ser visualmente intrusiva cuando no se usa. */
 .layers-column-resizer-grip::before {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 4px;
+  left: 4px;                                     /* centrado en el grip de 10px */
   width: 2px;
   background: var(--accent-color);
   opacity: 0;
-  transition: opacity 0.12s ease;
+  transition: opacity 0.15s ease;
   pointer-events: none;
 }
 
 .layers-column-resizer-grip:hover::before,
 .layers-column-resizer-grip.resizing::before {
-  opacity: 0.7;
+  opacity: 0.85;
+}
+
+.layers-column-resizer-grip.resizing::before {
+  width: 3px;                                    /* más grueso durante drag */
+  left: 3.5px;
 }
 
 .timeline-header-frames {
@@ -1990,6 +1982,11 @@ margin-right: 20px;
   flex: 1;
   min-height: 0;
   background: var(--bg-primary);
+  /* Clave: position: relative → es el containing block del resizer absolute,
+     que al estar dentro de overflow:auto se posiciona relativo al PADDING BOX
+     (no al content scrolleado). Así el grip siempre marca la frontera entre
+     capas y frames sin importar el scroll. */
+  position: relative;
   scrollbar-width: thin;
   scrollbar-color: var(--accent-color) var(--bg-tertiary);
 }

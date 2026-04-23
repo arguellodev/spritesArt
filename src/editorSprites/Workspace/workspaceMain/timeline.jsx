@@ -97,25 +97,18 @@ const FramesTimeline = ({
   animationTickFrame,  // frameNumber que el motor de animación está mostrando
 }) => {
 
-  const getFramesInfo = useCallback(() => {
-    if (!framesResume?.frames) {
-      return { frameNumbers: [], frameCount: 0, minFrame: 1, maxFrame: 1 };
-    }
-    
-    const frameNumbers = Object.keys(framesResume.frames)
-      .map(Number)
-      .sort((a, b) => a - b);
-    
-    return {
-      frameNumbers,
-      frameCount: frameNumbers.length,
-      minFrame: frameNumbers[0] || 1,
-      maxFrame: frameNumbers[frameNumbers.length - 1] || 1
-    };
+  // CRÍTICO para performance: `frameNumbers` debe tener identidad estable
+  // entre renders. Antes `getFramesInfo()` era useCallback pero se invocaba
+  // cada render y devolvía un array nuevo — con eso, el React.memo de cada
+  // LayerRow fallaba siempre (porque frameNumbers era prop nueva). Resultado:
+  // durante playback, pintado o selección, TODAS las filas re-renderizaban
+  // aunque la data real no hubiera cambiado para esa capa.
+  // useMemo asegura que el mismo array se reusa mientras framesResume no cambie.
+  const { frameNumbers, frameCount } = useMemo(() => {
+    if (!framesResume?.frames) return { frameNumbers: [], frameCount: 0 };
+    const arr = Object.keys(framesResume.frames).map(Number).sort((a, b) => a - b);
+    return { frameNumbers: arr, frameCount: arr.length };
   }, [framesResume]);
-  const { frameNumbers, frameCount } = getFramesInfo();
-
-  console.log("se esta renderizando layer animation");
   const [editingLayerId, setEditingLayerId] = useState(null);
   const [editingName, setEditingName] = useState('');
   // (Eliminado: `editingGroupId` / `editingGroupName` useStates — solo los
@@ -1046,7 +1039,16 @@ const renderLayerWithTimeline = (layer) => {
               <button
                 type="button"
                 className="corner-add-layer-btn"
-                onClick={() => { clearCurrentSelection(); addLayer(); }}
+                onClick={() => {
+                  clearCurrentSelection();
+                  // `addLayer` internamente hace `setActiveLayerId(newLayerId)`,
+                  // pero lo seteamos explícito aquí también para blindar el
+                  // caso donde el batcher de React coalesce múltiples setStates
+                  // y el orden de commit pudiera dejar al anterior activeLayerId
+                  // ganando. El setState extra es idempotente si es el mismo ID.
+                  const newLayerId = addLayer();
+                  if (newLayerId) setActiveLayerId(newLayerId);
+                }}
                 title="Añadir nueva capa"
               >
                 <BiSolidLayerPlus />
@@ -1100,23 +1102,19 @@ const renderLayerWithTimeline = (layer) => {
           {getOrderedLayers().map(layer => renderLayerWithTimeline(layer)).flat()}
         </div>
 
-        {/* Resizer: barra vertical "sticky" que el usuario arrastra para
-            cambiar el ancho de la columna de capas.
-            - position: sticky; left: 0 → se queda pegada al borde izquierdo
-              del viewport del scroll.
-            - top/bottom: 0 → se extiende por toda la altura.
-            - Su hijo `.layers-column-resizer-grip` se posiciona a
-              `calc(var(--layer-info-width) - 3px)` desde el borde izquierdo
-              del wrapper → siempre justo en la frontera entre capas y frames. */}
-        <div className="layers-column-resizer-sticky" aria-hidden>
-          <div
-            className={`layers-column-resizer-grip ${isResizingLayers ? 'resizing' : ''}`}
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Redimensionar columna de capas"
-            onMouseDown={handleResizerMouseDown}
-          />
-        </div>
+        {/* Resizer: `position: absolute` hijo directo de `.timeline-container`
+            (position: relative). Dentro de un overflow:auto, los children con
+            position:absolute se posicionan relativos al PADDING BOX del
+            contenedor (NO al content scrolleado) — efectivamente "fixed al
+            viewport del scroll", que es lo que queremos: el grip siempre
+            marca la frontera entre capas y frames, sin importar el scroll. */}
+        <div
+          className={`layers-column-resizer-grip ${isResizingLayers ? 'resizing' : ''}`}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Redimensionar columna de capas"
+          onMouseDown={handleResizerMouseDown}
+        />
       </div>
     </>
   );
