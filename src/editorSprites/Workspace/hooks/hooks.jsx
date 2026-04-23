@@ -2304,45 +2304,33 @@ const addLayer = useCallback(() => {
       });
     });
   
-    // ✅ AGREGAR: Actualizar framesResume
-    setFramesResume(prev => {
-      const updated = { ...prev };
-      
-      // Remover layer de la definición global
-      delete updated.layers[layerId];
-      
-      // Si es capa principal, remover también capas de grupo
+    setFramesResume(prev => produce(prev, draft => {
+      delete draft.layers[layerId];
       if (!layerToDelete.isGroupLayer) {
-        Object.keys(updated.layers).forEach(id => {
-          const layer = updated.layers[id];
+        Object.keys(draft.layers).forEach(id => {
+          const layer = draft.layers[id];
           if (layer.type === 'group' && layer.parentLayerId === layerId) {
-            delete updated.layers[id];
+            delete draft.layers[id];
           }
         });
       }
-  
-      // Remover de todos los frames
-      Object.keys(updated.frames).forEach(frameKey => {
-        const frame = updated.frames[frameKey];
+      Object.keys(draft.frames).forEach(frameKey => {
+        const frame = draft.frames[frameKey];
         delete frame.layerVisibility[layerId];
         delete frame.layerOpacity[layerId];
         delete frame.layerHasContent[layerId];
         delete frame.canvases[layerId];
         delete frame.pixelGroups[layerId];
       });
-  
-      // Limpiar computed
-      delete updated.computed.framesByLayer[layerId];
-      delete updated.computed.keyframes[layerId];
-      Object.keys(updated.computed.resolvedFrames).forEach(frameKey => {
-        const resolved = updated.computed.resolvedFrames[frameKey];
+      delete draft.computed.framesByLayer[layerId];
+      delete draft.computed.keyframes[layerId];
+      Object.keys(draft.computed.resolvedFrames).forEach(frameKey => {
+        const resolved = draft.computed.resolvedFrames[frameKey];
         delete resolved.layerVisibility[layerId];
         delete resolved.layerOpacity[layerId];
         delete resolved.layerHasContent[layerId];
       });
-  
-      return updated;
-    });
+    }));
   
     setFrames(updatedFrames);
     
@@ -2414,32 +2402,23 @@ const addLayer = useCallback(() => {
       return updatedFrames;
     });
   
-    // ✅ AGREGAR: Actualizar framesResume
     setFramesResume(prev => {
-      const updated = { ...prev };
-      
-      // Actualizar zIndex en la definición global de layers
-      const layer = updated.layers[layerId];
+      const layer = prev.layers[layerId];
       if (!layer) return prev;
-      
-      // Encontrar la capa que está inmediatamente encima
-      const relevantLayers = Object.values(updated.layers)
-        .filter(l => layer.type === 'group' 
+      const relevantLayers = Object.values(prev.layers)
+        .filter(l => layer.type === 'group'
           ? l.type === 'group' && l.parentLayerId === layer.parentLayerId
           : l.type === 'normal'
         )
+        .slice()
         .sort((a, b) => a.zIndex - b.zIndex);
-      
       const currentIndex = relevantLayers.findIndex(l => l.id === layerId);
       if (currentIndex === relevantLayers.length - 1) return prev;
-      
       const layerAbove = relevantLayers[currentIndex + 1];
-      
-      // Intercambiar zIndex
-      updated.layers[layerId] = { ...layer, zIndex: layerAbove.zIndex };
-      updated.layers[layerAbove.id] = { ...layerAbove, zIndex: layer.zIndex };
-      
-      return updated;
+      return produce(prev, draft => {
+        draft.layers[layerId].zIndex = layerAbove.zIndex;
+        draft.layers[layerAbove.id].zIndex = layer.zIndex;
+      });
     });
   }, [currentFrame]);
   
@@ -2638,56 +2617,45 @@ const deleteFrame = useCallback((frameNumber) => {
   const validNumbers = numbersToDelete.filter(num => frames[num]);
   if (validNumbers.length === 0) return false;
 
-  // ✅ AGREGAR: Actualizar framesResume PRIMERO
-  setFramesResume(prev => {
-    const updated = { ...prev };
-    
-    // Remover frames del resume
+  setFramesResume(prev => produce(prev, draft => {
     validNumbers.forEach(num => {
-      delete updated.frames[num];
-      delete updated.computed.resolvedFrames[num];
+      delete draft.frames[num];
+      delete draft.computed.resolvedFrames[num];
     });
-    
-    // Renumerar frames restantes
+
+    // Renumerar frames restantes (1-based, secuencial)
     const remainingFrames = {};
     const remainingResolved = {};
-    
-    Object.keys(updated.frames)
+    Object.keys(draft.frames)
       .map(Number)
       .sort((a, b) => a - b)
       .forEach((num, index) => {
         const newFrameNumber = index + 1;
-        remainingFrames[newFrameNumber] = updated.frames[num];
-        remainingResolved[newFrameNumber] = updated.computed.resolvedFrames[num];
+        remainingFrames[newFrameNumber] = draft.frames[num];
+        remainingResolved[newFrameNumber] = draft.computed.resolvedFrames[num];
       });
-    
-    updated.frames = remainingFrames;
-    updated.computed.resolvedFrames = remainingResolved;
-    
-    // Actualizar metadata
-    updated.metadata.frameCount = Object.keys(remainingFrames).length;
-    updated.metadata.totalDuration = Object.values(remainingFrames)
+
+    draft.frames = remainingFrames;
+    draft.computed.resolvedFrames = remainingResolved;
+
+    draft.metadata.frameCount = Object.keys(remainingFrames).length;
+    draft.metadata.totalDuration = Object.values(remainingFrames)
       .reduce((sum, frame) => sum + frame.duration, 0);
-    
-    // Recalcular computed
-    updated.computed.frameSequence = Object.keys(remainingFrames)
+
+    draft.computed.frameSequence = Object.keys(remainingFrames)
       .map(Number).sort((a, b) => a - b);
-    updated.computed.totalFrames = updated.computed.frameSequence.length;
-    
-    // Recalcular framesByLayer y keyframes
-    Object.keys(updated.layers).forEach(layerId => {
-      updated.computed.framesByLayer[layerId] = [];
-      updated.computed.keyframes[layerId] = [];
-      
+    draft.computed.totalFrames = draft.computed.frameSequence.length;
+
+    Object.keys(draft.layers).forEach(layerId => {
+      draft.computed.framesByLayer[layerId] = [];
+      draft.computed.keyframes[layerId] = [];
       Object.keys(remainingFrames).forEach(frameKey => {
         if (remainingFrames[frameKey].layerHasContent[layerId]) {
-          updated.computed.framesByLayer[layerId].push(Number(frameKey));
+          draft.computed.framesByLayer[layerId].push(Number(frameKey));
         }
       });
     });
-    
-    return updated;
-  });
+  }));
 
   // 1. Convertir frames a array y filtrar los que no se eliminarán
   const framesArray = Object.entries(frames)
@@ -2790,12 +2758,8 @@ const duplicateLayer = useCallback((layerId) => {
     }
   });
 
-  // ✅ AGREGAR: Actualizar framesResume
-  setFramesResume(prev => {
-    const updated = { ...prev };
-    
-    // Agregar layer duplicado a la definición global
-    updated.layers[newLayerId] = {
+  setFramesResume(prev => produce(prev, draft => {
+    draft.layers[newLayerId] = {
       id: newLayerId,
       name: newLayerName,
       type: originalLayer.isGroupLayer ? 'group' : 'normal',
@@ -2804,35 +2768,25 @@ const duplicateLayer = useCallback((layerId) => {
       blendMode: 'normal',
       locked: false,
     };
-
-    // Actualizar todos los frames
-    Object.keys(updated.frames).forEach(frameKey => {
-      const frame = updated.frames[frameKey];
+    Object.keys(draft.frames).forEach(frameKey => {
+      const frame = draft.frames[frameKey];
       const originalHasContent = frame.layerHasContent[layerId] ?? false;
-      
       frame.layerVisibility[newLayerId] = true;
       frame.layerOpacity[newLayerId] = frame.layerOpacity[layerId] ?? 1.0;
       frame.layerHasContent[newLayerId] = originalHasContent;
-      
-      // Duplicar pixelGroups si existen
       if (frame.pixelGroups[layerId]) {
         frame.pixelGroups[newLayerId] = structuredClone(frame.pixelGroups[layerId]);
       }
     });
-
-    // Actualizar computed
-    updated.computed.framesByLayer[newLayerId] = [...(updated.computed.framesByLayer[layerId] || [])];
-    updated.computed.keyframes[newLayerId] = [...(updated.computed.keyframes[layerId] || [])];
-    
-    Object.keys(updated.computed.resolvedFrames).forEach(frameKey => {
-      const resolved = updated.computed.resolvedFrames[frameKey];
+    draft.computed.framesByLayer[newLayerId] = [...(draft.computed.framesByLayer[layerId] || [])];
+    draft.computed.keyframes[newLayerId] = [...(draft.computed.keyframes[layerId] || [])];
+    Object.keys(draft.computed.resolvedFrames).forEach(frameKey => {
+      const resolved = draft.computed.resolvedFrames[frameKey];
       resolved.layerVisibility[newLayerId] = true;
       resolved.layerOpacity[newLayerId] = resolved.layerOpacity[layerId] ?? 1.0;
       resolved.layerHasContent[newLayerId] = resolved.layerHasContent[layerId] ?? false;
     });
-
-    return updated;
-  });
+  }));
 
   setFrames(updatedFrames);
 
@@ -2941,19 +2895,14 @@ const setFrameOpacity = useCallback((layerId, frameNumbers, opacity) => {
     return updatedFrames;
   });
 
-  // ✅ AGREGAR: Actualizar framesResume
-  setFramesResume(prev => {
-    const updated = { ...prev };
-    
+  setFramesResume(prev => produce(prev, draft => {
     frameList.forEach(frameKey => {
-      if (updated.frames[frameKey]) {
-        updated.frames[frameKey].layerOpacity[layerId] = opacity;
-        updated.computed.resolvedFrames[frameKey].layerOpacity[layerId] = opacity;
+      if (draft.frames[frameKey]) {
+        draft.frames[frameKey].layerOpacity[layerId] = opacity;
+        draft.computed.resolvedFrames[frameKey].layerOpacity[layerId] = opacity;
       }
     });
-    
-    return updated;
-  });
+  }));
 
   return true;
 }, []);
@@ -2996,23 +2945,16 @@ const setFrameDuration = useCallback((frameNumbers, duration) => {
     return updated;
   });
 
-  // ✅ AGREGAR: Actualizar framesResume
-  setFramesResume(prev => {
-    const updated = { ...prev };
-    
+  setFramesResume(prev => produce(prev, draft => {
     validNumbers.forEach(num => {
-      if (updated.frames[num]) {
-        updated.frames[num].duration = duration;
+      if (draft.frames[num]) {
+        draft.frames[num].duration = duration;
       }
     });
-    
-    // Recalcular metadata
-    updated.metadata.totalDuration = Object.values(updated.frames)
+    draft.metadata.totalDuration = Object.values(draft.frames)
       .reduce((sum, frame) => sum + frame.duration, 0);
-    updated.metadata.frameRate = Math.round(1000 / updated.metadata.defaultFrameDuration);
-    
-    return updated;
-  });
+    draft.metadata.frameRate = Math.round(1000 / draft.metadata.defaultFrameDuration);
+  }));
 
   return true;
 }, [frames]);
@@ -3087,32 +3029,23 @@ const getFrameRate = useCallback((frameNumber) => {
       return updatedFrames;
     });
   
-    // ✅ AGREGAR: Actualizar framesResume
     setFramesResume(prev => {
-      const updated = { ...prev };
-      
-      // Actualizar zIndex en la definición global de layers
-      const layer = updated.layers[layerId];
+      const layer = prev.layers[layerId];
       if (!layer) return prev;
-      
-      // Encontrar la capa que está inmediatamente debajo
-      const relevantLayers = Object.values(updated.layers)
-        .filter(l => layer.type === 'group' 
+      const relevantLayers = Object.values(prev.layers)
+        .filter(l => layer.type === 'group'
           ? l.type === 'group' && l.parentLayerId === layer.parentLayerId
           : l.type === 'normal'
         )
+        .slice()
         .sort((a, b) => a.zIndex - b.zIndex);
-      
       const currentIndex = relevantLayers.findIndex(l => l.id === layerId);
       if (currentIndex === 0) return prev;
-      
       const layerBelow = relevantLayers[currentIndex - 1];
-      
-      // Intercambiar zIndex
-      updated.layers[layerId] = { ...layer, zIndex: layerBelow.zIndex };
-      updated.layers[layerBelow.id] = { ...layerBelow, zIndex: layer.zIndex };
-      
-      return updated;
+      return produce(prev, draft => {
+        draft.layers[layerId].zIndex = layerBelow.zIndex;
+        draft.layers[layerBelow.id].zIndex = layer.zIndex;
+      });
     });
   }, [currentFrame]);
   
@@ -3168,30 +3101,18 @@ const getFrameRate = useCallback((frameNumber) => {
       return updatedFrames;
     });
   
-    // ✅ AGREGAR: Actualizar framesResume
-    setFramesResume(prev => {
-      const updated = { ...prev };
-      
-      // Determinar el nuevo valor de visibilidad
-      let atLeastOneVisible = false;
+    setFramesResume(prev => produce(prev, draft => {
       let allVisible = true;
-      
-      Object.values(updated.frames).forEach(frame => {
+      Object.values(draft.frames).forEach(frame => {
         const isVisible = frame.layerVisibility[layerId] ?? true;
-        if (isVisible) atLeastOneVisible = true;
-        else allVisible = false;
+        if (!isVisible) allVisible = false;
       });
-      
-      const newVisibilityValue = allVisible ? false : true;
-      
-      // Aplicar a todos los frames
-      Object.keys(updated.frames).forEach(frameKey => {
-        updated.frames[frameKey].layerVisibility[layerId] = newVisibilityValue;
-        updated.computed.resolvedFrames[frameKey].layerVisibility[layerId] = newVisibilityValue;
+      const newVisibilityValue = !allVisible;
+      Object.keys(draft.frames).forEach(frameKey => {
+        draft.frames[frameKey].layerVisibility[layerId] = newVisibilityValue;
+        draft.computed.resolvedFrames[frameKey].layerVisibility[layerId] = newVisibilityValue;
       });
-      
-      return updated;
-    });
+    }));
   }, []);
   
 
@@ -3231,19 +3152,13 @@ const getFrameRate = useCallback((frameNumber) => {
       return updatedFrames;
     });
   
-    // ✅ AGREGAR: Actualizar framesResume
     setFramesResume(prev => {
-      const updated = { ...prev };
-      
-      if (updated.frames[frameStr]) {
-        const currentVisibility = updated.frames[frameStr].layerVisibility[layerId] ?? true;
-        const newVisibility = !currentVisibility;
-        
-        updated.frames[frameStr].layerVisibility[layerId] = newVisibility;
-        updated.computed.resolvedFrames[frameStr].layerVisibility[layerId] = newVisibility;
-      }
-      
-      return updated;
+      if (!prev.frames[frameStr]) return prev;
+      const newVisibility = !(prev.frames[frameStr].layerVisibility[layerId] ?? true);
+      return produce(prev, draft => {
+        draft.frames[frameStr].layerVisibility[layerId] = newVisibility;
+        draft.computed.resolvedFrames[frameStr].layerVisibility[layerId] = newVisibility;
+      });
     });
   }, [frames]);
 
@@ -3305,29 +3220,19 @@ const getFrameRate = useCallback((frameNumber) => {
       }
     });
   
-    // ✅ AGREGAR: Actualizar framesResume
-    setFramesResume(prev => {
-      const updated = { ...prev };
-      
+    setFramesResume(prev => produce(prev, draft => {
       frameNumbers.forEach(frameNum => {
-        if (updated.frames[frameNum]) {
-          // Marcar que la capa ya no tiene contenido
-          updated.frames[frameNum].layerHasContent[layerId] = false;
-          updated.computed.resolvedFrames[frameNum].layerHasContent[layerId] = false;
-          
-          // Limpiar pixelGroups
-          updated.frames[frameNum].pixelGroups[layerId] = {};
+        if (draft.frames[frameNum]) {
+          draft.frames[frameNum].layerHasContent[layerId] = false;
+          draft.computed.resolvedFrames[frameNum].layerHasContent[layerId] = false;
+          draft.frames[frameNum].pixelGroups[layerId] = {};
         }
       });
-      
-      // Recalcular framesByLayer
-      updated.computed.framesByLayer[layerId] = Object.keys(updated.frames)
+      draft.computed.framesByLayer[layerId] = Object.keys(draft.frames)
         .map(Number)
-        .filter(frameNum => updated.frames[frameNum].layerHasContent[layerId])
+        .filter(frameNum => draft.frames[frameNum].layerHasContent[layerId])
         .sort((a, b) => a - b);
-      
-      return updated;
-    });
+    }));
   
     // Re-renderizar si el frame actual está incluido
     if (frameNumbers.includes(currentFrame)) {
