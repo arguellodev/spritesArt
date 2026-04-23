@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { nanoid } from 'nanoid';
 import React from 'react';
-import { produce } from 'immer';
+import { produce, setAutoFreeze } from 'immer';
+
+// Deshabilitar autoFreeze global de Immer. Por default freezea el resultado,
+// lo cual es correcto para consumidores puros pero rompe código existente
+// que muta arrays derivados (`.sort()`, `.push()`, etc. sobre slices de
+// framesResume como `frameSequence`, `keyframes`, `framesByLayer`). Migrar
+// todos los consumidores a clones antes de mutar sería invasivo; deshabilitar
+// el freeze aquí preserva compatibilidad. Se pierde la salvaguarda de dev
+// ("mutaste sin produce"), pero ganamos no romper código viejo.
+setAutoFreeze(false);
 import { useOptimizedFloodFill } from './optimizedFloodFill';
 /**
  * Custom hook for tracking pointer/mouse interactions
