@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { nanoid } from 'nanoid';
 import React from 'react';
+import { produce } from 'immer';
 import { useOptimizedFloodFill } from './optimizedFloodFill';
 /**
  * Custom hook for tracking pointer/mouse interactions
@@ -16,6 +17,7 @@ function throttle(func, limit) {
     }
   };
 }
+
 
 // ✅ NUEVA: Función debounce personalizada  
 function debounce(func, delay) {
@@ -46,54 +48,40 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [relativeToTarget, setRelativeToTarget] = useState({ x: 0, y: 0 });
   
-  // Refs para el throttling
-  const lastUpdateTime = useRef(0);
-  const positionUpdateTimer = useRef(null);
-  const POSITION_UPDATE_INTERVAL = 8; // ~60fps para preview
-  
   // Refs estables para las dependencias
   const ignoreRefsRef = useRef(ignoreRefs);
   const optionsRef = useRef(options);
-  
+
+  // RAF id para el throttling de posición — solo 1 actualización por frame del monitor
+  const positionRafRef = useRef(null);
+
   // Función para obtener posición actual sin causar re-render
   const getCurrentPosition = useCallback(() => {
     const currentPosition = positionRef.current || { x: 0, y: 0 };
     const currentRelativeToTarget = relativeToTargetRef.current || { x: 0, y: 0 };
-    
+
     return {
-      position: { 
-        x: typeof currentPosition.x === 'number' ? currentPosition.x : 0, 
-        y: typeof currentPosition.y === 'number' ? currentPosition.y : 0 
+      position: {
+        x: typeof currentPosition.x === 'number' ? currentPosition.x : 0,
+        y: typeof currentPosition.y === 'number' ? currentPosition.y : 0
       },
-      relativeToTarget: { 
-        x: typeof currentRelativeToTarget.x === 'number' ? currentRelativeToTarget.x : 0, 
-        y: typeof currentRelativeToTarget.y === 'number' ? currentRelativeToTarget.y : 0 
+      relativeToTarget: {
+        x: typeof currentRelativeToTarget.x === 'number' ? currentRelativeToTarget.x : 0,
+        y: typeof currentRelativeToTarget.y === 'number' ? currentRelativeToTarget.y : 0
       }
     };
   }, []);
-  
-  // Función para actualizar estados de posición con throttling
+
+  // Actualización de posición sincronizada con el refresh rate del monitor.
+  // RAF garantiza exactamente 1 actualización por frame, sin apilamiento de timers.
   const schedulePositionUpdate = useCallback(() => {
-    const now = Date.now();
-    
-    // Solo actualizar si ha pasado suficiente tiempo
-    if (now - lastUpdateTime.current >= POSITION_UPDATE_INTERVAL) {
-      const current = getCurrentPosition();
-      setPosition(current.position);
-      setRelativeToTarget(current.relativeToTarget);
-      lastUpdateTime.current = now;
-    } else {
-      // Programar actualización para más tarde
-      if (positionUpdateTimer.current) {
-        clearTimeout(positionUpdateTimer.current);
-      }
-      
-      positionUpdateTimer.current = setTimeout(() => {
+    if (positionRafRef.current === null) {
+      positionRafRef.current = requestAnimationFrame(() => {
         const current = getCurrentPosition();
         setPosition(current.position);
         setRelativeToTarget(current.relativeToTarget);
-        lastUpdateTime.current = Date.now();
-      }, POSITION_UPDATE_INTERVAL - (now - lastUpdateTime.current));
+        positionRafRef.current = null;
+      });
     }
   }, [getCurrentPosition]);
   
@@ -114,11 +102,15 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
     pathRef.current = path;
   }, [path]);
 
-  // Limpiar timer al desmontar
+  // Limpiar RAF pendiente al desmontar.
+  // (Antes usaba un `setTimeout` en `positionUpdateTimer` — ese ref ya no existe
+  // tras migrar a `positionRafRef` + requestAnimationFrame; esto es el cleanup
+  // actualizado para la implementación RAF.)
   useEffect(() => {
     return () => {
-      if (positionUpdateTimer.current) {
-        clearTimeout(positionUpdateTimer.current);
+      if (positionRafRef.current !== null) {
+        cancelAnimationFrame(positionRafRef.current);
+        positionRafRef.current = null;
       }
     };
   }, []);
@@ -404,6 +396,9 @@ const paintBatchTimer = useRef(null);
 
 // Estados para manejo de frames
 const [frames, setFrames] = useState({});
+// Ref siempre actualizada — permite leer frames sin stale closure en undo/redo
+const framesRef = useRef({});
+useEffect(() => { framesRef.current = frames; }, [frames]);
 const [framesResume, setFramesResume] = useState({
   metadata: {
     frameCount: 1,
@@ -445,16 +440,24 @@ const [selectedGroup, setSelectedGroup] = useState(null);
 
   ///=========Funciones de utilidad para la gestion de grupos =================
 
+  // Cache para la jerarquía: se recalcula solo cuando cambia la referencia de `layers`.
+  // Evita el O(n²) filter-dentro-de-map en cada render.
+  const hierarchicalLayersCache = useRef({ layersRef: null, result: [] });
+
   // 4. NUEVA FUNCIÓN para obtener capas de forma jerárquica
 const getHierarchicalLayers = useCallback(() => {
+  if (hierarchicalLayersCache.current.layersRef === layers) {
+    return hierarchicalLayersCache.current.result;
+  }
   const mainLayers = layers.filter(layer => !layer.isGroupLayer);
-  
-  return mainLayers.map(mainLayer => ({
+  const result = mainLayers.map(mainLayer => ({
     ...mainLayer,
-    groupLayers: layers.filter(layer => 
+    groupLayers: layers.filter(layer =>
       layer.isGroupLayer && layer.parentLayerId === mainLayer.id
     ).sort((a, b) => a.zIndex - b.zIndex)
   }));
+  hierarchicalLayersCache.current = { layersRef: layers, result };
+  return result;
 }, [layers]);
 
 // 7. NUEVA FUNCIÓN para obtener solo las capas principales (para UI)
@@ -469,33 +472,36 @@ const getGroupLayersForParent = useCallback((parentLayerId) => {
   ).sort((a, b) => a.zIndex - b.zIndex);
 }, [layers]);
 
- // ✅ NUEVO: Cache para canvas bajo demanda
+ // Cache LRU para canvas bajo demanda: elimina el más antiguo (primer entry del Map)
+ // cuando supera el límite, en lugar de limpiar todo.
  const canvasCache = useRef(new Map());
- const maxCacheSize = useRef(50); // Límite de canvas en cache
+ const MAX_CANVAS_CACHE = 100;
 
  // ✅ NUEVO: Función para obtener o crear canvas solo cuando se necesita
  const getOrCreateCanvas = useCallback((layerId, frameNumber, forceCreate = false) => {
    const cacheKey = `${layerId}_${frameNumber}`;
-   
-   // Si existe en cache, devolverlo
-   if (canvasCache.current.has(cacheKey) && !forceCreate) {
-     return canvasCache.current.get(cacheKey);
+   const cache = canvasCache.current;
+
+   if (!forceCreate && cache.has(cacheKey)) {
+     // Mover al final para marcar como recientemente usado (LRU)
+     const existing = cache.get(cacheKey);
+     cache.delete(cacheKey);
+     cache.set(cacheKey, existing);
+     return existing;
    }
-   
-   // Crear nuevo canvas solo si es necesario
+
    const canvas = document.createElement('canvas');
    canvas.width = width;
    canvas.height = height;
    const ctx = canvas.getContext('2d', { willReadFrequently: true });
    ctx.imageSmoothingEnabled = false;
-   
-   // Limpiar cache si está lleno
-   if (canvasCache.current.size >= maxCacheSize.current) {
-     const firstKey = canvasCache.current.keys().next().value;
-     canvasCache.current.delete(firstKey);
+
+   // LRU eviction: eliminar el entry más antiguo (primero del Map)
+   if (cache.size >= MAX_CANVAS_CACHE) {
+     cache.delete(cache.keys().next().value);
    }
-   
-   canvasCache.current.set(cacheKey, canvas);
+
+   cache.set(cacheKey, canvas);
    return canvas;
  }, [width, height]);
 
@@ -816,53 +822,68 @@ const [onionFramesConfig, setOnionFramesConfig] = useState({
 // ============ SISTEMA DE CANVAS PRE-RENDERIZADO CON MATICES ============
 const tintedCanvasCache = useRef(new Map()); // Cache para canvas con matices
 
-// Función para aplicar matiz a un canvas (manipulación directa de píxeles)
-const applyTintToCanvas = useCallback((sourceCanvas, config, frameNumber, layerId) => {
+// Versión de contenido por capa+frame: se incrementa al pintar.
+// Permite invalidar el caché de onion skin cuando cambia el contenido real.
+const paintVersionRef = useRef({});
+
+// Límite del cache de canvas teñidos. Con keys por viewport, puede crecer
+// durante un paneo; mantenemos LRU-ish por orden de inserción del Map.
+const TINTED_CACHE_MAX = 64;
+
+// Aplica matiz a la REGIÓN DEL VIEWPORT de un canvas (no al canvas completo).
+// - Crea un canvas del tamaño del viewport, no del canvas fuente.
+// - El recoloreado usa compositing GPU (`source-in` + fillRect) en lugar de un
+//   loop JS sobre w*h píxeles con getImageData/putImageData.
+const applyTintToCanvas = useCallback((sourceCanvas, config, frameNumber, layerId, vx, vy, vw, vh) => {
   const { hue, saturation, brightness, opacity } = config;
-  
-  const cacheKey = `frame_${frameNumber}_layer_${layerId}_${hue}_${saturation}_${brightness}_${opacity}`;
-  
-  if (tintedCanvasCache.current.has(cacheKey)) {
-    return tintedCanvasCache.current.get(cacheKey);
+
+  // Clamp mínimo para no crear canvas 0x0 cuando el viewport queda fuera
+  const regionW = Math.max(1, Math.round(vw));
+  const regionH = Math.max(1, Math.round(vh));
+  const regionX = Math.round(vx);
+  const regionY = Math.round(vy);
+
+  const contentVersion = paintVersionRef.current[`${layerId}_${frameNumber}`] ?? 0;
+  const cacheKey = `f${frameNumber}_l${layerId}_${hue}_${saturation}_${brightness}_${opacity}_v${contentVersion}_r${regionX},${regionY},${regionW},${regionH}`;
+
+  const cached = tintedCanvasCache.current.get(cacheKey);
+  if (cached) {
+    // refresh LRU: reinsertar lo mueve al final
+    tintedCanvasCache.current.delete(cacheKey);
+    tintedCanvasCache.current.set(cacheKey, cached);
+    return cached;
   }
-  
+
   const tintedCanvas = document.createElement('canvas');
-  tintedCanvas.width = sourceCanvas.width;
-  tintedCanvas.height = sourceCanvas.height;
+  tintedCanvas.width = regionW;
+  tintedCanvas.height = regionH;
   const tintedCtx = tintedCanvas.getContext('2d');
-  
-  tintedCtx.drawImage(sourceCanvas, 0, 0);
-  
+
+  // drawImage con source rect = viewport del source. Si la región se sale del
+  // source, el navegador recorta sola — igual que el comportamiento previo.
+  tintedCtx.drawImage(sourceCanvas, regionX, regionY, regionW, regionH, 0, 0, regionW, regionH);
+
   if (hue !== 0 || saturation !== 100 || brightness !== 100) {
-    const imageData = tintedCtx.getImageData(0, 0, tintedCanvas.width, tintedCanvas.height);
-    const data = imageData.data;
-    
     const targetHue = (hue % 360) / 360;
     const targetSaturation = saturation / 100;
-    const targetLightness = (brightness / 100) * 0.5; // Lightness fijo basado en brightness
-    
-    // Convertir el color objetivo a RGB una sola vez
+    const targetLightness = (brightness / 100) * 0.5;
     const [targetR, targetG, targetB] = hslToRgb(targetHue, targetSaturation, targetLightness);
-    
-    for (let i = 0; i < data.length; i += 4) {
-      const a = data[i + 3]; // Solo necesitamos el alpha original
-      
-      // Solo procesar píxeles no transparentes
-      if (a > 0) {
-        // IGNORAR COMPLETAMENTE EL COLOR ORIGINAL
-        // Aplicar el mismo color a todos los píxeles visibles
-        data[i] = targetR;     // Red = color objetivo
-        data[i + 1] = targetG; // Green = color objetivo  
-        data[i + 2] = targetB; // Blue = color objetivo
-        // data[i + 3] = a;    // Alpha = transparencia original (preservada)
-      }
-    }
-    
-    tintedCtx.putImageData(imageData, 0, 0);
+
+    // Reemplaza el color preservando el alpha: 'source-in' mantiene solo los
+    // píxeles donde ya había contenido y los pinta con el fill. Equivalente al
+    // loop original pero sin salir a CPU ni iterar en JS.
+    tintedCtx.globalCompositeOperation = 'source-in';
+    tintedCtx.fillStyle = `rgb(${targetR}, ${targetG}, ${targetB})`;
+    tintedCtx.fillRect(0, 0, regionW, regionH);
+    tintedCtx.globalCompositeOperation = 'source-over';
   }
-  
+
+  if (tintedCanvasCache.current.size >= TINTED_CACHE_MAX) {
+    const oldestKey = tintedCanvasCache.current.keys().next().value;
+    if (oldestKey !== undefined) tintedCanvasCache.current.delete(oldestKey);
+  }
   tintedCanvasCache.current.set(cacheKey, tintedCanvas);
-  
+
   return tintedCanvas;
 }, []);
 
@@ -960,39 +981,45 @@ const renderCurrentFrameWithAdjacent = useCallback((ctx) => {
     // Renderizar capa principal del frame con matiz
     const mainCanvas = frameData.canvases[activeLayerId];
     if (mainCanvas) {
-      const tintedCanvas = applyTintToCanvas(mainCanvas, config, frameIndex, activeLayerId);
+      // El tinted canvas ya viene recortado al viewport, se dibuja 1:1 y se
+      // escala al zoom en destino.
+      const tintedCanvas = applyTintToCanvas(
+        mainCanvas, config, frameIndex, activeLayerId,
+        viewportOffset.x, viewportOffset.y, viewportWidth, viewportHeight
+      );
       const layerOpacity = (activeLayer.opacity ?? 1.0) * config.opacity;
-      
+
       ctx.globalAlpha = layerOpacity;
       ctx.drawImage(
         tintedCanvas,
-        viewportOffset.x, viewportOffset.y,
-        viewportWidth, viewportHeight,
+        0, 0, tintedCanvas.width, tintedCanvas.height,
         0, 0,
         Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
       );
       ctx.globalAlpha = 1.0;
     }
-    
+
     // Renderizar capas de grupo relacionadas con matiz
-    const groupLayers = frameData.layers.filter(layer => 
+    const groupLayers = frameData.layers.filter(layer =>
       layer.isGroupLayer && layer.parentLayerId === activeLayerId
     );
-    
+
     for (const groupLayer of groupLayers) {
       const isGroupVisible = groupLayer.visible && (groupLayer.visible[frameIndex] !== false);
       if (!isGroupVisible) continue;
-      
+
       const groupCanvas = frameData.canvases[groupLayer.id];
       if (groupCanvas) {
-        const tintedGroupCanvas = applyTintToCanvas(groupCanvas, config, frameIndex, groupLayer.id);
+        const tintedGroupCanvas = applyTintToCanvas(
+          groupCanvas, config, frameIndex, groupLayer.id,
+          viewportOffset.x, viewportOffset.y, viewportWidth, viewportHeight
+        );
         const groupOpacity = (groupLayer.opacity ?? 1.0) * config.opacity;
-        
+
         ctx.globalAlpha = groupOpacity;
         ctx.drawImage(
           tintedGroupCanvas,
-          viewportOffset.x, viewportOffset.y,
-          viewportWidth, viewportHeight,
+          0, 0, tintedGroupCanvas.width, tintedGroupCanvas.height,
           0, 0,
           Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
         );
@@ -1596,908 +1623,464 @@ const getLighterInfo = useCallback(() => {
 
 
 
-// ===== SISTEMA DE UNDO/REDO SERIALIZADO GLOBAL =====
+// ===== SISTEMA DE UNDO/REDO — STACK UNIFICADO (v2) =====
+//
+// Diseño:
+//  - historyRef: array de entradas, nunca causa re-renders. Max 200 entradas.
+//  - historyIndexRef: posición actual en el stack (apunta a la última entrada aplicada).
+//  - isRestoringRef: bloquea pushes durante undo/redo.
+//  - historyVersion: estado mínimo solo para que canUndo/canRedo cambien en UI.
+//
+// Tipos de entrada:
+//  - { type:'pixel_changes', layerId, frameId, timestamp, changes:{added,modified,removed} }
+//  - { type:'frame_state', timestamp, ...framesResume }
+//
+// Merge automático de pixel_changes:
+//  Pinceladas dentro de la misma capa, mismo frame y <300ms se fusionan en
+//  una sola entrada, así Ctrl+Z deshace la pincelada completa, no píxel a píxel.
 
-// Estados para el sistema de versiones (mantener existentes)
-const [history, setHistory] = useState([]);
-const [currentIndex, setCurrentIndex] = useState(-1);
+const historyRef = useRef([]);
+const historyIndexRef = useRef(-1);
 const isRestoringRef = useRef(false);
+const framesResumeDebounceRef = useRef(null);
 
-// Stack específico para cambios de píxeles
-const [pixelChangesStack, setPixelChangesStack] = useState([]);
-const [pixelChangesIndex, setPixelChangesIndex] = useState(0);
-const pendingPixelChanges = useRef([]);
+// Estado mínimo — solo para disparar re-render cuando canUndo/canRedo cambia.
+const [historyVersion, setHistoryVersion] = useState(0);
+const _bumpVersion = useCallback(() => setHistoryVersion(v => v + 1), []);
 
-// Referencias para controlar el guardado
-const previousFramesResumeRef = useRef(null);
-const isInitializedRef = useRef(false);
+// ---- Merge de dos entradas pixel_changes ----
+// Concatena los arrays en orden: undo/redo los recorre en sentido inverso/directo.
+// No deduplicamos aquí para mantener la lógica simple y sin errores.
+const _mergePixelEntries = (base, incoming) => {
+  base.changes.added.push(...incoming.changes.added);
+  base.changes.modified.push(...incoming.changes.modified);
+  base.changes.removed.push(...incoming.changes.removed);
+  base.timestamp = incoming.timestamp; // actualizar timestamp al último trazo
+};
 
-// ✅ FUNCIÓN SIMPLE: historyPush desde cero
-const historyPush = useCallback((data) => {
+// ---- Push principal ----
+const historyPush = useCallback((entry) => {
   if (isRestoringRef.current) return;
-  
+
+  const stack = historyRef.current;
+  const idx = historyIndexRef.current;
+
+  // Truncar el futuro si estamos en medio del stack
+  if (idx < stack.length - 1) {
+    stack.splice(idx + 1);
+  }
+
   let entryToSave;
-  
-  if (data && data.changes && data.layerId && data.frameId) {
-    // Es un cambio de píxeles - asegurar que tenga type
-    entryToSave = {
-      ...data,
-      type: 'pixel_changes'
-    };
-  } else if (data) {
-    // Es otro tipo de dato, preservar como está
-    entryToSave = data;
-  } else {
-    // Es un cambio de frames - crear snapshot de framesResume
-    if (!framesResume || !framesResume.frames || Object.keys(framesResume.frames).length === 0) {
+
+  if (entry && entry.type === 'pixel_changes') {
+    // Intentar fusionar con la entrada anterior si es elegible
+    const last = stack[stack.length - 1];
+    if (
+      last &&
+      last.type === 'pixel_changes' &&
+      last.layerId === entry.layerId &&
+      last.frameId === entry.frameId &&
+      entry.timestamp - last.timestamp < 300
+    ) {
+      _mergePixelEntries(last, entry);
+      // No mover el índice ni cambiar la versión aquí — la entrada ya existe
+      _bumpVersion();
       return;
     }
-    
-    entryToSave = {
-      ...JSON.parse(JSON.stringify(framesResume)),
+    entryToSave = entry;
+
+  } else if (entry) {
+    entryToSave = entry;
+
+  } else {
+    // Snapshot de framesResume para cambios estructurales
+    if (!framesResume?.frames || Object.keys(framesResume.frames).length === 0) return;
+
+    const snapshot = {
+      ...structuredClone(framesResume),
       timestamp: Date.now(),
-      type: 'frame_state'
+      type: 'frame_state',
     };
-  }
-  
-  setHistory(prev => {
-    const newHistory = [...prev];
-    
-    // Eliminar versiones futuras si estamos en medio del historial
-    if (currentIndex >= 0 && currentIndex < newHistory.length - 1) {
-      newHistory.splice(currentIndex + 1);
-    }
-    
-    // Verificar duplicados solo para frame_state
-    if (entryToSave.type === 'frame_state' && newHistory.length > 0) {
-      const lastEntry = newHistory[newHistory.length - 1];
-      if (lastEntry.type === 'frame_state') {
-        const currentStr = JSON.stringify(entryToSave);
-        const lastStr = JSON.stringify(lastEntry);
-        if (currentStr === lastStr) {
-          return prev; // No agregar duplicados
-        }
-      }
-    }
-    
-    newHistory.push(entryToSave);
-    
-    // Mantener solo los últimos 50 estados
-    if (newHistory.length > 50) {
-      newHistory.shift();
-    }
-    
-    return newHistory;
-  });
-  
-  setCurrentIndex(prev => prev + 1);
-}, [framesResume]);
 
-// ✅ USEEFFECT SIMPLE: Detectar cambios en framesResume
+    // Evitar duplicados consecutivos de frame_state
+    const last = stack[stack.length - 1];
+    if (last?.type === 'frame_state') {
+      const a = JSON.stringify({ frames: last.frames, layers: last.layers, metadata: last.metadata });
+      const b = JSON.stringify({ frames: snapshot.frames, layers: snapshot.layers, metadata: snapshot.metadata });
+      if (a === b) return;
+    }
+
+    entryToSave = snapshot;
+  }
+
+  stack.push(entryToSave);
+  historyIndexRef.current = stack.length - 1;
+
+  // Limitar a 200 entradas — eliminar las más antiguas
+  if (stack.length > 200) {
+    stack.shift();
+    historyIndexRef.current = stack.length - 1;
+  }
+
+  _bumpVersion();
+}, [framesResume, _bumpVersion]);
+
+// ---- Firma estructural de framesResume ----
+// Solo incluye campos que el usuario puede deshacer:
+// layers, frames, visibilidad, opacidad, duración, nombre, orden.
+// EXCLUYE: layerHasContent, canvases, pixelGroups, computed
+// (esos cambian al pintar y NO deben generar entradas de historial).
+const lastStructuralSigRef = useRef(null);
+
+const _getStructuralSig = (fr) => {
+  if (!fr?.frames || !fr?.layers) return '';
+  try {
+    return JSON.stringify({
+      fk: Object.keys(fr.frames).sort(),
+      lk: Object.keys(fr.layers).sort(),
+      ln: Object.fromEntries(Object.entries(fr.layers).map(([k, l]) => [k, l.name])),
+      lz: Object.fromEntries(Object.entries(fr.layers).map(([k, l]) => [k, l.zIndex])),
+      lp: Object.fromEntries(Object.entries(fr.layers).map(([k, l]) => [k, l.parentLayerId ?? null])),
+      fv: Object.fromEntries(Object.entries(fr.frames).map(([k, f]) => [k, f.layerVisibility])),
+      fo: Object.fromEntries(Object.entries(fr.frames).map(([k, f]) => [k, f.layerOpacity])),
+      fd: Object.fromEntries(Object.entries(fr.frames).map(([k, f]) => [k, f.duration])),
+      ft: Object.fromEntries(Object.entries(fr.frames).map(([k, f]) => [k, f.tags])),
+      fc: fr.metadata?.frameCount,
+    });
+  } catch {
+    return '';
+  }
+};
+
+// ---- Detectar cambios ESTRUCTURALES en framesResume (debounced 80ms) ----
+// Se ignoran cambios de layerHasContent/canvases/pixelGroups/computed para
+// que los trazos de pintura no contaminen el stack con frame_states inútiles.
 useEffect(() => {
-  // 1. Evitar guardado durante restauración (undo/redo)
-  if (isRestoringRef.current) {
-    console.log('⏸️ Guardado pausado: restauración activa');
-    return;
-  }
-  
-  // 2. Verificar que framesResume tiene contenido
-  if (!framesResume || !framesResume.frames || Object.keys(framesResume.frames).length === 0) {
-    console.log('⏳ Esperando frames válidos...');
-    return;
-  }
-  
-  // 3. Guardar automáticamente
-  console.log('🔄 Cambio detectado en framesResume, guardando...');
-  historyPush();
-  
-}, [framesResume, historyPush]);
+  if (isRestoringRef.current) return;
+  if (!framesResume?.frames || Object.keys(framesResume.frames).length === 0) return;
 
-// ✅ NUEVO: Función para inicializar el historial
-const initializeHistory = useCallback(() => {
-  if (history.length === 0) {
-    const initialState = {
-      ...framesResume,
-      timestamp: Date.now(),
-      reason: 'initial'
-    };
-    
-    setHistory([initialState]);
-    setCurrentIndex(0);
-    console.log('📚 Historial inicializado');
-  }
-}, [framesResume, history.length]);
+  const sig = _getStructuralSig(framesResume);
+  if (sig === lastStructuralSigRef.current) return; // Solo metadata cambió — ignorar
 
-// ✅ NUEVO: useEffect para inicializar historial
-useEffect(() => {
-  if (Object.keys(framesResume.frames).length > 1) {
-    initializeHistory();
-  }
-}, [framesResume, initializeHistory]);
+  clearTimeout(framesResumeDebounceRef.current);
+  framesResumeDebounceRef.current = setTimeout(() => {
+    if (isRestoringRef.current) return;
+    const currentSig = _getStructuralSig(framesResume);
+    if (currentSig === lastStructuralSigRef.current) return;
+    lastStructuralSigRef.current = currentSig;
+    historyPush();
+  }, 80);
 
+  return () => clearTimeout(framesResumeDebounceRef.current);
+}, [framesResume]); // historyPush excluido intencionalmente
 
-
-// ✅ NUEVO: Función para guardar cambios de píxeles en el stack
+// ---- Guardar cambios de píxeles en el stack ----
 const savePixelChangesToStack = useCallback((changes, layerId, frameId) => {
   if (isRestoringRef.current) return;
-  
-  if (!changes || (changes.added.length === 0 && changes.modified.length === 0 && changes.removed.length === 0)) {
-    return;
-  }
+  if (!changes || (changes.added.length === 0 && changes.modified.length === 0 && changes.removed.length === 0)) return;
 
-  const changeEntry = {
+  historyPush({
     id: nanoid(),
     timestamp: Date.now(),
     layerId,
     frameId,
     changes,
-    type: 'pixel_changes'
-  };
-console.log("se agregaron los cambios.............................................", changes)
- historyPush(changeEntry);
-}, [pixelChangesIndex]);
+    type: 'pixel_changes',
+  });
+}, [historyPush]);
 
 // ✅ MODIFICAR: Función logPixelChanges para incluir guardado en stack
 
 
-// ✅ NUEVO: Función para aplicar cambios de píxeles al canvas
+// ---- Aplicar patch de píxeles al canvas (undo reverse=true, redo reverse=false) ----
+// Antes leía/escribía TODO el canvas con getImageData/putImageData(0,0,w,h), lo
+// que escalaba O(w*h) aunque el patch afectara 10 píxeles. Ahora computamos el
+// bbox de los puntos tocados y operamos solo en esa sub-región.
 const applyPixelChangesToCanvas = useCallback((changes, layerId, frameId, reverse = false) => {
-  const frame = frames[frameId];
-  if (!frame || !frame.canvases[layerId]) return false;
-  
+  const frame = framesRef.current[frameId];
+  if (!frame?.canvases[layerId]) return false;
+
   const canvas = frame.canvases[layerId];
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return false;
-  
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+  // Calcular bbox de todos los puntos del patch
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const updateBbox = (arr) => {
+    for (let i = 0; i < arr.length; i++) {
+      const p = arr[i];
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    }
+  };
+  updateBbox(changes.added);
+  updateBbox(changes.modified);
+  updateBbox(changes.removed);
+
+  if (minX === Infinity) return true; // patch vacío, nada que aplicar
+
+  const regionX = Math.max(0, minX);
+  const regionY = Math.max(0, minY);
+  const regionEndX = Math.min(canvas.width - 1, maxX);
+  const regionEndY = Math.min(canvas.height - 1, maxY);
+  const regionW = regionEndX - regionX + 1;
+  const regionH = regionEndY - regionY + 1;
+  if (regionW <= 0 || regionH <= 0) return true;
+
+  const imageData = ctx.getImageData(regionX, regionY, regionW, regionH);
   const data = imageData.data;
-  
+
+  const idxAt = (x, y) => ((y - regionY) * regionW + (x - regionX)) * 4;
+  const inRegion = (x, y) => x >= regionX && x <= regionEndX && y >= regionY && y <= regionEndY;
+
   if (reverse) {
-    // Aplicar cambios en reversa para undo
-    
-    // Restaurar píxeles eliminados
-    changes.removed.forEach(pixel => {
-      const index = (pixel.y * canvas.width + pixel.x) * 4;
-      data[index] = pixel.color.r;
-      data[index + 1] = pixel.color.g;
-      data[index + 2] = pixel.color.b;
-      data[index + 3] = pixel.color.a;
-    });
-    
-    // Restaurar píxeles modificados al estado anterior
-    changes.modified.forEach(pixel => {
-      const index = (pixel.y * canvas.width + pixel.x) * 4;
-      data[index] = pixel.oldColor.r;
-      data[index + 1] = pixel.oldColor.g;
-      data[index + 2] = pixel.oldColor.b;
-      data[index + 3] = pixel.oldColor.a;
-    });
-    
-    // Eliminar píxeles añadidos
-    changes.added.forEach(pixel => {
-      const index = (pixel.y * canvas.width + pixel.x) * 4;
-      data[index] = 0;
-      data[index + 1] = 0;
-      data[index + 2] = 0;
-      data[index + 3] = 0;
-    });
-    
+    // Iterar en orden inverso para deshacer correctamente múltiples sub-patches mergeados
+    for (let i = changes.removed.length - 1; i >= 0; i--) {
+      const p = changes.removed[i];
+      if (!inRegion(p.x, p.y)) continue;
+      const idx = idxAt(p.x, p.y);
+      data[idx] = p.color.r; data[idx+1] = p.color.g; data[idx+2] = p.color.b; data[idx+3] = p.color.a;
+    }
+    for (let i = changes.modified.length - 1; i >= 0; i--) {
+      const p = changes.modified[i];
+      if (!inRegion(p.x, p.y)) continue;
+      const idx = idxAt(p.x, p.y);
+      data[idx] = p.oldColor.r; data[idx+1] = p.oldColor.g; data[idx+2] = p.oldColor.b; data[idx+3] = p.oldColor.a;
+    }
+    for (let i = changes.added.length - 1; i >= 0; i--) {
+      const p = changes.added[i];
+      if (!inRegion(p.x, p.y)) continue;
+      const idx = idxAt(p.x, p.y);
+      data[idx] = 0; data[idx+1] = 0; data[idx+2] = 0; data[idx+3] = 0;
+    }
   } else {
-    // Aplicar cambios normales para redo
-    
-    // Aplicar píxeles añadidos
-    changes.added.forEach(pixel => {
-      const index = (pixel.y * canvas.width + pixel.x) * 4;
-      data[index] = pixel.color.r;
-      data[index + 1] = pixel.color.g;
-      data[index + 2] = pixel.color.b;
-      data[index + 3] = pixel.color.a;
+    changes.added.forEach(p => {
+      if (!inRegion(p.x, p.y)) return;
+      const idx = idxAt(p.x, p.y);
+      data[idx] = p.color.r; data[idx+1] = p.color.g; data[idx+2] = p.color.b; data[idx+3] = p.color.a;
     });
-    
-    // Aplicar píxeles modificados
-    changes.modified.forEach(pixel => {
-      const index = (pixel.y * canvas.width + pixel.x) * 4;
-      data[index] = pixel.newColor.r;
-      data[index + 1] = pixel.newColor.g;
-      data[index + 2] = pixel.newColor.b;
-      data[index + 3] = pixel.newColor.a;
+    changes.modified.forEach(p => {
+      if (!inRegion(p.x, p.y)) return;
+      const idx = idxAt(p.x, p.y);
+      data[idx] = p.newColor.r; data[idx+1] = p.newColor.g; data[idx+2] = p.newColor.b; data[idx+3] = p.newColor.a;
     });
-    
-    // Eliminar píxeles removidos
-    changes.removed.forEach(pixel => {
-      const index = (pixel.y * canvas.width + pixel.x) * 4;
-      data[index] = 0;
-      data[index + 1] = 0;
-      data[index + 2] = 0;
-      data[index + 3] = 0;
+    changes.removed.forEach(p => {
+      if (!inRegion(p.x, p.y)) return;
+      const idx = idxAt(p.x, p.y);
+      data[idx] = 0; data[idx+1] = 0; data[idx+2] = 0; data[idx+3] = 0;
     });
   }
-  
-  ctx.putImageData(imageData, 0, 0);
-  return true;
-}, [frames]);
 
-const syncFramesFromResume = useCallback((newFramesResume) => {
-  if (!newFramesResume || !newFramesResume.frames) return;
+  ctx.putImageData(imageData, regionX, regionY);
+  return true;
+}, []);
+
+// ---- Reconstruir frames desde un snapshot de framesResume, preservando canvases actuales ----
+const syncFramesFromResume = useCallback((snapshot) => {
+  if (!snapshot?.frames) return null;
+
+  const currentCanvases = {};
+  Object.keys(framesRef.current).forEach(k => {
+    currentCanvases[Number(k)] = { ...framesRef.current[k].canvases };
+  });
 
   const newFrames = {};
-  
-  // Convertir cada frame del resume al formato de frames
-  Object.keys(newFramesResume.frames).forEach(frameKey => {
+  Object.keys(snapshot.frames).forEach(frameKey => {
     const frameNumber = Number(frameKey);
-    const resumeFrame = newFramesResume.frames[frameKey];
-    
-    // Crear layers array desde la definición global y el frame específico
-    const frameLayers = Object.keys(newFramesResume.layers).map(layerId => {
-      const globalLayer = newFramesResume.layers[layerId];
+    const resumeFrame = snapshot.frames[frameKey];
+
+    const frameLayers = Object.keys(snapshot.layers).map(layerId => {
+      const gl = snapshot.layers[layerId];
       return {
         id: layerId,
-        name: globalLayer.name,
-        visible: {
-          ...{}, // base
-          [frameNumber]: resumeFrame.layerVisibility[layerId] ?? true
-        },
+        name: gl.name,
+        visible: { [frameNumber]: resumeFrame.layerVisibility[layerId] ?? true },
         opacity: resumeFrame.layerOpacity[layerId] ?? 1.0,
-        zIndex: globalLayer.zIndex,
-        isGroupLayer: globalLayer.type === 'group',
-        parentLayerId: globalLayer.parentLayerId || null
+        zIndex: gl.zIndex,
+        isGroupLayer: gl.type === 'group',
+        parentLayerId: gl.parentLayerId || null,
       };
     });
 
-    // Crear canvases para este frame
     const frameCanvases = {};
     frameLayers.forEach(layer => {
-      // Si existe canvas en resume, usarlo; si no, crear uno nuevo
-      if (resumeFrame.canvases && resumeFrame.canvases[layer.id]) {
-        frameCanvases[layer.id] = resumeFrame.canvases[layer.id];
-      } else {
-        frameCanvases[layer.id] = getOrCreateCanvas(layer.id, frameNumber, true);
-      }
+      frameCanvases[layer.id] =
+        currentCanvases[frameNumber]?.[layer.id] ||
+        resumeFrame.canvases?.[layer.id] ||
+        getOrCreateCanvas(layer.id, frameNumber, true);
     });
 
-    // Crear el frame completo
     newFrames[frameNumber] = {
       layers: frameLayers,
       pixelGroups: resumeFrame.pixelGroups || {},
       canvases: frameCanvases,
       frameDuration: resumeFrame.duration || defaultFrameDuration,
-      tags: resumeFrame.tags || []
+      tags: resumeFrame.tags || [],
     };
   });
 
   return newFrames;
-}, [getOrCreateCanvas, defaultFrameDuration]);
+}, [frames, getOrCreateCanvas, defaultFrameDuration]);
 
-
-const undoPixelChanges = useCallback(() => {
-  if (pixelChangesIndex <= 1) {
-    console.warn("No hay cambios de píxeles para deshacer");
-    return false;
-  }
-  
-  const changeEntry = pixelChangesStack[pixelChangesIndex];
-  if (!changeEntry) return false;
-  
-  console.log("🔄 Deshaciendo cambios de píxeles:", changeEntry);
-  
-  // Marcar que estamos restaurando
+// ---- Helpers de aplicación de frame_state ----
+const _applyFrameSnapshot = useCallback((snapshot) => {
   isRestoringRef.current = true;
-  
-  // Aplicar cambios en reversa
-  const success = applyPixelChangesToCanvas(
-    changeEntry.changes, 
-    changeEntry.layerId, 
-    changeEntry.frameId, 
-    true // reverse = true
-  );
-  
-  if (success) {
-    setPixelChangesIndex(prev => prev - 1);
-    
-    // Re-renderizar si es el frame actual
-    if (changeEntry.frameId === currentFrame) {
-      requestAnimationFrame(compositeRender);
-    }
+  setFramesResume(snapshot);
+  const newFrames = syncFramesFromResume(snapshot);
+  if (!newFrames) { isRestoringRef.current = false; return; }
+  setFrames(newFrames);
+  setFrameCount(Object.keys(newFrames).length);
+  const nums = Object.keys(newFrames).map(Number);
+  if (!nums.includes(currentFrame)) {
+    setCurrentFrame(Math.min(...nums));
+  } else {
+    const fd = newFrames[currentFrame];
+    setLayers(fd.layers);
+    setPixelGroups(fd.pixelGroups);
+    layerCanvasesRef.current = { ...fd.canvases };
   }
-  
-  // Permitir guardar nuevamente después de un breve delay
-  setTimeout(() => {
-    isRestoringRef.current = false;
-  }, 100);
-  
-  return success;
-}, [pixelChangesStack, pixelChangesIndex, applyPixelChangesToCanvas, currentFrame, compositeRender]);
+  setTimeout(() => { isRestoringRef.current = false; }, 100);
+}, [syncFramesFromResume, currentFrame]);
 
-// ✅ NUEVO: Función para rehacer cambios de píxeles
-const redoPixelChanges = useCallback(() => {
-  if (pixelChangesIndex >= pixelChangesStack.length - 1) {
-    console.warn("No hay cambios de píxeles para rehacer");
-    return false;
-  }
-  
-  const nextIndex = pixelChangesIndex + 1;
-  const changeEntry = pixelChangesStack[nextIndex];
-  if (!changeEntry) return false;
-  
-  console.log("🔄 Rehaciendo cambios de píxeles:", changeEntry);
-  
-  // Marcar que estamos restaurando
-  isRestoringRef.current = true;
-  
-  // Aplicar cambios normales
-  const success = applyPixelChangesToCanvas(
-    changeEntry.changes, 
-    changeEntry.layerId, 
-    changeEntry.frameId, 
-    false // reverse = false
-  );
-  
-  if (success) {
-    setPixelChangesIndex(nextIndex);
-    
-    // Re-renderizar si es el frame actual
-    if (changeEntry.frameId === currentFrame) {
-      requestAnimationFrame(compositeRender);
-    }
-  }
-  
-  // Permitir guardar nuevamente después de un breve delay
-  setTimeout(() => {
-    isRestoringRef.current = false;
-  }, 100);
-  
-  return success;
-}, [pixelChangesStack, pixelChangesIndex, applyPixelChangesToCanvas, currentFrame, compositeRender]);
-
+// ---- setActiveFrame (necesario para varios lugares) ----
 const setActiveFrame = useCallback((frameNumber) => {
-  if (frameNumber === currentFrame) {
-    console.log(`Ya estamos en el frame ${frameNumber}, ignorando cambio`);
-    return true;
-  }
-
-  if (!frames[frameNumber]) {
-    console.warn(`Frame ${frameNumber} no existe`);
-    return false;
-  }
+  if (frameNumber === currentFrame) return true;
+  if (!frames[frameNumber]) return false;
 
   const frameData = frames[frameNumber];
-  
   frameData.layers.forEach(layer => {
     if (!frameData.canvases[layer.id]) {
       frameData.canvases[layer.id] = getOrCreateCanvas(layer.id, frameNumber, true);
     }
   });
-  
-  // Actualizar referencias
   setLayers(frameData.layers);
   setPixelGroups(frameData.pixelGroups);
   layerCanvasesRef.current = frameData.canvases;
-  
   setCurrentFrame(frameNumber);
-  
-  // ✅ FIX: Actualizar activeLayerId al cambiar frame
-  // Usar la primera capa visible del frame, o la primera capa si no hay visibles
-  const visibleLayers = frameData.layers.filter(layer => 
-    !layer.isGroupLayer && (layer.visible[frameNumber] !== false)
-  );
-  const targetLayer = visibleLayers.length > 0 ? visibleLayers[0] : frameData.layers[0];
-  
-  if (targetLayer && targetLayer.id !== activeLayerId) {
-    setActiveLayerId(targetLayer.id);
-  }
-  
+
+  const visibleLayers = frameData.layers.filter(l => !l.isGroupLayer && l.visible[frameNumber] !== false);
+  const target = visibleLayers[0] ?? frameData.layers[0];
+  if (target && target.id !== activeLayerId) setActiveLayerId(target.id);
+
   requestAnimationFrame(compositeRender);
   return true;
 }, [currentFrame, frames, getOrCreateCanvas, activeLayerId, compositeRender]);
 
-// ✅ FUNCIONES ORIGINALES DE FRAMES (renombradas para evitar conflictos)
-const undoFrames = useCallback(() => {
-  console.log("Undo frames activado");
-  console.log("Current index:", currentIndex);
-  console.log("History length:", history.length);
-  
-  if (currentIndex < 1) {
-    console.warn("No hay versiones anteriores para deshacer");
-    return false;
-  }
-  
-  isRestoringRef.current = true;
-  
-  const newIndex = currentIndex - 1;
-  const previousVersion = history[newIndex];
-  
-  console.log("Restaurando versión anterior:", previousVersion);
-  
-  // 1. Actualizar framesResume
-  setFramesResume(previousVersion);
-  
-  // 2. Sincronizar frames desde framesResume
-  const newFrames = syncFramesFromResume(previousVersion);
-  setFrames(newFrames);
-  
-  // 3. Actualizar frameCount
-  setFrameCount(Object.keys(newFrames).length);
-  
-  // 4. Verificar si el currentFrame sigue siendo válido
-  const newFrameNumbers = Object.keys(newFrames).map(Number);
-  if (!newFrameNumbers.includes(currentFrame)) {
-    // Si el frame actual ya no existe, cambiar al primer frame disponible
-    const firstFrame = Math.min(...newFrameNumbers);
-    setActiveFrame(firstFrame);
-  } else {
-    // Si el frame actual sigue existiendo, sincronizar layers y canvas
-    const currentFrameData = newFrames[currentFrame];
-    setLayers(currentFrameData.layers);
-    setPixelGroups(currentFrameData.pixelGroups);
-    layerCanvasesRef.current = { ...currentFrameData.canvases };
-  }
-  
-  // 5. Actualizar índice
-  setCurrentIndex(newIndex);
-  
-  setTimeout(() => {
-    isRestoringRef.current = false;
-  }, 100);
-  
-  return true;
-}, [currentIndex, history, syncFramesFromResume, currentFrame, setActiveFrame]);
-
-const redoFrames = useCallback(() => {
-  console.log("Redo frames activado");
-  
-  if (currentIndex >= history.length - 1) {
-    console.warn("No hay versiones posteriores para rehacer");
-    return false;
-  }
-  
-  isRestoringRef.current = true;
-  
-  const newIndex = currentIndex + 1;
-  const nextVersion = history[newIndex];
-  
-  console.log("Restaurando versión posterior:", nextVersion);
-  
-  // 1. Actualizar framesResume
-  setFramesResume(nextVersion);
-  
-  // 2. Sincronizar frames desde framesResume
-  const newFrames = syncFramesFromResume(nextVersion);
-  setFrames(newFrames);
-  
-  // 3. Actualizar frameCount
-  setFrameCount(Object.keys(newFrames).length);
-  
-  // 4. Verificar si el currentFrame sigue siendo válido
-  const newFrameNumbers = Object.keys(newFrames).map(Number);
-  if (!newFrameNumbers.includes(currentFrame)) {
-    // Si el frame actual ya no existe, cambiar al primer frame disponible
-    const firstFrame = Math.min(...newFrameNumbers);
-    setActiveFrame(firstFrame);
-  } else {
-    // Si el frame actual sigue existiendo, sincronizar layers y canvas
-    const currentFrameData = newFrames[currentFrame];
-    setLayers(currentFrameData.layers);
-    setPixelGroups(currentFrameData.pixelGroups);
-    layerCanvasesRef.current = { ...currentFrameData.canvases };
-  }
-  
-  // 5. Actualizar índice
-  setCurrentIndex(newIndex);
-  
-  setTimeout(() => {
-    isRestoringRef.current = false;
-  }, 100);
-  
-  return true;
-}, [currentIndex, history, syncFramesFromResume, currentFrame, setActiveFrame]);
-
-
-// ✅ NUEVO: Función combinada para undo (frames + píxeles)
-const undoComplete = useCallback(() => {
-  console.log("undocomplete");
-  // Primero intentar deshacer cambios de píxeles
-  const pixelUndoSuccess = undoPixelChanges();
-  
-  if (!pixelUndoSuccess) {
-    // Si no hay cambios de píxeles, deshacer cambios de frames
-    return undoFrames();
-  }
-  
-  return pixelUndoSuccess;
-}, [undoPixelChanges, undoFrames]);
-
-// ✅ NUEVO: Función combinada para redo (frames + píxeles)
-const redoComplete = useCallback(() => {
-  // Primero intentar rehacer cambios de píxeles
-  const pixelRedoSuccess = redoPixelChanges();
-  
-  if (!pixelRedoSuccess) {
-    // Si no hay cambios de píxeles, rehacer cambios de frames
-    return redoFrames();
-  }
-  
-  return pixelRedoSuccess;
-}, [redoPixelChanges, redoFrames]);
-
+// ---- UNDO ----
 const undo = useCallback(() => {
+  const stack = historyRef.current;
+  const idx = historyIndexRef.current;
 
-  console.log("current index absoluto", currentIndex);
-  if (currentIndex <= 0) {
-    console.warn("No hay cambios para deshacer");
-    return false;
-  }
-  
-  const entryToUndo = history[currentIndex];
-  
-  // Detectar tipo de entrada
-  const isPixelChange = entryToUndo.type === 'pixel_changes' || 
-                       (entryToUndo.changes && entryToUndo.layerId && entryToUndo.frameId);
-  
-  const isFrameState = entryToUndo.type === 'frame_state' || 
-                      (entryToUndo.frames && entryToUndo.layers && entryToUndo.metadata);
-  
-  console.log('Deshaciendo:', isPixelChange ? 'Cambio de píxeles' : 'Cambio de frames', entryToUndo);
-  
-  if (isPixelChange) {
-    // Deshacer cambios de píxeles (esto está bien)
-    const { layerId, frameId, changes } = entryToUndo;
-    const frame = frames[frameId];
-    
-    if (frame && frame.canvases[layerId]) {
-      isRestoringRef.current = true;
-      
-      const canvas = frame.canvases[layerId];
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      
-      // Aplicar cambios en reversa
-      changes.removed.forEach(pixel => {
-        const index = (pixel.y * canvas.width + pixel.x) * 4;
-        data[index] = pixel.color.r;
-        data[index + 1] = pixel.color.g;
-        data[index + 2] = pixel.color.b;
-        data[index + 3] = pixel.color.a;
-      });
-      
-      changes.modified.forEach(pixel => {
-        const index = (pixel.y * canvas.width + pixel.x) * 4;
-        data[index] = pixel.oldColor.r;
-        data[index + 1] = pixel.oldColor.g;
-        data[index + 2] = pixel.oldColor.b;
-        data[index + 3] = pixel.oldColor.a;
-      });
-      
-      changes.added.forEach(pixel => {
-        const index = (pixel.y * canvas.width + pixel.x) * 4;
-        data[index] = 0;
-        data[index + 1] = 0;
-        data[index + 2] = 0;
-        data[index + 3] = 0;
-      });
-      
-      ctx.putImageData(imageData, 0, 0);
-      
-      if (frameId === currentFrame) {
-        requestAnimationFrame(compositeRender);
-      }
-      
-      setTimeout(() => {
-        isRestoringRef.current = false;
-      }, 100);
-    }
-    
-  } else if (isFrameState) {
-    // Buscar el estado de frame anterior
-    let previousFrameState = null;
-    for (let i = currentIndex - 1; i >= 0; i--) {
-      const entry = history[i];
-      const isPreviousFrameState = entry.type === 'frame_state' || 
-                                  (entry.frames && entry.layers && entry.metadata);
-      if (isPreviousFrameState) {
-        previousFrameState = entry;
-        break;
-      }
-    }
-    
-    if (previousFrameState) {
-      isRestoringRef.current = true;
-      
-      console.log('Restaurando estado de frames anterior:', previousFrameState);
-      
-      // Restaurar framesResume
-      setFramesResume(previousFrameState);
-      
-      // ✅ PRESERVAR LOS CANVAS ACTUALES
-      const currentCanvases = {};
-      Object.keys(frames).forEach(frameKey => {
-        const frameNumber = Number(frameKey);
-        currentCanvases[frameNumber] = { ...frames[frameNumber].canvases };
-      });
-      
-      // Sincronizar frames
-      const newFrames = {};
-      Object.keys(previousFrameState.frames).forEach(frameKey => {
-        const frameNumber = Number(frameKey);
-        const resumeFrame = previousFrameState.frames[frameKey];
-        
-        const frameLayers = Object.keys(previousFrameState.layers).map(layerId => {
-          const globalLayer = previousFrameState.layers[layerId];
-          return {
-            id: layerId,
-            name: globalLayer.name,
-            visible: {
-              [frameNumber]: resumeFrame.layerVisibility[layerId] ?? true
-            },
-            opacity: resumeFrame.layerOpacity[layerId] ?? 1.0,
-            zIndex: globalLayer.zIndex,
-            isGroupLayer: globalLayer.type === 'group',
-            parentLayerId: globalLayer.parentLayerId || null
-          };
-        });
-        
-        // ✅ REUTILIZAR CANVAS EXISTENTES EN LUGAR DE CREAR NUEVOS
-        const frameCanvases = {};
-        frameLayers.forEach(layer => {
-          // Si existe un canvas pintado, conservarlo
-          if (currentCanvases[frameNumber] && currentCanvases[frameNumber][layer.id]) {
-            frameCanvases[layer.id] = currentCanvases[frameNumber][layer.id];
-          } else if (resumeFrame.canvases && resumeFrame.canvases[layer.id]) {
-            frameCanvases[layer.id] = resumeFrame.canvases[layer.id];
-          } else {
-            frameCanvases[layer.id] = getOrCreateCanvas(layer.id, frameNumber, true);
-          }
-        });
-        
-        newFrames[frameNumber] = {
-          layers: frameLayers,
-          pixelGroups: resumeFrame.pixelGroups || {},
-          canvases: frameCanvases,
-          frameDuration: resumeFrame.duration || defaultFrameDuration,
-          tags: resumeFrame.tags || []
-        };
-      });
-      
-      setFrames(newFrames);
-      setFrameCount(Object.keys(newFrames).length);
-      
-      // Verificar frame actual
-      const newFrameNumbers = Object.keys(newFrames).map(Number);
-      if (!newFrameNumbers.includes(currentFrame)) {
-        const firstFrame = Math.min(...newFrameNumbers);
-        setActiveFrame(firstFrame);
-      } else {
-        const currentFrameData = newFrames[currentFrame];
-        setLayers(currentFrameData.layers);
-        setPixelGroups(currentFrameData.pixelGroups);
-        layerCanvasesRef.current = { ...currentFrameData.canvases };
-      }
-      
-      setTimeout(() => {
-        isRestoringRef.current = false;
-      }, 100);
-    }
-  }
-  
-  setCurrentIndex(prev => prev - 1);
-  return true;
-}, [currentIndex, history, frames, currentFrame, compositeRender, getOrCreateCanvas, defaultFrameDuration, setActiveFrame]);
+  // idx=0 es el estado inicial — nada que deshacer
+  if (idx < 1) return false;
 
-const redo = useCallback(() => {
-  if (currentIndex >= history.length - 1) {
-    console.warn("No hay cambios para rehacer");
-    return false;
-  }
-  
-  const nextIndex = currentIndex + 1;
-  const entryToRedo = history[nextIndex];
-  
-  // Detectar tipo de entrada
-  const isPixelChange = entryToRedo.type === 'pixel_changes' || 
-                       (entryToRedo.changes && entryToRedo.layerId && entryToRedo.frameId);
-  
-  const isFrameState = entryToRedo.type === 'frame_state' || 
-                      (entryToRedo.frames && entryToRedo.layers && entryToRedo.metadata);
-  
-  console.log('Rehaciendo:', isPixelChange ? 'Cambio de píxeles' : 'Cambio de frames', entryToRedo);
-  
-  if (isPixelChange) {
-    // Rehacer cambios de píxeles
-    const { layerId, frameId, changes } = entryToRedo;
-    const frame = frames[frameId];
-    
-    if (frame && frame.canvases[layerId]) {
-      isRestoringRef.current = true;
-      
-      const canvas = frame.canvases[layerId];
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      
-      // Aplicar cambios normales (como si fuera la primera vez)
-      changes.added.forEach(pixel => {
-        const index = (pixel.y * canvas.width + pixel.x) * 4;
-        data[index] = pixel.color.r;
-        data[index + 1] = pixel.color.g;
-        data[index + 2] = pixel.color.b;
-        data[index + 3] = pixel.color.a;
-      });
-      
-      changes.modified.forEach(pixel => {
-        const index = (pixel.y * canvas.width + pixel.x) * 4;
-        data[index] = pixel.newColor.r;
-        data[index + 1] = pixel.newColor.g;
-        data[index + 2] = pixel.newColor.b;
-        data[index + 3] = pixel.newColor.a;
-      });
-      
-      changes.removed.forEach(pixel => {
-        const index = (pixel.y * canvas.width + pixel.x) * 4;
-        data[index] = 0;
-        data[index + 1] = 0;
-        data[index + 2] = 0;
-        data[index + 3] = 0;
-      });
-      
-      ctx.putImageData(imageData, 0, 0);
-      
-      if (frameId === currentFrame) {
-        requestAnimationFrame(compositeRender);
-      }
-      
-      setTimeout(() => {
-        isRestoringRef.current = false;
-      }, 100);
+  const entry = stack[idx];
+  isRestoringRef.current = true;
+
+  if (entry.type === 'pixel_changes') {
+    // Deshacer trazo: revertir los píxeles en el canvas
+    const frame = framesRef.current[entry.frameId];
+    if (frame?.canvases[entry.layerId]) {
+      applyPixelChangesToCanvas(entry.changes, entry.layerId, entry.frameId, true);
+      if (entry.frameId === currentFrame) requestAnimationFrame(compositeRender);
     }
-    
-  } else if (isFrameState) {
-    // Rehacer cambios de frames
-    isRestoringRef.current = true;
-    
-    console.log('Rehaciendo estado de frames:', entryToRedo);
-    
-    // Restaurar framesResume al estado que queremos rehacer
-    setFramesResume(entryToRedo);
-    
-    // ✅ PRESERVAR LOS CANVAS ACTUALES
-    const currentCanvases = {};
-    Object.keys(frames).forEach(frameKey => {
-      const frameNumber = Number(frameKey);
-      currentCanvases[frameNumber] = { ...frames[frameNumber].canvases };
-    });
-    
-    // Sincronizar frames al estado del redo
-    const newFrames = {};
-    Object.keys(entryToRedo.frames).forEach(frameKey => {
-      const frameNumber = Number(frameKey);
-      const resumeFrame = entryToRedo.frames[frameKey];
-      
-      const frameLayers = Object.keys(entryToRedo.layers).map(layerId => {
-        const globalLayer = entryToRedo.layers[layerId];
-        return {
-          id: layerId,
-          name: globalLayer.name,
-          visible: {
-            [frameNumber]: resumeFrame.layerVisibility[layerId] ?? true
-          },
-          opacity: resumeFrame.layerOpacity[layerId] ?? 1.0,
-          zIndex: globalLayer.zIndex,
-          isGroupLayer: globalLayer.type === 'group',
-          parentLayerId: globalLayer.parentLayerId || null
-        };
-      });
-      
-      // ✅ REUTILIZAR CANVAS EXISTENTES EN LUGAR DE CREAR NUEVOS
-      const frameCanvases = {};
-      frameLayers.forEach(layer => {
-        // Si existe un canvas pintado, conservarlo
-        if (currentCanvases[frameNumber] && currentCanvases[frameNumber][layer.id]) {
-          frameCanvases[layer.id] = currentCanvases[frameNumber][layer.id];
-        } else if (resumeFrame.canvases && resumeFrame.canvases[layer.id]) {
-          frameCanvases[layer.id] = resumeFrame.canvases[layer.id];
-        } else {
-          frameCanvases[layer.id] = getOrCreateCanvas(layer.id, frameNumber, true);
-        }
-      });
-      
-      newFrames[frameNumber] = {
-        layers: frameLayers,
-        pixelGroups: resumeFrame.pixelGroups || {},
-        canvases: frameCanvases,
-        frameDuration: resumeFrame.duration || defaultFrameDuration,
-        tags: resumeFrame.tags || []
-      };
-    });
-    
-    setFrames(newFrames);
-    setFrameCount(Object.keys(newFrames).length);
-    
-    // Verificar frame actual
-    const newFrameNumbers = Object.keys(newFrames).map(Number);
-    if (!newFrameNumbers.includes(currentFrame)) {
-      const firstFrame = Math.min(...newFrameNumbers);
-      setActiveFrame(firstFrame);
+    setTimeout(() => { isRestoringRef.current = false; }, 100);
+
+  } else if (entry.type === 'frame_state') {
+    // Deshacer cambio estructural: restaurar el snapshot anterior al actual.
+    // Los pixel_changes entre dos FS no se tocan — se deshacen uno a uno
+    // cuando el usuario sigue presionando Ctrl+Z.
+    let prevSnapshot = null;
+    for (let i = idx - 1; i >= 0; i--) {
+      if (stack[i].type === 'frame_state') { prevSnapshot = stack[i]; break; }
+    }
+    if (prevSnapshot) {
+      _applyFrameSnapshot(prevSnapshot);
     } else {
-      const currentFrameData = newFrames[currentFrame];
-      setLayers(currentFrameData.layers);
-      setPixelGroups(currentFrameData.pixelGroups);
-      layerCanvasesRef.current = { ...currentFrameData.canvases };
+      setTimeout(() => { isRestoringRef.current = false; }, 100);
     }
-    
-    setTimeout(() => {
-      isRestoringRef.current = false;
-    }, 100);
   }
-  
-  setCurrentIndex(nextIndex);
+
+  historyIndexRef.current = idx - 1;
+  _bumpVersion();
   return true;
-}, [currentIndex, history, frames, currentFrame, compositeRender, getOrCreateCanvas, defaultFrameDuration, setActiveFrame]);
+}, [currentFrame, applyPixelChangesToCanvas, compositeRender, _applyFrameSnapshot, _bumpVersion]);
 
-// ✅ NUEVO: Estados mejorados para botones de undo/redo
-const canUndoPixels = pixelChangesIndex > 0;
-const canRedoPixels = pixelChangesIndex < pixelChangesStack.length - 1;
-const canUndoFrames = currentIndex > 1;
-const canRedoFrames = currentIndex < history.length - 1;
+// ---- REDO ----
+const redo = useCallback(() => {
+  const stack = historyRef.current;
+  const idx = historyIndexRef.current;
+  if (idx >= stack.length - 1) return false;
 
-// Estados combinados para la UI
-const canUndoComplete = canUndoPixels || canUndoFrames;
-const canRedoComplete = canRedoPixels || canRedoFrames;
+  const nextIdx = idx + 1;
+  const entry = stack[nextIdx];
+  isRestoringRef.current = true;
 
-// ✅ NUEVO: Función para limpiar todo el historial
+  if (entry.type === 'pixel_changes') {
+    const frame = framesRef.current[entry.frameId];
+    if (frame?.canvases[entry.layerId]) {
+      applyPixelChangesToCanvas(entry.changes, entry.layerId, entry.frameId, false);
+      if (entry.frameId === currentFrame) requestAnimationFrame(compositeRender);
+    }
+    setTimeout(() => { isRestoringRef.current = false; }, 100);
+
+  } else if (entry.type === 'frame_state') {
+    _applyFrameSnapshot(entry);
+  }
+
+  historyIndexRef.current = nextIdx;
+  _bumpVersion();
+  return true;
+}, [currentFrame, applyPixelChangesToCanvas, compositeRender, _applyFrameSnapshot, _bumpVersion]);
+
+// ---- Alias y compatibilidad con el resto del codebase ----
+const undoFrames = undo;
+const redoFrames = redo;
+const undoPixelChanges = undo;
+const redoPixelChanges = redo;
+const undoComplete = undo;
+const redoComplete = redo;
+
+// canUndo/canRedo — se recalculan cada vez que historyVersion cambia
+const canUndo = historyIndexRef.current > 0;
+const canRedo = historyIndexRef.current < historyRef.current.length - 1;
+const canUndoComplete = canUndo;
+const canRedoComplete = canRedo;
+const canUndoPixels = canUndo;
+const canRedoPixels = canRedo;
+const canUndoFrames = canUndo;
+const canRedoFrames = canRedo;
+
+// history expuesto como vista de solo lectura (sin causar re-renders)
+const history = historyRef.current;
+const currentIndex = historyIndexRef.current;
+
 const clearAllHistory = useCallback(() => {
-  setHistory([]);
-  setCurrentIndex(-1);
-  setPixelChangesStack([]);
-  setPixelChangesIndex(-1);
-  console.log("🧹 Todo el historial limpiado");
+  historyRef.current = [];
+  historyIndexRef.current = -1;
+  _bumpVersion();
+}, [_bumpVersion]);
+
+const getCompleteDebugInfo = useCallback(() => ({
+  historyLength: historyRef.current.length,
+  currentIndex: historyIndexRef.current,
+  canUndo,
+  canRedo,
+}), [canUndo, canRedo]);
+
+const getChangePreview = useCallback(() => {
+  const idx = historyIndexRef.current;
+  const stack = historyRef.current;
+  return {
+    current: stack[idx] ?? null,
+    next: stack[idx + 1] ?? null,
+    previous: stack[idx - 1] ?? null,
+  };
 }, []);
 
-// ✅ NUEVO: Función para obtener información de debug completa
-const getCompleteDebugInfo = useCallback(() => {
-  return {
-    frames: {
-      historyLength: history.length,
-      currentIndex,
-      canUndo: canUndoFrames,
-      canRedo: canRedoFrames
-    },
-    pixels: {
-      stackLength: pixelChangesStack.length,
-      currentIndex: pixelChangesIndex,
-      canUndo: canUndoPixels,
-      canRedo: canRedoPixels
-    },
-    combined: {
-      canUndoComplete,
-      canRedoComplete
-    }
-  };
-}, [
-  history.length, currentIndex, canUndoFrames, canRedoFrames,
-  pixelChangesStack.length, pixelChangesIndex, canUndoPixels, canRedoPixels,
-  canUndoComplete, canRedoComplete
-]);
-
-// ✅ NUEVO: Función para obtener vista previa de cambios
-const getChangePreview = useCallback(() => {
-  const frameChanges = history[currentIndex];
-  const pixelChanges = pixelChangesStack[pixelChangesIndex];
-  
-  return {
-    nextPixelChange: pixelChangesIndex < pixelChangesStack.length - 1 ? 
-      pixelChangesStack[pixelChangesIndex + 1] : null,
-    previousPixelChange: pixelChangesIndex > 0 ? 
-      pixelChangesStack[pixelChangesIndex - 1] : null,
-    nextFrameChange: currentIndex < history.length - 1 ? 
-      history[currentIndex + 1] : null,
-    previousFrameChange: currentIndex > 0 ? 
-      history[currentIndex - 1] : null
-  };
-}, [history, currentIndex, pixelChangesStack, pixelChangesIndex]);
-
-
-// ===================== SISTEMA UNDO/REDO ====================================//
-
+// ===================== FIN SISTEMA UNDO/REDO ====================================//
 
 
 // 3. FUNCIÓN PARA RENDERIZAR UN FRAME COMO CAPA
@@ -2631,10 +2214,8 @@ const addLayer = useCallback(() => {
     }
   });
 
-  setFramesResume(prev => {
-    const updated = { ...prev };
-    
-    updated.layers[newLayerId] = {
+  setFramesResume(prev => produce(prev, draft => {
+    draft.layers[newLayerId] = {
       id: newLayerId,
       name: `Layer ${Object.keys(prev.layers).length + 1}`,
       type: 'normal',
@@ -2644,23 +2225,21 @@ const addLayer = useCallback(() => {
       locked: false,
     };
 
-    Object.keys(updated.frames).forEach(frameKey => {
-      const frame = updated.frames[frameKey];
+    Object.keys(draft.frames).forEach(frameKey => {
+      const frame = draft.frames[frameKey];
       frame.layerVisibility[newLayerId] = true;
       frame.layerOpacity[newLayerId] = 1.0;
       frame.layerHasContent[newLayerId] = false;
     });
 
-    updated.computed.framesByLayer[newLayerId] = [];
-    updated.computed.keyframes[newLayerId] = [];
-    Object.keys(updated.computed.resolvedFrames).forEach(frameKey => {
-      updated.computed.resolvedFrames[frameKey].layerVisibility[newLayerId] = true;
-      updated.computed.resolvedFrames[frameKey].layerOpacity[newLayerId] = 1.0;
-      updated.computed.resolvedFrames[frameKey].layerHasContent[newLayerId] = false;
+    draft.computed.framesByLayer[newLayerId] = [];
+    draft.computed.keyframes[newLayerId] = [];
+    Object.keys(draft.computed.resolvedFrames).forEach(frameKey => {
+      draft.computed.resolvedFrames[frameKey].layerVisibility[newLayerId] = true;
+      draft.computed.resolvedFrames[frameKey].layerOpacity[newLayerId] = 1.0;
+      draft.computed.resolvedFrames[frameKey].layerHasContent[newLayerId] = false;
     });
-
-    return updated;
-  });
+  }));
 
   setFrames(updatedFrames);
   
@@ -2875,7 +2454,7 @@ const createFrame = useCallback((mode = "newContent", customDuration = null, sou
           }
         };
       }),
-      pixelGroups: JSON.parse(JSON.stringify(sourceFrame.pixelGroups)),
+      pixelGroups: structuredClone(sourceFrame.pixelGroups),
       canvases: {}, // ✅ Se llenará abajo con canvas duplicados
       frameDuration: sourceFrame.frameDuration,
       tags: [...(sourceFrame.tags || [])]
@@ -2927,78 +2506,75 @@ const createFrame = useCallback((mode = "newContent", customDuration = null, sou
   }
 
   // ✅ AGREGAR: Actualizar framesResume ANTES de setFrames
-  setFramesResume(prev => {
-    const updated = { ...prev };
+  setFramesResume(prev => produce(prev, draft => {
     const sourceFrameResume = prev.frames[sourceFrameNumber ?? currentFrame];
-    
-    // Shiftar frames existentes en framesResume
+
+    // Shiftar frames existentes en framesResume (N ≥ insertAt → N+1).
+    // Con produce, podemos mutar draft directamente — Immer crea estructuras
+    // nuevas para las branches tocadas y conserva refs en las no tocadas.
     const framesToShift = {};
-    Object.keys(updated.frames).forEach(frameKey => {
+    Object.keys(draft.frames).forEach(frameKey => {
       const num = Number(frameKey);
       if (num >= insertAt) {
-        framesToShift[num + 1] = updated.frames[frameKey];
-        delete updated.frames[frameKey];
+        framesToShift[num + 1] = draft.frames[frameKey];
+        delete draft.frames[frameKey];
       }
     });
-    Object.assign(updated.frames, framesToShift);
+    Object.assign(draft.frames, framesToShift);
 
     // Crear nuevo frame en framesResume
     if (mode === "duplicate") {
-      updated.frames[insertAt] = {
+      draft.frames[insertAt] = {
         layerVisibility: { ...sourceFrameResume.layerVisibility },
         layerOpacity: { ...sourceFrameResume.layerOpacity },
         layerHasContent: { ...sourceFrameResume.layerHasContent },
-        canvases: {}, // Se llenará después
-        pixelGroups: JSON.parse(JSON.stringify(sourceFrameResume.pixelGroups)),
+        canvases: {},
+        pixelGroups: structuredClone(sourceFrameResume.pixelGroups),
         duration: sourceFrameResume.duration,
-        tags: [...(sourceFrameResume.tags || [])]
+        tags: [...(sourceFrameResume.tags || [])],
       };
     } else {
-      updated.frames[insertAt] = {
+      draft.frames[insertAt] = {
         layerVisibility: { ...sourceFrameResume.layerVisibility },
         layerOpacity: { ...sourceFrameResume.layerOpacity },
         layerHasContent: Object.fromEntries(
-          Object.keys(updated.layers).map(layerId => [layerId, false])
+          Object.keys(draft.layers).map(layerId => [layerId, false])
         ),
         canvases: {},
         pixelGroups: {},
         duration: customDuration ?? defaultFrameDuration,
-        tags: []
+        tags: [],
       };
     }
 
-    // Actualizar metadata
-    updated.metadata.frameCount += 1;
-    updated.metadata.totalDuration = Object.values(updated.frames)
+    // Metadata
+    draft.metadata.frameCount += 1;
+    draft.metadata.totalDuration = Object.values(draft.frames)
       .reduce((sum, frame) => sum + frame.duration, 0);
 
     // Recalcular computed
-    updated.computed.frameSequence = Object.keys(updated.frames)
+    draft.computed.frameSequence = Object.keys(draft.frames)
       .map(Number).sort((a, b) => a - b);
-    updated.computed.totalFrames = updated.computed.frameSequence.length;
+    draft.computed.totalFrames = draft.computed.frameSequence.length;
 
-    // Actualizar resolvedFrames (shiftar y agregar nuevo)
+    // Shiftar resolvedFrames + crear el nuevo
+    const prevResolved = draft.computed.resolvedFrames;
     const newResolvedFrames = {};
-    Object.keys(updated.computed.resolvedFrames).forEach(frameKey => {
+    Object.keys(prevResolved).forEach(frameKey => {
       const num = Number(frameKey);
       if (num >= insertAt) {
-        newResolvedFrames[num + 1] = updated.computed.resolvedFrames[frameKey];
+        newResolvedFrames[num + 1] = prevResolved[frameKey];
       } else {
-        newResolvedFrames[frameKey] = updated.computed.resolvedFrames[frameKey];
+        newResolvedFrames[frameKey] = prevResolved[frameKey];
       }
     });
-    
-    // Crear resolved frame para el nuevo frame
     newResolvedFrames[insertAt] = {
-      layerVisibility: { ...updated.frames[insertAt].layerVisibility },
-      layerOpacity: { ...updated.frames[insertAt].layerOpacity },
-      layerHasContent: { ...updated.frames[insertAt].layerHasContent }
+      layerVisibility: { ...draft.frames[insertAt].layerVisibility },
+      layerOpacity: { ...draft.frames[insertAt].layerOpacity },
+      layerHasContent: { ...draft.frames[insertAt].layerHasContent },
     };
-    
-    updated.computed.resolvedFrames = newResolvedFrames;
-
-    return updated;
-  });
+    draft.computed.resolvedFrames = newResolvedFrames;
+  }));
 
   // Actualizar numeración de frames existentes
   setFrames(prev => {
@@ -3231,7 +2807,7 @@ const duplicateLayer = useCallback((layerId) => {
       
       // Duplicar pixelGroups si existen
       if (frame.pixelGroups[layerId]) {
-        frame.pixelGroups[newLayerId] = JSON.parse(JSON.stringify(frame.pixelGroups[layerId]));
+        frame.pixelGroups[newLayerId] = structuredClone(frame.pixelGroups[layerId]);
       }
     });
 
@@ -3895,7 +3471,97 @@ const getFrameRate = useCallback((frameNumber) => {
   }, [savePixelChangesToStack]);
   // ✅ Ref para guardar el estado anterior del canvas
   const previousCanvasStatesRef = useRef({});
-  
+
+// ---- Captura de trazo para undo/redo ----
+const strokeSnapshotRef = useRef(null);
+
+const computePixelChanges = (beforeData, afterData, width) => {
+  const added = [];
+  const modified = [];
+  const removed = [];
+  const len = beforeData.data.length;
+  for (let i = 0; i < len; i += 4) {
+    const bA = beforeData.data[i + 3];
+    const aA = afterData.data[i + 3];
+    const bR = beforeData.data[i], bG = beforeData.data[i + 1], bB = beforeData.data[i + 2];
+    const aR = afterData.data[i], aG = afterData.data[i + 1], aB = afterData.data[i + 2];
+    const pixelIndex = i / 4;
+    const x = pixelIndex % width;
+    const y = Math.floor(pixelIndex / width);
+    const wasEmpty = bA === 0;
+    const isEmpty = aA === 0;
+    if (wasEmpty && !isEmpty) {
+      added.push({ x, y, color: { r: aR, g: aG, b: aB, a: aA } });
+    } else if (!wasEmpty && isEmpty) {
+      removed.push({ x, y, color: { r: bR, g: bG, b: bB, a: bA } });
+    } else if (!wasEmpty && !isEmpty && (bR !== aR || bG !== aG || bB !== aB || bA !== aA)) {
+      modified.push({ x, y, oldColor: { r: bR, g: bG, b: bB, a: bA }, newColor: { r: aR, g: aG, b: aB, a: aA } });
+    }
+  }
+  return { added, modified, removed };
+};
+
+const captureStrokeStart = useCallback((layerId, frameId) => {
+  const frame = framesRef.current[frameId];
+  if (!frame?.canvases?.[layerId]) return;
+  const canvas = frame.canvases[layerId];
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return;
+  strokeSnapshotRef.current = {
+    layerId,
+    frameId,
+    imageData: ctx.getImageData(0, 0, canvas.width, canvas.height),
+  };
+}, []);
+
+const finalizeStroke = useCallback((layerId, frameId) => {
+  const snapshot = strokeSnapshotRef.current;
+  if (!snapshot || snapshot.layerId !== layerId || snapshot.frameId !== frameId) {
+    strokeSnapshotRef.current = null;
+    return;
+  }
+  const frame = framesRef.current[frameId];
+  if (!frame?.canvases?.[layerId]) { strokeSnapshotRef.current = null; return; }
+  const canvas = frame.canvases[layerId];
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) { strokeSnapshotRef.current = null; return; }
+  const afterData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const changes = computePixelChanges(snapshot.imageData, afterData, canvas.width);
+  strokeSnapshotRef.current = null;
+  if (changes.added.length > 0 || changes.modified.length > 0 || changes.removed.length > 0) {
+    logPixelChanges(changes, layerId, frameId);
+  }
+}, [logPixelChanges]);
+
+// Variante de computePixelChanges que opera sobre un sub-rect y traduce los
+// índices locales a coords absolutas del canvas.
+const computePixelChangesRegion = (beforeData, afterData, bx, by, bw) => {
+  const added = [];
+  const modified = [];
+  const removed = [];
+  const data0 = beforeData.data;
+  const data1 = afterData.data;
+  const len = data0.length;
+  for (let i = 0; i < len; i += 4) {
+    const bA = data0[i + 3];
+    const aA = data1[i + 3];
+    const bR = data0[i], bG = data0[i + 1], bB = data0[i + 2];
+    const aR = data1[i], aG = data1[i + 1], aB = data1[i + 2];
+    const pixelIndex = i / 4;
+    const x = bx + (pixelIndex % bw);
+    const y = by + Math.floor(pixelIndex / bw);
+    const wasEmpty = bA === 0;
+    const isEmpty = aA === 0;
+    if (wasEmpty && !isEmpty) {
+      added.push({ x, y, color: { r: aR, g: aG, b: aB, a: aA } });
+    } else if (!wasEmpty && isEmpty) {
+      removed.push({ x, y, color: { r: bR, g: bG, b: bB, a: bA } });
+    } else if (!wasEmpty && !isEmpty && (bR !== aR || bG !== aG || bB !== aB || bA !== aA)) {
+      modified.push({ x, y, oldColor: { r: bR, g: bG, b: bB, a: bA }, newColor: { r: aR, g: aG, b: aB, a: aA } });
+    }
+  }
+  return { added, modified, removed };
+};
 
 // Ref para trackear la última capa modificada
 const lastModifiedLayer = useRef(null);
@@ -3940,48 +3606,53 @@ const checkIfCanvasIsPaintedViaBlob = async (ctx, layerId, currentFrame, setFram
       hasContent ? 'color: green; font-weight: bold' : 'color: gray; font-style: italic'
     );
 
-    // ✅ Actualizar estado de framesResume
+    // ✅ Actualizar estado de framesResume inmutablemente (Immer).
+    // Antes: `{...prev}` + mutación in-place rompía React.memo downstream
+    // (los sub-objetos compartían referencia y las mutaciones no se
+    // detectaban por identidad). Con produce(), cada branch modificado
+    // tiene nueva referencia, las no tocadas la conservan → LayerRow.memo
+    // puede skippear limpiamente cuando no hay cambios para esa capa.
     setFramesResume(prev => {
       const currentHasContent = prev.frames[currentFrame]?.layerHasContent[layerId];
-
       if (currentHasContent === hasContent) return prev;
 
-      const updated = { ...prev };
-      updated.frames[currentFrame].layerHasContent[layerId] = hasContent;
-      updated.computed.resolvedFrames[currentFrame].layerHasContent[layerId] = hasContent;
+      return produce(prev, draft => {
+        draft.frames[currentFrame].layerHasContent[layerId] = hasContent;
+        draft.computed.resolvedFrames[currentFrame].layerHasContent[layerId] = hasContent;
 
-      const currentFrames = updated.computed.framesByLayer[layerId] || [];
-
-      if (hasContent && !currentFrames.includes(currentFrame)) {
-        updated.computed.framesByLayer[layerId] = [...currentFrames, currentFrame].sort((a, b) => a - b);
-      } else if (!hasContent && currentFrames.includes(currentFrame)) {
-        updated.computed.framesByLayer[layerId] = currentFrames.filter(f => f !== currentFrame);
-      }
-
-      return updated;
+        const currentFrames = draft.computed.framesByLayer[layerId] || [];
+        if (hasContent && !currentFrames.includes(currentFrame)) {
+          draft.computed.framesByLayer[layerId] = [...currentFrames, currentFrame].sort((a, b) => a - b);
+        } else if (!hasContent && currentFrames.includes(currentFrame)) {
+          draft.computed.framesByLayer[layerId] = currentFrames.filter(f => f !== currentFrame);
+        }
+      });
     });
 
   } catch (error) {
     console.error('[BlobCheck] Error:', error);
   }
 };
-// useEffect para actualizar framesResume cuando termine el dibujo
+// useEffect para actualizar framesResume cuando termine el dibujo y capturar trazos para undo/redo
 
 useEffect(() => {
-  if (!isPressed) {
-    const layerId = activeLayerId; // ← Usa tu identificador de layer actual
-    const canvas = layerCanvasesRef.current?.[layerId];
+  if (isPressed) {
+    // Inicio de trazo: capturar estado del canvas antes de pintar
+    captureStrokeStart(activeLayerId, currentFrame);
+  } else {
+    // Fin de trazo: comparar antes/después y registrar en historial
+    finalizeStroke(activeLayerId, currentFrame);
 
+    const layerId = activeLayerId;
+    const canvas = layerCanvasesRef.current?.[layerId];
     if (canvas && layerId != null) {
       const ctx = canvas.getContext('2d');
-
-      // Esperar un poco tras soltar el mouse para asegurar que la pintura terminó
       setTimeout(() => {
         checkIfCanvasIsPaintedViaBlob(ctx, layerId, currentFrame, setFramesResume);
       }, 50);
     }
   }
-}, [isPressed]);
+}, [isPressed]); // captureStrokeStart/finalizeStroke excluidos intencionalmente (refs estables)
 
 /*
 const drawOnLayer = useCallback((layerId, drawFn, shouldBatch = false) => {
@@ -4085,8 +3756,11 @@ const drawOnLayer = useCallback((layerId, drawFn, shouldBatch = false) => {
   // --- Ejecutar función de dibujo ---
   drawFn(targetCanvas._ctx);
 
-  // --- Actualizar estado si es necesario ---
+  // --- Invalidar caché de onion skin para este layer+frame ---
   if (!activeLighter) {
+    const pvKey = `${layerId}_${currentFrame}`;
+    paintVersionRef.current[pvKey] = (paintVersionRef.current[pvKey] ?? 0) + 1;
+
     if (lastModifiedLayer.current !== layerId) {
       lastModifiedLayer.current = layerId;
       setLastModifiedLayerState(layerId);
@@ -4109,6 +3783,62 @@ const drawOnLayer = useCallback((layerId, drawFn, shouldBatch = false) => {
   compositeRender,
   setLastModifiedLayerState
 ]);
+
+// Commit explícito para figuras geométricas (square, circle, line, etc.).
+// Antes las figuras dibujaban con drawOnLayer pero NUNCA registraban en el
+// historial — el mecanismo automático captureStrokeStart/finalizeStroke es
+// dependiente del timing de useEffect [isPressed] y no capturaba los cambios
+// de figuras de forma fiable. Este helper diffea el bbox de la figura y emite
+// la entrada al history, además de cancelar el snapshot automático para evitar
+// doble registro. Usa drawOnLayer internamente, por lo que respeta lighter mode,
+// onion-skin cache invalidation y compositeRender.
+const commitShapeWithHistory = useCallback((layerId, frameId, bbox, drawFn) => {
+  // En modo lighter, el dibujo va a un canvas temporal que se mergea después;
+  // el diff por bbox no aplica directamente. Caemos al drawOnLayer normal sin
+  // registrar en history (fallback seguro, sin ruido).
+  if (activeLighter) {
+    drawOnLayer(layerId, drawFn);
+    return;
+  }
+
+  const canvas = layerCanvasesRef.current[layerId];
+  if (!canvas) {
+    drawOnLayer(layerId, drawFn);
+    return;
+  }
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) {
+    drawOnLayer(layerId, drawFn);
+    return;
+  }
+
+  // Clamp del bbox a los bordes del canvas
+  const bx = Math.max(0, Math.floor(bbox.x));
+  const by = Math.max(0, Math.floor(bbox.y));
+  const bex = Math.min(canvas.width, Math.ceil(bbox.x + bbox.w));
+  const bey = Math.min(canvas.height, Math.ceil(bbox.y + bbox.h));
+  const bw = bex - bx;
+  const bh = bey - by;
+
+  let beforeData = null;
+  if (bw > 0 && bh > 0) {
+    beforeData = ctx.getImageData(bx, by, bw, bh);
+  }
+
+  // drawOnLayer dibuja sincronamente, maneja onion invalidation y programa render.
+  drawOnLayer(layerId, drawFn);
+
+  // Cancelar snapshot automático para que finalizeStroke no duplique el registro.
+  strokeSnapshotRef.current = null;
+
+  if (beforeData) {
+    const afterData = ctx.getImageData(bx, by, bw, bh);
+    const changes = computePixelChangesRegion(beforeData, afterData, bx, by, bw);
+    if (changes.added.length > 0 || changes.modified.length > 0 || changes.removed.length > 0) {
+      logPixelChanges(changes, layerId, frameId);
+    }
+  }
+}, [activeLighter, drawOnLayer, logPixelChanges]);
 
 // ===== FUNCIÓN PARA MANEJAR CAMBIO DE ACTIVELIGHTER =====
 
@@ -4216,43 +3946,63 @@ const processPaintBatch = useCallback(() => {
   paintBatchTimer.current = null;
 }, []);
 
-// 5. NUEVA FUNCIÓN: paintPixelsImmediate - ULTRA-OPTIMIZADA
+// 5. paintPixelsImmediate: dirty-rect para leer/escribir solo la región modificada.
+// Evita getImageData/putImageData de toda la canvas cuando solo cambian pocos píxeles.
 const paintPixelsImmediate = useCallback((layerId, frameNumber, pixels, rgba) => {
   const frame = frames[frameNumber];
   if (!frame?.canvases[layerId]) return false;
-  
-  const canvas = frame.canvases[layerId];
-  const ctx = canvas.getContext('2d', { 
-    willReadFrequently: true,
-    alpha: true
-  });
-  
-  if (!ctx || pixels.length === 0) return false;
 
-  // Crear imageData para toda la operación
-  const imageData = ctx.getImageData(0, 0, width, height);
-  const data = imageData.data;
-  
-  // Optimización: usar TypedArray para mejor rendimiento
+  const canvas = frame.canvases[layerId];
+  if (!canvas._ctx) {
+    canvas._ctx = canvas.getContext('2d', { willReadFrequently: true, alpha: true });
+  }
+  const ctx = canvas._ctx;
+
   const pixelCount = pixels.length;
+  if (!ctx || pixelCount === 0) return false;
+
+  // Calcular bounding rect de los píxeles a modificar
+  let minX = width, minY = height, maxX = 0, maxY = 0;
   for (let i = 0; i < pixelCount; i++) {
-    const pixel = pixels[i];
-    if (pixel.x >= 0 && pixel.x < width && pixel.y >= 0 && pixel.y < height) {
-      const index = (pixel.y * width + pixel.x) << 2; // Bit shift más rápido que * 4
-      data[index] = rgba.r;
+    const { x, y } = pixels[i];
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  }
+  minX = Math.max(0, minX);
+  minY = Math.max(0, minY);
+  maxX = Math.min(width - 1, maxX);
+  maxY = Math.min(height - 1, maxY);
+
+  const dirtyW = maxX - minX + 1;
+  const dirtyH = maxY - minY + 1;
+
+  // Leer solo la región sucia — mucho menos datos que la canvas completa
+  const imageData = ctx.getImageData(minX, minY, dirtyW, dirtyH);
+  const data = imageData.data;
+
+  for (let i = 0; i < pixelCount; i++) {
+    const { x, y } = pixels[i];
+    if (x >= 0 && x < width && y >= 0 && y < height) {
+      const index = ((y - minY) * dirtyW + (x - minX)) << 2;
+      data[index]     = rgba.r;
       data[index + 1] = rgba.g;
       data[index + 2] = rgba.b;
       data[index + 3] = rgba.a;
     }
   }
-  
-  ctx.putImageData(imageData, 0, 0);
-  
-  // Solo re-renderizar si es el frame actual
+
+  ctx.putImageData(imageData, minX, minY);
+
+  // Invalidar caché de onion skin para esta capa+frame
+  const pvKey = `${layerId}_${frameNumber}`;
+  paintVersionRef.current[pvKey] = (paintVersionRef.current[pvKey] ?? 0) + 1;
+
   if (frameNumber === currentFrame) {
     requestAnimationFrame(compositeRender);
   }
-  
+
   return true;
 }, [frames, width, height, currentFrame, compositeRender]);
 
@@ -7468,12 +7218,92 @@ const createLayerAndPaintDataUrlCentered = useCallback(async (dataUrl, options =
 
 
 
+// ===== RESTAURACIÓN DESDE FORMATO v2 =====
+// Recibe el projectData del nuevo formato .pixcalli y los canvases ya
+// deserializados (objetos canvas DOM), y restaura todo el estado del editor.
+const restoreFromProjectData = useCallback(async (projectData, restoredCanvases) => {
+  try {
+    isRestoringRef.current = true;
+
+    // 1. Restaurar framesResume si viene válido
+    if (projectData.framesResume) {
+      setFramesResume(projectData.framesResume);
+    }
+
+    // 2. Restaurar capas
+    if (Array.isArray(projectData.layers) && projectData.layers.length > 0) {
+      setLayers(projectData.layers);
+    }
+
+    // 3. Reconstruir `frames` desde restoredCanvases + framesResume
+    // restoredCanvases tiene claves "frame_N_layerId"
+    if (projectData.framesResume?.frames && restoredCanvases) {
+      const newFrames = {};
+
+      for (const [frameKey, frameResume] of Object.entries(projectData.framesResume.frames)) {
+        const frameNumber = Number(frameKey);
+        const frameCanvases = {};
+
+        // Buscar todos los canvases que pertenecen a este frame
+        for (const [key, canvas] of Object.entries(restoredCanvases)) {
+          const prefix = `frame_${frameNumber}_`;
+          if (key.startsWith(prefix)) {
+            const layerId = key.slice(prefix.length);
+            frameCanvases[layerId] = canvas;
+          }
+        }
+
+        newFrames[frameNumber] = {
+          canvases: frameCanvases,
+          layers: projectData.layers ?? [],
+          frameDuration: frameResume.duration ?? (projectData.animation?.defaultFrameDuration ?? 100),
+          tags: frameResume.tags ?? [],
+        };
+      }
+
+      setFrames(newFrames);
+    }
+
+    // 4. Restaurar frame activo
+    if (projectData.viewport?.currentFrame) {
+      setCurrentFrame(projectData.viewport.currentFrame);
+    }
+
+    // 5. Restaurar capa activa
+    if (projectData.viewport?.activeLayerId) {
+      setActiveLayerId(projectData.viewport.activeLayerId);
+    }
+
+    // 6. Restaurar onion skin
+    if (projectData.onionSkin?.settings) {
+      setOnionSkinSettings(prev => ({ ...prev, ...projectData.onionSkin.settings }));
+    }
+    if (projectData.onionSkin?.framesConfig) {
+      setOnionFramesConfig(projectData.onionSkin.framesConfig);
+    }
+    if (typeof projectData.onionSkin?.enabled === 'boolean') {
+      setOnionSkinEnabled(projectData.onionSkin.enabled);
+    }
+
+    console.log('Proyecto restaurado correctamente desde formato v2');
+    return true;
+  } catch (err) {
+    console.error('Error restaurando proyecto:', err);
+    return false;
+  } finally {
+    // Pequeño delay para que React procese todos los setState antes de
+    // volver a permitir que el historial registre cambios.
+    setTimeout(() => { isRestoringRef.current = false; }, 100);
+  }
+}, [setLayers, setFramesResume, setFrames, setCurrentFrame, setActiveLayerId,
+    setOnionSkinSettings, setOnionFramesConfig, setOnionSkinEnabled]);
+
 return {
   // State
   layers,
   compositeCanvasRef,
   viewportOffset,
-  activeLayerId, 
+  activeLayerId,
   setActiveLayerId,
   
   // Layer management
@@ -7622,12 +7452,12 @@ undo,
 redo,
 undoPixelChanges,
 redoPixelChanges,
-undoFrames, // Función específica para deshacer frames
-redoFrames, // Función específica para rehacer frames
+undoFrames,
+redoFrames,
 
 // Estados de disponibilidad
-canUndo: canUndoComplete,
-canRedo: canRedoComplete,
+canUndo,
+canRedo,
 canUndoPixels,
 canRedoPixels,
 canUndoFrames,
@@ -7638,13 +7468,19 @@ clearHistory: clearAllHistory,
 debugInfo: getCompleteDebugInfo,
 getChangePreview,
 
-// Información del stack
-pixelChangesStack,
-pixelChangesIndex,
-
-// Función logPixelChanges modificada (ya incluye guardado en stack)
+// Función logPixelChanges (incluye guardado en stack)
 logPixelChanges,
 history,
+
+// API low-level del historial (requerida por modales que mutan canvas completo —
+// filtros, insertar texto, scripts). Permite registrar frame_state snapshots
+// desde fuera del hook. Ver plan-ambicioso: cableado Sprint 1–6.
+historyPush,
+
+// Captura de trazos para undo/redo
+captureStrokeStart,
+finalizeStroke,
+commitShapeWithHistory,
 
 //exportacion: 
 exportLayersAndFrames,
@@ -7663,7 +7499,9 @@ exportLayersAndFrames,
 //gestion del data url:
 
 createLayerAndPaintDataUrlCentered,
-//gestion de aislamiento de
+
+// Restauración completa desde formato .pixcalli v2
+restoreFromProjectData,
 
 };
 }

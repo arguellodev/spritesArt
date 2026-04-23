@@ -22,6 +22,8 @@
     "@react-three/fiber": "^9.3.0",
     "cubic-spline": "^3.0.3",
     "electron-color-picker": "^0.2.0",
+    "gifenc": "^1.0.3",
+    "immer": "^11.1.4",
     "numeric": "^1.2.6",
     "numericjs": "^1.2.6",
     "pixi-painter": "^0.1.6-beta.1",

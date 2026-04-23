@@ -97,33 +97,19 @@ const FramesTimeline = ({
   animationTickFrame,  // frameNumber que el motor de animación está mostrando
 }) => {
 
-  // Nota sobre PERFORMANCE vs CORRECCIÓN:
-  //
-  // En versiones anteriores probé memoizar `frameNumbers` con useMemo deps
-  // [framesResume]. Eso optimizó playback (LayerRow memo skippeaba cuando
-  // framesResume no cambiaba), PERO expuso un bug sutil: al pintar / crear
-  // frame / crear capa, la UI no se actualizaba hasta cambiar de frame.
-  //
-  // Causa raíz: `useLayerManager` hace `setFramesResume(prev => ({...prev, ...}))`
-  // con MUTACIONES IN-PLACE sobre los objetos anidados (ver `hooks.jsx:3616`+,
-  // `addLayer:2216`+, etc.). El top-level ref cambia pero sub-objetos comparten
-  // referencia entre prev y next. Con el `frameNumbers` memoizado, la UI podía
-  // acabar sirviendo un árbol "cacheado" antes de que React detectara el cambio
-  // (interacción con el React Compiler + el nested shallow-spread pattern).
-  //
-  // Sin la memoización: `frameNumbers` es new array cada render. LayerRow.memo
-  // falla siempre. Re-render más frecuente, pero la UI SIEMPRE refleja la
-  // última data. Trade-off elegido: correctness > performance.
-  //
-  // Fix arquitectónico (futuro): migrar setFramesResume a updates inmutables
-  // (spreads profundos o Immer) en `useLayerManager`. Con eso, se podrá volver
-  // a memoizar frameNumbers Y LayerRow podrá usar un comparador custom seguro.
-  const getFramesInfo = useCallback(() => {
+  // `frameNumbers` memoizado: identidad estable mientras framesResume no cambie.
+  // Seguro de usar ahora que `useLayerManager` hace updates inmutables con
+  // Immer (`produce()` en checkIfCanvasIsPaintedViaBlob, addLayer, createFrame):
+  // cuando el top-level ref de framesResume cambia, los sub-objetos TOCADOS
+  // también cambian ref → LayerRow.memo detecta el cambio y re-renderea con
+  // la data actualizada. Durante playback, framesResume es estable →
+  // frameNumbers estable → LayerRow.memo skippea → solo las 2 header cells
+  // afectadas se re-renderean por tick de animación.
+  const { frameNumbers, frameCount } = useMemo(() => {
     if (!framesResume?.frames) return { frameNumbers: [], frameCount: 0 };
     const arr = Object.keys(framesResume.frames).map(Number).sort((a, b) => a - b);
     return { frameNumbers: arr, frameCount: arr.length };
   }, [framesResume]);
-  const { frameNumbers, frameCount } = getFramesInfo();
   const [editingLayerId, setEditingLayerId] = useState(null);
   const [editingName, setEditingName] = useState('');
   // (Eliminado: `editingGroupId` / `editingGroupName` useStates — solo los
