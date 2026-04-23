@@ -941,31 +941,16 @@ margin-right: 20px;
   color: white;
 }
 
-/* ===== TIMELINE LAYERS ===== */
+/* ===== TIMELINE LAYERS =====
+   Ya NO tiene overflow propio: el scroll (horizontal + vertical) lo maneja
+   `.timeline-container` (padre) para que el header-row y las filas de capas
+   scrolleen como una sola unidad. */
 .timeline-layers {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--accent-color) var(--bg-tertiary);
-}
-
-.timeline-layers::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.timeline-layers::-webkit-scrollbar-track {
-  background: var(--bg-tertiary);
-}
-
-.timeline-layers::-webkit-scrollbar-thumb {
-  background: var(--accent-color);
-  border-radius: 3px;
-}
-
-.timeline-layers::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-hover);
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+  min-width: 100%;
 }
 
 /* ===== ANIMATION LAYER ROW ===== */
@@ -1774,11 +1759,17 @@ margin-right: 20px;
   flex-direction: row;
   align-items: stretch;
   height: 28px;
+  min-height: 28px;
   background: var(--bg-tertiary);
   border-bottom: 2px solid var(--border-color);
+  /* Sticky-top dentro del `.timeline-container` scrollable: al scrollear
+     verticalmente el header queda fijo arriba; al scrollear horizontalmente
+     las celdas se mueven con las capas (mismo scroll parent). */
   position: sticky;
   top: 0;
   z-index: 3;
+  width: max-content;   /* mismo ancho que cada .animation-layer-row abajo */
+  min-width: 100%;
 }
 
 .timeline-header-left-placeholder {
@@ -1844,29 +1835,81 @@ margin-right: 20px;
   border-radius: 1px;
 }
 
-/* Contenedor padre del grid de filas por capa */
+/* Contenedor padre del grid: scroll COMPARTIDO (horizontal + vertical).
+   El header-row y las filas de capas viven DENTRO de este scroll, así
+   cualquier desplazamiento afecta a ambos simultáneamente — frame #5 del
+   header siempre está encima de frame #5 de cada capa, sin importar dónde
+   se scrollee. */
 .timeline-container {
   display: flex;
   flex-direction: column;
+  overflow-x: auto;
   overflow-y: auto;
-  overflow-x: hidden;
   flex: 1;
   min-height: 0;
   background: var(--bg-primary);
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-color) var(--bg-tertiary);
 }
 
-.timeline-layers {
-  display: flex;
-  flex-direction: column;
+.timeline-container::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.timeline-container::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+}
+
+.timeline-container::-webkit-scrollbar-thumb {
+  background: var(--accent-color);
+  border-radius: 4px;
+}
+
+.timeline-container::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-hover, var(--accent-color));
 }
 
 /* Las celdas de frame en cada LayerRow usan el mismo ancho que el header */
+.animation-layer-row {
+  width: max-content;          /* mismo ancho que header-row */
+  min-width: 100%;
+}
+
+.animation-layer-row .timeline-frames {
+  display: flex;
+  flex-direction: row;
+  overflow: visible;            /* el scroll lo maneja .timeline-container */
+}
+
 .animation-layer-row .timeline-frames .timeline-frame {
   width: var(--frame-cell-width);
   min-width: var(--frame-cell-width);
   max-width: var(--frame-cell-width);
   flex-shrink: 0;
   box-sizing: border-box;
+}
+
+/* Sticky-left: layer-info de cada LayerRow se queda pegada a la izquierda al
+   scrollear horizontalmente. Igual que el placeholder del header: siempre
+   visible, siempre column-alineada. */
+.animation-layer-row .layer-info {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--bg-secondary);
+  /* Sombra sutil para indicar "acantilado" cuando se scrollea a la derecha */
+  box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.15);
+}
+
+/* Sticky-left del placeholder del header: pegado a la izquierda Y arriba
+   (corner top-left). z-index superior para estar ENCIMA del layer-info
+   cuando se scrollea en ambos ejes. */
+.timeline-header-left-placeholder {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.15);
 }
 
 /* ============================================================================
