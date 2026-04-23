@@ -1146,35 +1146,8 @@ const renderLayerWithTimeline = (layer) => {
 
           <div className="toolbar-divider" aria-hidden />
 
-          {/* Acciones de capa */}
-          <div className="toolbar-group" role="group" aria-label="Capas">
-            <button
-              className="add-layer-btn"
-              onClick={() => { clearCurrentSelection(); addLayer(); }}
-              title="Añadir nueva capa"
-            >
-              <BiSolidLayerPlus />
-              <span>Nueva</span>
-            </button>
-            <button
-              onClick={handleMoveActiveLayerUp}
-              title="Mover capa activa arriba"
-              className="header-btn"
-              disabled={!canMoveActiveLayerUp()}
-            >
-              <LuArrowUp />
-            </button>
-            <button
-              onClick={handleMoveActiveLayerDown}
-              title="Mover capa activa abajo"
-              className="header-btn"
-              disabled={!canMoveActiveLayerDown()}
-            >
-              <LuArrowDown />
-            </button>
-          </div>
-
-          <div className="toolbar-divider" aria-hidden />
+          {/* (Movido: "Nueva capa" + ↑↓ ahora viven en la esquina top-left
+              del grid de FramesTimeline, encima de la columna de capas.) */}
 
           {/* Frame actual: badge + duración + acciones */}
           <div className="toolbar-group" role="group" aria-label="Frame actual">

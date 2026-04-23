@@ -1744,9 +1744,12 @@ margin-right: 20px;
   --frame-cell-width: 50px;
 }
 
-/* Forzamos el ancho de layer-info para alineación columnar. */
+/* Forzamos el ancho de layer-info para alineación columnar.
+   box-sizing: border-box para que el padding y el border-right queden
+   INCLUIDOS dentro de --layer-info-width. Si no, el ancho total real sería
+   width + padding + border, y desalinearía con el placeholder del header. */
 .animation-layer-row .layer-info {
-  width: var(--layer-info-width);
+  width: var(--layer-info-width) !important;
   min-width: var(--layer-info-width);
   max-width: var(--layer-info-width);
   flex-shrink: 0;
@@ -1777,8 +1780,142 @@ margin-right: 20px;
   min-width: var(--layer-info-width);
   max-width: var(--layer-info-width);
   flex-shrink: 0;
+  box-sizing: border-box;               /* mismo modelo que .layer-info */
   background: var(--bg-tertiary);
   border-right: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  position: relative;
+  padding: 0 6px;
+}
+
+/* Acciones de capa en la esquina top-left (ANTES estaban en la animation-bar):
+   Nueva + mover arriba + mover abajo. */
+.layers-corner-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.corner-add-layer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+  background: var(--accent-color);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
+  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.corner-add-layer-btn:hover {
+  background: var(--accent-active, var(--accent-color));
+}
+
+.corner-add-layer-btn:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+.corner-add-layer-btn > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.corner-move-btn {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--button-bg);
+  border: 1px solid var(--button-border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 11px;
+}
+
+.corner-move-btn:hover:not(:disabled) {
+  background: var(--button-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-color);
+}
+
+.corner-move-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* En columnas estrechas (layer-info-width pequeño), oculta el texto
+   "Nueva" y deja solo el ícono. */
+@container (max-width: 180px) {
+  .corner-add-layer-btn > span {
+    display: none;
+  }
+}
+
+/* --- Resizer de la columna de capas ------------------------------------- */
+
+/* Wrapper sticky: 0×0, solo hospeda el grip absolutamente posicionado.
+   Queda pegado arriba-izquierda del viewport scrollable; el grip se coloca
+   a `--layer-info-width` desde el borde, así siempre marca la frontera. */
+.layers-column-resizer-sticky {
+  position: sticky;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  z-index: 15;
+  pointer-events: none;
+}
+
+.layers-column-resizer-grip {
+  position: absolute;
+  top: 0;
+  /* Altura = altura visible del contenedor de scroll.
+     100vh es "suficiente" para cualquier panel práctico; el overflow del
+     padre lo recorta. */
+  height: 100vh;
+  width: 10px;
+  /* Centrado sobre el borde: 3px hacia dentro para dar área de agarre amplia
+     sin desplazar visualmente. */
+  left: calc(var(--layer-info-width) - 5px);
+  cursor: col-resize;
+  pointer-events: auto;
+  background: transparent;
+  /* Una línea sutil visible solo en hover / drag */
+  transition: background 0.12s ease;
+}
+
+.layers-column-resizer-grip::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 2px;
+  background: var(--accent-color);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+
+.layers-column-resizer-grip:hover::before,
+.layers-column-resizer-grip.resizing::before {
+  opacity: 0.7;
 }
 
 .timeline-header-frames {
@@ -1794,6 +1931,11 @@ margin-right: 20px;
   min-width: var(--frame-cell-width);
   max-width: var(--frame-cell-width);
   height: 100%;
+  /* border-box: el border-right entra dentro del width, igual que en
+     .animation-layer-row .timeline-frames .timeline-frame. Sin esto el
+     ancho real es 50 + 1 = 51 px, y las capas quedan 50 px — desfase N px
+     acumulado. */
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;

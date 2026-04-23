@@ -43,6 +43,7 @@ import { BiSolidLayerPlus } from "react-icons/bi";
 const FramesTimeline = ({
   // Capas
   layers,
+  addLayer,
   deleteLayer,
   moveLayerUp,
   moveLayerDown,
@@ -688,8 +689,14 @@ const handleCreateGroup = (layerId) => {
     return activeLayer && !activeLayer.isGroupLayer && !isLastLayer(activeLayer);
   };
 
-  // (Eliminados: `handleMoveActiveLayerUp` / `handleMoveActiveLayerDown` —
-  // sin botones de mover capa en este archivo; viven en layerAnimation.jsx.)
+  // Re-activados porque ahora el botón "Nueva capa" + ↑↓ viven en la esquina
+  // top-left del grid (encima de la columna de capas), no en la barra de playback.
+  const handleMoveActiveLayerUp = () => {
+    if (canMoveActiveLayerUp()) moveLayerUp(activeLayerId);
+  };
+  const handleMoveActiveLayerDown = () => {
+    if (canMoveActiveLayerDown()) moveLayerDown(activeLayerId);
+  };
 
   const handleLayerChange = (layerId) => {
  
@@ -791,6 +798,67 @@ const stableRowHandlers = useMemo(() => ({
 // Click = seleccionar un frame. Shift+click = rango. Ctrl/Cmd = toggle múltiple.
 // Drag (con mousedown + mouseenter mientras isDraggingHeader) = seleccionar varios.
 const [isDraggingHeader, setIsDraggingHeader] = useState(false);
+
+// --- Resizer: ajusta --layer-info-width dinámicamente, arrastrando el borde
+// derecho de la columna de capas. El valor persiste en localStorage. ---
+const LAYER_INFO_WIDTH_MIN = 140;
+const LAYER_INFO_WIDTH_MAX = 500;
+const LAYER_INFO_WIDTH_KEY = 'pixcalli.layerInfoWidth';
+
+// Restaura el ancho guardado en localStorage al montar.
+useEffect(() => {
+  const saved = localStorage.getItem(LAYER_INFO_WIDTH_KEY);
+  if (saved) {
+    const n = parseInt(saved, 10);
+    if (Number.isFinite(n) && n >= LAYER_INFO_WIDTH_MIN && n <= LAYER_INFO_WIDTH_MAX) {
+      document.documentElement.style.setProperty('--layer-info-width', `${n}px`);
+    }
+  }
+}, []);
+
+const [isResizingLayers, setIsResizingLayers] = useState(false);
+const resizeStartXRef = useRef(0);
+const resizeStartWidthRef = useRef(220);
+
+const handleResizerMouseDown = useCallback((e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  resizeStartXRef.current = e.clientX;
+  const current = getComputedStyle(document.documentElement)
+    .getPropertyValue('--layer-info-width').trim();
+  const n = parseInt(current, 10);
+  resizeStartWidthRef.current = Number.isFinite(n) ? n : 220;
+  setIsResizingLayers(true);
+}, []);
+
+useEffect(() => {
+  if (!isResizingLayers) return;
+  const onMove = (e) => {
+    const delta = e.clientX - resizeStartXRef.current;
+    const next = Math.max(
+      LAYER_INFO_WIDTH_MIN,
+      Math.min(LAYER_INFO_WIDTH_MAX, resizeStartWidthRef.current + delta)
+    );
+    document.documentElement.style.setProperty('--layer-info-width', `${next}px`);
+  };
+  const onUp = () => {
+    setIsResizingLayers(false);
+    const final = getComputedStyle(document.documentElement)
+      .getPropertyValue('--layer-info-width').trim();
+    try { localStorage.setItem(LAYER_INFO_WIDTH_KEY, final); } catch { /* noop */ }
+  };
+  // Durante el drag: cursor global + desactivar selección de texto.
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+  return () => {
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  };
+}, [isResizingLayers]);
 
 function handleHeaderFrameSelection(frameNumber, event) {
   const { ctrlKey, metaKey, shiftKey } = event;
@@ -971,7 +1039,39 @@ const renderLayerWithTimeline = (layer) => {
       <div className="timeline-container">
         {/* Header row: frame-numbers strip column-aligned con las filas de capas */}
         <div className="timeline-header-row">
-          <div className="timeline-header-left-placeholder" aria-hidden />
+          {/* Esquina top-left del grid: botones de gestión de capas
+              (Nueva / ↑ / ↓). Sticky-left + sticky-top → siempre visibles. */}
+          <div className="timeline-header-left-placeholder">
+            <div className="layers-corner-actions">
+              <button
+                type="button"
+                className="corner-add-layer-btn"
+                onClick={() => { clearCurrentSelection(); addLayer(); }}
+                title="Añadir nueva capa"
+              >
+                <BiSolidLayerPlus />
+                <span>Nueva</span>
+              </button>
+              <button
+                type="button"
+                className="corner-move-btn"
+                onClick={handleMoveActiveLayerUp}
+                title="Mover capa activa arriba"
+                disabled={!canMoveActiveLayerUp()}
+              >
+                <LuArrowUp />
+              </button>
+              <button
+                type="button"
+                className="corner-move-btn"
+                onClick={handleMoveActiveLayerDown}
+                title="Mover capa activa abajo"
+                disabled={!canMoveActiveLayerDown()}
+              >
+                <LuArrowDown />
+              </button>
+            </div>
+          </div>
           <div className="timeline-header-frames">
             {frameNumbers.map((frameNumber) => {
               const isSelected = selectedFrames.includes(frameNumber);
@@ -998,6 +1098,24 @@ const renderLayerWithTimeline = (layer) => {
         {/* Layer rows: cada una con su LayerRow (layer-info + timeline-frames) */}
         <div className="timeline-layers">
           {getOrderedLayers().map(layer => renderLayerWithTimeline(layer)).flat()}
+        </div>
+
+        {/* Resizer: barra vertical "sticky" que el usuario arrastra para
+            cambiar el ancho de la columna de capas.
+            - position: sticky; left: 0 → se queda pegada al borde izquierdo
+              del viewport del scroll.
+            - top/bottom: 0 → se extiende por toda la altura.
+            - Su hijo `.layers-column-resizer-grip` se posiciona a
+              `calc(var(--layer-info-width) - 3px)` desde el borde izquierdo
+              del wrapper → siempre justo en la frontera entre capas y frames. */}
+        <div className="layers-column-resizer-sticky" aria-hidden>
+          <div
+            className={`layers-column-resizer-grip ${isResizingLayers ? 'resizing' : ''}`}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Redimensionar columna de capas"
+            onMouseDown={handleResizerMouseDown}
+          />
         </div>
       </div>
     </>
