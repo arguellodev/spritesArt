@@ -2251,9 +2251,13 @@ const addLayer = useCallback(() => {
   }));
 
   setFrames(updatedFrames);
-  
+
   if (currentFrameData) {
-    setLayers(currentFrameData.layers);
+    // IMPORTANTE: arriba se hizo `currentFrameData.layers.push(...)` (mutación
+    // in-place). Pasar esa MISMA ref a setLayers haría que React bail-out por
+    // Object.is(prev, next) — y consumers memoizados sobre [layers] no
+    // recomputarían (ej: `orderedLayers` en timeline.jsx). Clonar aquí.
+    setLayers([...currentFrameData.layers]);
     layerCanvasesRef.current[newLayerId] = currentFrameData.canvases[newLayerId];
   }
 
@@ -2791,7 +2795,9 @@ const duplicateLayer = useCallback((layerId) => {
   setFrames(updatedFrames);
 
   const currentFrameData = updatedFrames[currentFrame];
-  setLayers(currentFrameData.layers);
+  // Clonar (ver comentario en addLayer): `frame.layers.push(...)` arriba
+  // mutó in-place, la misma ref haría bail-out en setLayers.
+  setLayers([...currentFrameData.layers]);
   layerCanvasesRef.current[newLayerId] = currentFrameData.canvases[newLayerId];
 
   return newLayerId;
