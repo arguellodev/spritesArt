@@ -2039,6 +2039,72 @@ margin-right: 20px;
   background: var(--bg-secondary);
   /* Sombra sutil para indicar "acantilado" cuando se scrollea a la derecha */
   box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.15);
+  /* Preparamos un pseudo-elemento absoluto (barra lateral morada) que solo
+     se revela en estado .selected — ver regla abajo. Transición suave. */
+  transition: background 180ms ease, box-shadow 180ms ease;
+}
+
+/* Hover ampliado (solo cuando NO está seleccionada para evitar "parpadeos"
+   entre estados): sutil relleno con brand tint. */
+.animation-layer-row .layer-info:not(.selected):hover {
+  background: var(--layer-hover);
+}
+
+/* Estado seleccionado — indicador PRIMARIO de capa activa.
+   Specificidad (0,3,0) para ganarle al sticky `.animation-layer-row .layer-info`
+   (0,2,0) que sobrescribía el background y hacía invisible la selección.
+
+   Diseño:
+     - Barra vertical morada de 4px en el borde izquierdo (inset box-shadow):
+       indicador inmediato, independiente del scroll horizontal.
+     - Gradiente morado semi-transparente que fade hacia la derecha (más
+       presencia cerca del bar, se desvanece al unirse con las frames).
+     - Halo sutil a la derecha con tint morado (sustituye al "cliff" oscuro
+       solo cuando está seleccionada, para reforzar continuidad con frames).
+     - Transición con el resto del layer-info (180ms ease).
+   Combinado con `.timeline-frame.active` del lado de frames, el usuario ve
+   de un vistazo qué capa está activa SIN importar en qué frame esté. */
+.animation-layer-row .layer-info.selected {
+  background: linear-gradient(
+    90deg,
+    rgba(140, 82, 255, 0.28) 0%,
+    rgba(140, 82, 255, 0.12) 60%,
+    rgba(140, 82, 255, 0.06) 100%
+  );
+  box-shadow:
+    inset 4px 0 0 0 var(--accent-color),             /* barra lateral */
+    2px 0 8px -2px rgba(140, 82, 255, 0.45);         /* halo derecho */
+}
+
+.animation-layer-row .layer-info.selected:hover {
+  background: linear-gradient(
+    90deg,
+    rgba(140, 82, 255, 0.36) 0%,
+    rgba(140, 82, 255, 0.16) 60%,
+    rgba(140, 82, 255, 0.08) 100%
+  );
+}
+
+/* Nombre de la capa en estado seleccionado: más blanco + peso, para leerse
+   claramente sobre el tint morado. */
+.animation-layer-row .layer-info.selected .layer-name {
+  color: #ffffff;
+  font-weight: 600;
+  letter-spacing: 0.1px;
+}
+
+/* Acentuar los iconos de acciones (mousePointer, visibility, etc) cuando la
+   capa está activa: currentColor para que hereden del nombre. */
+.animation-layer-row .layer-info.selected .layer-btn {
+  color: #ffffff;
+}
+
+/* Respeto a prefers-reduced-motion: las transiciones de selección son
+   cosméticas, se deshabilitan para usuarios que lo piden explícitamente. */
+@media (prefers-reduced-motion: reduce) {
+  .animation-layer-row .layer-info {
+    transition: none;
+  }
 }
 
 /* Sticky-left del placeholder del header: pegado a la izquierda Y arriba
