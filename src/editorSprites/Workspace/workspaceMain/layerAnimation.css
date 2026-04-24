@@ -2587,16 +2587,30 @@ margin-right: 20px;
   cursor: ns-resize !important;
 }
 
-/* Modo colapsado: el panel colapsa a la altura de la toolbar. El
-   FramesTimeline NO se renderea (conditional en el JSX), así que solo nos
-   aseguramos de que el resto del layout no introduzca scroll vertical. */
+/* Modo colapsado: mantiene la toolbar + el header-row de FramesTimeline
+   (para que el strip de frame-numbers ilumine qué frame está reproduciendo),
+   y oculta TODO lo demás del grid:
+     - `.timeline-layers` (filas con layer-info + timeline-frames)
+     - `.layers-column-resizer-grip` (no tiene sentido con 0 filas)
+     - El corner de "Nueva capa + ↑↓" dentro del header se mantiene, pero
+       podemos ocultarlo si se ve ruidoso.
+   Nota: el panel sigue teniendo un grid debajo de la bar, así que el
+   border-radius de la bar se queda solo-arriba (no se cambia a 4 lados). */
 .layer-animation.collapsed {
   overflow: hidden;
 }
 
-.layer-animation.collapsed .animation-bar-unified {
-  border-radius: 8px;  /* sin grid debajo → bordes redondeados por los 4 lados */
+.layer-animation.collapsed .timeline-layers {
+  display: none;
 }
+
+.layer-animation.collapsed .layers-column-resizer-grip {
+  display: none;
+}
+
+/* El corner top-left (Nueva capa + flechas) sigue siendo funcional en
+   collapsed — addLayer + moveLayerUp/Down trabajan sobre activeLayerId
+   sin necesidad de que las filas se vean. */
 
 /* ============================================================================
    LAYER NAV GROUP — prev/[nombre capa]/next en la toolbar

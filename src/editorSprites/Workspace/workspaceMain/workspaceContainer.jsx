@@ -198,7 +198,11 @@ const [rotationAngle, setRotationAngle] = useState(0);
   const LAYER_ANIM_COLLAPSED_KEY = 'layerAnimationCollapsed';
   const LAYER_ANIM_MIN_H = 120;   // altura mínima en modo expandido
   const LAYER_ANIM_MAX_H = 720;   // cap razonable (no tapar toda la pantalla)
-  const LAYER_ANIM_COLLAPSED_H = 48; // altura exacta en modo collapsed (solo toolbar)
+  // Modo collapsed: toolbar (44px) + timeline-header-row (28px) + bordes/separaciones.
+  // Mantenemos el strip de frame-numbers visible para ver el frame que se
+  // ilumina durante playback; ocultamos solo las filas de capas (ver CSS
+  // `.layer-animation.collapsed .timeline-layers`).
+  const LAYER_ANIM_COLLAPSED_H = 84;
   const [layerAnimationHeight, setLayerAnimationHeight] = useState(() => {
     try {
       const raw = localStorage.getItem(LAYER_ANIM_H_KEY);
@@ -11598,10 +11602,13 @@ handleRotSprite(rotationAngleSelection, true);
               )}
 
               {MemoizedLayerAnimation}
-              {/* En modo collapsed el timeline no se renderea — ahorra ciclos
-                  de reconciliación además del espacio visual. La toolbar de
-                  LayerAnimation incluye navegación de capas como reemplazo. */}
-              {!isLayerAnimationCollapsed && MemoizedFramesTimeline}
+              {/* FramesTimeline se mantiene montado SIEMPRE. En modo collapsed,
+                  el CSS oculta únicamente `.timeline-layers` y el grip de
+                  resize de columna; el `timeline-header-row` con el strip de
+                  frame-numbers sigue visible para ver qué frame se ilumina
+                  durante playback. La navegación de capa se maneja con el
+                  grupo ◀ NombreCapa ▶ en la toolbar. */}
+              {MemoizedFramesTimeline}
             </div>
           }
         </div>
