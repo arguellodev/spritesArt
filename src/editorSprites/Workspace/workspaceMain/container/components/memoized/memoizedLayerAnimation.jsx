@@ -101,6 +101,8 @@ export function renderLayerAnimation(props) {
       toggleOnionFrames={props.toggleOnionFrames}
       applyOnionFramesPreset={props.applyOnionFramesPreset}
       clearTintCache={props.clearTintCache}
+      isCollapsed={props.isCollapsed}
+      onToggleCollapse={props.onToggleCollapse}
     />
   );
 }

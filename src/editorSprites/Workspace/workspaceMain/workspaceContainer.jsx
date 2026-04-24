@@ -190,6 +190,74 @@ const [rotationAngle, setRotationAngle] = useState(0);
   const handleAnimationFrameChange = useCallback((_frameIndex, frameNumber) => {
     setAnimationTickFrame(frameNumber);
   }, []);
+
+  // --- Panel de animación: altura redimensionable + modo colapsado ---
+  // Ambos persisten en localStorage. El resize handle vive en el borde
+  // superior del contenedor `.layer-animation` (ver JSX más abajo).
+  const LAYER_ANIM_H_KEY = 'layerAnimationHeight';
+  const LAYER_ANIM_COLLAPSED_KEY = 'layerAnimationCollapsed';
+  const LAYER_ANIM_MIN_H = 120;   // altura mínima en modo expandido
+  const LAYER_ANIM_MAX_H = 720;   // cap razonable (no tapar toda la pantalla)
+  const LAYER_ANIM_COLLAPSED_H = 48; // altura exacta en modo collapsed (solo toolbar)
+  const [layerAnimationHeight, setLayerAnimationHeight] = useState(() => {
+    try {
+      const raw = localStorage.getItem(LAYER_ANIM_H_KEY);
+      const n = raw ? parseInt(raw, 10) : NaN;
+      if (Number.isFinite(n) && n >= LAYER_ANIM_MIN_H && n <= LAYER_ANIM_MAX_H) return n;
+    } catch { /* localStorage unavailable, fall through */ }
+    return 230;
+  });
+  const [isLayerAnimationCollapsed, setIsLayerAnimationCollapsed] = useState(() => {
+    try { return localStorage.getItem(LAYER_ANIM_COLLAPSED_KEY) === '1'; }
+    catch { return false; }
+  });
+  const toggleLayerAnimationCollapse = useCallback(() => {
+    setIsLayerAnimationCollapsed(prev => {
+      const next = !prev;
+      try { localStorage.setItem(LAYER_ANIM_COLLAPSED_KEY, next ? '1' : '0'); } catch { /* noop */ }
+      return next;
+    });
+  }, []);
+
+  // Drag-to-resize vertical: handle en el top del contenedor. El panel vive
+  // anclado al bottom (`bottom: 0`), así que mover el handle HACIA ARRIBA
+  // aumenta la altura; hacia abajo, la reduce. Usamos refs para evitar
+  // re-renders en cada pixel (pattern idéntico al resizer de columnas de
+  // FramesTimeline).
+  const [isResizingLayerAnim, setIsResizingLayerAnim] = useState(false);
+  const layerAnimResizeStartYRef = useRef(0);
+  const layerAnimResizeStartHRef = useRef(layerAnimationHeight);
+  const handleLayerAnimResizeMouseDown = useCallback((e) => {
+    if (isLayerAnimationCollapsed) return; // no resize cuando está colapsado
+    e.preventDefault();
+    e.stopPropagation();
+    layerAnimResizeStartYRef.current = e.clientY;
+    layerAnimResizeStartHRef.current = layerAnimationHeight;
+    setIsResizingLayerAnim(true);
+  }, [isLayerAnimationCollapsed, layerAnimationHeight]);
+
+  useEffect(() => {
+    if (!isResizingLayerAnim) return;
+    const onMove = (e) => {
+      const dy = layerAnimResizeStartYRef.current - e.clientY; // up = positivo
+      const next = Math.max(
+        LAYER_ANIM_MIN_H,
+        Math.min(LAYER_ANIM_MAX_H, layerAnimResizeStartHRef.current + dy)
+      );
+      setLayerAnimationHeight(next);
+    };
+    const onUp = () => {
+      setIsResizingLayerAnim(false);
+      // Persistir al final del drag (no en cada tick) para no spammear localStorage
+      try { localStorage.setItem(LAYER_ANIM_H_KEY, String(layerAnimationHeight)); } catch { /* noop */ }
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, [isResizingLayerAnim, layerAnimationHeight]);
   // estado especial para manejo de gradiente editable
   const [gradientPixels, setGradientPixels] = useState(null);
   //Estados de la inteligencia artificial:
@@ -10279,6 +10347,8 @@ const cutSelection = useCallback(() => {
         toggleOnionFrames,
         applyOnionFramesPreset,
         clearTintCache,
+        isCollapsed: isLayerAnimationCollapsed,
+        onToggleCollapse: toggleLayerAnimationCollapse,
       }),
     [
       // `frozenProps` ya cubre currentFrame/activeLayerId/frameCount/layers/frames
@@ -10306,6 +10376,8 @@ const cutSelection = useCallback(() => {
       onionFramesConfig,
       onionSkinEnabled,
       onionSkinSettings,
+      isLayerAnimationCollapsed,
+      toggleLayerAnimationCollapse,
     ]
   );
 
@@ -11498,22 +11570,38 @@ handleRotSprite(rotationAngleSelection, true);
           </div>
 
           { true &&
-            <div className="layer-animation"
+            <div
+              className={`layer-animation ${isLayerAnimationCollapsed ? 'collapsed' : ''} ${isResizingLayerAnim ? 'resizing' : ''}`}
               onContextMenu={(e) => e.preventDefault()}
               ref={animationLayerRef}
               style={{
-                height: "230px",
-             
-                width:"100%",
-                userSelect: "none",
+                height: isLayerAnimationCollapsed
+                  ? `${LAYER_ANIM_COLLAPSED_H}px`
+                  : `${layerAnimationHeight}px`,
+                width: "100%",
+                userSelect: isResizingLayerAnim ? "none" : undefined,
                 bottom: "0",
               }}
             >
+              {/* Resize handle: barra horizontal en el borde superior del
+                  panel. Solo visible/funcional cuando NO está colapsado;
+                  cursor ns-resize, hover tint morado, drag mueve el top
+                  edge. Persistencia en localStorage al soltar. */}
+              {!isLayerAnimationCollapsed && (
+                <div
+                  className="layer-animation-resizer"
+                  role="separator"
+                  aria-orientation="horizontal"
+                  aria-label="Redimensionar panel de animación"
+                  onMouseDown={handleLayerAnimResizeMouseDown}
+                />
+              )}
 
-
-              
               {MemoizedLayerAnimation}
-              {MemoizedFramesTimeline}
+              {/* En modo collapsed el timeline no se renderea — ahorra ciclos
+                  de reconciliación además del espacio visual. La toolbar de
+                  LayerAnimation incluye navegación de capas como reemplazo. */}
+              {!isLayerAnimationCollapsed && MemoizedFramesTimeline}
             </div>
           }
         </div>

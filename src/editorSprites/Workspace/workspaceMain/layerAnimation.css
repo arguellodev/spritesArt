@@ -2529,3 +2529,144 @@ margin-right: 20px;
     display: none;  /* solo el slider + % en viewport estrecho */
   }
 }
+
+/* ============================================================================
+   RESIZE VERTICAL DEL PANEL + MODO COLLAPSED
+   ============================================================================ */
+
+/* Contenedor `.layer-animation` es `position: relative` implícito (usa bottom).
+   Lo forzamos para anclar el resize handle absoluto en el borde superior. */
+.layer-animation {
+  position: relative;
+}
+
+/* Handle de resize: banda de 6px en el borde superior. Invisible por defecto
+   (solo un hit area); se tinta con accent al hover/drag. Cursor ns-resize. */
+.layer-animation-resizer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 10;
+  background: transparent;
+  transition: background-color 160ms ease;
+}
+
+.layer-animation-resizer::before {
+  /* Línea visual fina centrada; aparece al hover/drag para indicar "tomar
+     de aquí". El hit area real sigue siendo los 6px completos. */
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 48px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--border-color);
+  opacity: 0;
+  transition: opacity 160ms ease, background-color 160ms ease;
+}
+
+.layer-animation-resizer:hover::before,
+.layer-animation.resizing .layer-animation-resizer::before {
+  opacity: 1;
+  background: var(--accent-color);
+}
+
+.layer-animation-resizer:hover {
+  background: rgba(140, 82, 255, 0.08);
+}
+
+/* Durante drag: cursor global + bloqueo de selección. El inline style en
+   JSX ya maneja userSelect; esto agrega el cursor global para feedback. */
+.layer-animation.resizing,
+.layer-animation.resizing * {
+  cursor: ns-resize !important;
+}
+
+/* Modo colapsado: el panel colapsa a la altura de la toolbar. El
+   FramesTimeline NO se renderea (conditional en el JSX), así que solo nos
+   aseguramos de que el resto del layout no introduzca scroll vertical. */
+.layer-animation.collapsed {
+  overflow: hidden;
+}
+
+.layer-animation.collapsed .animation-bar-unified {
+  border-radius: 8px;  /* sin grid debajo → bordes redondeados por los 4 lados */
+}
+
+/* ============================================================================
+   LAYER NAV GROUP — prev/[nombre capa]/next en la toolbar
+   Visible siempre; vital en modo collapsed (no hay lista de filas).
+   ============================================================================ */
+
+.layer-nav-group {
+  min-width: 0;  /* permite al label hacer ellipsis */
+  max-width: 220px;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.layer-nav-btn {
+  flex: 0 0 auto;
+  min-width: 26px;
+  min-height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.layer-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.layer-nav-label {
+  flex: 1 1 auto;
+  min-width: 60px;
+  max-width: 140px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Tint morado para destacar — es el "identificador de capa" en collapsed */
+  background: linear-gradient(
+    135deg,
+    rgba(140, 82, 255, 0.28),
+    rgba(140, 82, 255, 0.14)
+  );
+  border: 1px solid rgba(140, 82, 255, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  user-select: none;
+  cursor: default;
+}
+
+/* ============================================================================
+   COLLAPSE TOGGLE BUTTON (en unified-timeline-right)
+   ============================================================================ */
+
+.collapse-toggle-btn {
+  /* Usa .config-button como base; solo marca el estado pressed con tint */
+}
+
+.collapse-toggle-btn[aria-pressed="true"] {
+  background: rgba(140, 82, 255, 0.20);
+  color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layer-animation-resizer,
+  .layer-animation-resizer::before {
+    transition: none;
+  }
+}

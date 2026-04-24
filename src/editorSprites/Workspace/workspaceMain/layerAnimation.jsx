@@ -8,15 +8,17 @@ import { CgArrowLongRightC } from "react-icons/cg";
 import { BsDashCircleDotted } from "react-icons/bs";
 import CustomContextMenu from './customContextMenu';
 
-import { 
-  LuEye, 
-  LuEyeOff, 
-  LuTrash2, 
-  LuArrowUp, 
-  LuArrowDown, 
-  LuX, 
-  LuChevronDown, 
+import {
+  LuEye,
+  LuEyeOff,
+  LuTrash2,
+  LuArrowUp,
+  LuArrowDown,
+  LuX,
+  LuChevronDown,
   LuChevronRight,
+  LuChevronUp,
+  LuChevronLeft,
   LuGroup,
   LuSquare,
   LuMousePointer,
@@ -35,7 +37,7 @@ import {
   LuDelete,
   LuTrash,
   LuEraser,
-  
+
 } from "react-icons/lu";
 import { BiSolidLayerPlus } from "react-icons/bi";
 
@@ -122,6 +124,10 @@ const LayerAnimation = ({
   toggleOnionFrames,
   applyOnionFramesPreset,
   clearTintCache,
+
+  // Colapso del panel (controlado desde workspaceContainer)
+  isCollapsed = false,
+  onToggleCollapse,
 }) => {
   "use memo";
   const getFramesInfo = useCallback(() => {
@@ -896,6 +902,40 @@ const handleLastFrame = () => {
     }
   };
 
+  // --- Navegación RÁPIDA entre capas (visible siempre, vital en modo
+  // collapsed donde el timeline con las filas no está renderizado) ---
+  // Convención visual del editor: zIndex DESC = top-to-bottom en el stack.
+  // "prev" = capa visualmente arriba (mayor zIndex); "next" = abajo.
+  const handlePrevLayer = () => {
+    const ordered = layers
+      .filter(l => !l.isGroupLayer)
+      .sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0));
+    const idx = ordered.findIndex(l => l.id === activeLayerId);
+    if (idx > 0) {
+      clearCurrentSelection();
+      handleLayerChange(ordered[idx - 1].id);
+    }
+  };
+  const handleNextLayer = () => {
+    const ordered = layers
+      .filter(l => !l.isGroupLayer)
+      .sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0));
+    const idx = ordered.findIndex(l => l.id === activeLayerId);
+    if (idx >= 0 && idx < ordered.length - 1) {
+      clearCurrentSelection();
+      handleLayerChange(ordered[idx + 1].id);
+    }
+  };
+  const activeLayerName = layers.find(l => l.id === activeLayerId)?.name || '—';
+  const canPrevLayer = (() => {
+    const ordered = layers.filter(l => !l.isGroupLayer);
+    return ordered.length > 1 && !isFirstLayer(layers.find(l => l.id === activeLayerId) || {});
+  })();
+  const canNextLayer = (() => {
+    const ordered = layers.filter(l => !l.isGroupLayer);
+    return ordered.length > 1 && !isLastLayer(layers.find(l => l.id === activeLayerId) || {});
+  })();
+
   const handleLayerChange = (layerId) => {
  
     showOnionSkinForLayer(layerId)
@@ -1202,6 +1242,38 @@ const renderLayerWithTimeline = (layer) => {
 
           <div className="toolbar-divider" aria-hidden />
 
+          {/* Navegación rápida entre capas — esencial cuando el panel está
+              colapsado (no hay lista de filas visible). */}
+          <div className="toolbar-group layer-nav-group" role="group" aria-label="Capa activa">
+            <button
+              onClick={handlePrevLayer}
+              disabled={!canPrevLayer}
+              title="Capa anterior (arriba)"
+              className="control-btn layer-nav-btn"
+              aria-label="Capa anterior"
+            >
+              <LuChevronLeft />
+            </button>
+            <span
+              className="layer-nav-label"
+              title={`Capa actual: ${activeLayerName}`}
+              aria-label={`Capa actual ${activeLayerName}`}
+            >
+              {activeLayerName}
+            </span>
+            <button
+              onClick={handleNextLayer}
+              disabled={!canNextLayer}
+              title="Capa siguiente (abajo)"
+              className="control-btn layer-nav-btn"
+              aria-label="Capa siguiente"
+            >
+              <LuChevronRight />
+            </button>
+          </div>
+
+          <div className="toolbar-divider" aria-hidden />
+
           {/* Opacidad (layer en este frame) */}
           <div
             className="toolbar-group opacity-group"
@@ -1260,6 +1332,21 @@ const renderLayerWithTimeline = (layer) => {
           >
             <LuSettings />
           </button>
+          {/* Toggle collapse: oculta el timeline grid de capas/frames y deja
+              solo esta barra. La navegación de capas (layer-nav-group) +
+              playback + frame-tools siguen funcionando — es el modo "HUD"
+              para cuando el timeline no se necesita visible. */}
+          {typeof onToggleCollapse === 'function' && (
+            <button
+              className="config-button collapse-toggle-btn"
+              onClick={onToggleCollapse}
+              title={isCollapsed ? 'Expandir panel de capas' : 'Colapsar panel de capas'}
+              aria-label={isCollapsed ? 'Expandir panel' : 'Colapsar panel'}
+              aria-pressed={isCollapsed}
+            >
+              {isCollapsed ? <LuChevronUp /> : <LuChevronDown />}
+            </button>
+          )}
         </div>
       </div>
     </>
