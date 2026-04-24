@@ -63,7 +63,6 @@ const FramesTimeline = ({
   getLayerGroups,
   selectPixelGroup,
   clearCurrentSelection,
-  getGroupLayersForParent,
   selectAllCanvas,
 
   // Frames
@@ -639,20 +638,52 @@ const handleCreateGroup = (layerId) => {
 
   // (Eliminado: `goToFrame` — wrapper trivial sobre setActiveFrame sin call site.)
 
-  // Funciones heredadas del LayerManager
-  const getOrderedLayers = () => {
-    // Solo devolver capas principales (no grupos)
-    return layers.filter(l => !l.isGroupLayer).sort((a, b) => {
-      return (b.zIndex || 0) - (a.zIndex || 0);
-    });
-  };
+  // Selectores derivados, memoizados sobre `layers` / `pixelGroups`:
+  //
+  // - `orderedLayers`: capas principales (no-grupo) ordenadas por zIndex DESC.
+  //   Reemplaza `getOrderedLayers()` que se recalculaba en CADA render
+  //   (filter+sort = O(N log N) aunque nada haya cambiado).
+  // - `childrenByParent`: Map<parentId, childLayer[]> precomputado. Reemplaza
+  //   `getGroupLayersForParent(id)` llamado en cada `renderLayerWithTimeline`.
+  //   Sin esto: O(N²) (N capas × filter sobre N). Con esto: O(N) total.
+  // - `layerGroupsCounts`: Record<layerId, count>. Evita `Object.values(...)`
+  //   por capa en el render body.
+  const orderedLayers = useMemo(
+    () =>
+      layers
+        .filter(l => !l.isGroupLayer)
+        .sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0)),
+    [layers]
+  );
 
-  const getVisualLayerIndex = (layer) => {
-    const orderedLayers = layers
-      .filter(l => !l.isGroupLayer)
-      .sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0));
-    return orderedLayers.findIndex(l => l.id === layer.id);
-  };
+  const childrenByParent = useMemo(() => {
+    const map = new Map();
+    for (const layer of layers) {
+      if (!layer.isGroupLayer) continue;
+      const arr = map.get(layer.parentLayerId);
+      if (arr) arr.push(layer);
+      else map.set(layer.parentLayerId, [layer]);
+    }
+    // Orden consistente con el DOM: los hijos expandidos van de zIndex DESC.
+    for (const arr of map.values()) {
+      arr.sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0));
+    }
+    return map;
+  }, [layers]);
+
+  const layerGroupsCounts = useMemo(() => {
+    const counts = {};
+    if (pixelGroups) {
+      for (const layerId in pixelGroups) {
+        const g = pixelGroups[layerId];
+        counts[layerId] = g ? Object.keys(g).length : 0;
+      }
+    }
+    return counts;
+  }, [pixelGroups]);
+
+  const getVisualLayerIndex = (layer) =>
+    orderedLayers.findIndex(l => l.id === layer.id);
 
   const isFirstLayer = (layer) => {
     if (layer.isGroupLayer) return false;
@@ -661,9 +692,6 @@ const handleCreateGroup = (layerId) => {
 
   const isLastLayer = (layer) => {
     if (layer.isGroupLayer) return false;
-    const orderedLayers = layers
-      .filter(l => !l.isGroupLayer)
-      .sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0));
     return getVisualLayerIndex(layer) === orderedLayers.length - 1;
   };
 
@@ -930,14 +958,19 @@ const stableHeaderFrameMouseEnter = useCallback(
 );
 
 
-// Builder recursivo para `LayerRow`: devuelve array plano con la fila de la
-// capa y, si está expandida, los rows de sus hijos. `LayerRow` (hoisted abajo)
-// absorbe layer-info + timeline-frames en un único componente memoizado.
+// Builder recursivo para `LayerRow`. Usa los selectores memoizados
+// (`childrenByParent`, `layerGroupsCounts`) en vez de llamar a las funciones
+// O(N) del LayerManager en cada render — bajando el render global de O(N²) a
+// O(N) sobre el número de capas.
+//
+// (No envolvemos en `useCallback`: la función solo se invoca en el render
+// body, nunca se pasa como prop, así que la identidad estable no aporta nada
+// — y además `useCallback` rompería la recursión self-referenciada.)
 const renderLayerWithTimeline = (layer) => {
-  const children = getGroupLayersForParent(layer.id);
+  const children = childrenByParent.get(layer.id);
   const isExpanded = !!expandedLayers[layer.id];
-  const hasChildren = children.length > 0;
-  const layerGroups = getLayerGroups(layer.id);
+  const hasChildren = !!children && children.length > 0;
+  const layerGroupsCount = layerGroupsCounts[layer.id] || 0;
 
   const elementsToRender = [];
 
@@ -947,7 +980,7 @@ const renderLayerWithTimeline = (layer) => {
       layer={layer}
       isExpanded={isExpanded}
       hasChildren={hasChildren}
-      layerGroupsCount={layerGroups.length}
+      layerGroupsCount={layerGroupsCount}
       layersLength={layers.length}
       frameNumbers={frameNumbers}
       currentFrame={currentFrame}
@@ -964,11 +997,13 @@ const renderLayerWithTimeline = (layer) => {
   );
 
   if (isExpanded && hasChildren) {
-    children
-      .sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0))
-      .forEach(childLayer => {
-        elementsToRender.push(...renderLayerWithTimeline(childLayer));
-      });
+    // `children` ya viene ordenado por zIndex DESC desde `childrenByParent`.
+    for (const childLayer of children) {
+      const childRows = renderLayerWithTimeline(childLayer);
+      for (let i = 0; i < childRows.length; i++) {
+        elementsToRender.push(childRows[i]);
+      }
+    }
   }
 
   return elementsToRender;
@@ -1098,7 +1133,7 @@ const renderLayerWithTimeline = (layer) => {
 
         {/* Layer rows: cada una con su LayerRow (layer-info + timeline-frames) */}
         <div className="timeline-layers">
-          {getOrderedLayers().map(layer => renderLayerWithTimeline(layer)).flat()}
+          {orderedLayers.map(layer => renderLayerWithTimeline(layer)).flat()}
         </div>
 
         {/* Resizer: `position: absolute` hijo directo de `.timeline-container`
