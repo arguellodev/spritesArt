@@ -1243,7 +1243,8 @@ const renderLayerWithTimeline = (layer) => {
           <div className="toolbar-divider" aria-hidden />
 
           {/* Navegación rápida entre capas — esencial cuando el panel está
-              colapsado (no hay lista de filas visible). */}
+              colapsado (no hay lista de filas visible). Doble clic en el
+              nombre activa edición inline (mismo flujo que en LayerRow). */}
           <div className="toolbar-group layer-nav-group" role="group" aria-label="Capa activa">
             <button
               onClick={handlePrevLayer}
@@ -1254,13 +1255,31 @@ const renderLayerWithTimeline = (layer) => {
             >
               <LuChevronLeft />
             </button>
-            <span
-              className="layer-nav-label"
-              title={`Capa actual: ${activeLayerName}`}
-              aria-label={`Capa actual ${activeLayerName}`}
-            >
-              {activeLayerName}
-            </span>
+            {editingLayerId === activeLayerId ? (
+              <input
+                type="text"
+                value={editingName}
+                onChange={(e) => setEditingName(e.target.value)}
+                onBlur={saveLayerName}
+                onKeyDown={handleKeyDown}
+                autoFocus
+                onFocus={(e) => e.target.select()}
+                className="layer-nav-input"
+                aria-label="Editar nombre de capa"
+              />
+            ) : (
+              <span
+                className="layer-nav-label"
+                title={`Capa actual: ${activeLayerName} — doble clic para renombrar`}
+                aria-label={`Capa actual ${activeLayerName}`}
+                onDoubleClick={(e) => {
+                  const activeLayer = layers.find(l => l.id === activeLayerId);
+                  if (activeLayer) startEditing(activeLayer, e);
+                }}
+              >
+                {activeLayerName}
+              </span>
+            )}
             <button
               onClick={handleNextLayer}
               disabled={!canNextLayer}

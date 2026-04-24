@@ -2661,7 +2661,42 @@ margin-right: 20px;
   border: 1px solid rgba(140, 82, 255, 0.45);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
   user-select: none;
-  cursor: default;
+  cursor: text;  /* sugiere editabilidad (doble clic activa rename inline) */
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.layer-nav-label:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(140, 82, 255, 0.36),
+    rgba(140, 82, 255, 0.18)
+  );
+  border-color: var(--accent-color);
+}
+
+/* Input inline de rename: mantiene el mismo footprint que el badge para que
+   el layout no salte al entrar/salir de edición. Border morado sólido para
+   indicar "estás editando"; caret blanco. */
+.layer-nav-input {
+  flex: 1 1 auto;
+  min-width: 60px;
+  max-width: 140px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  text-align: center;
+  background: rgba(140, 82, 255, 0.14);
+  border: 1px solid var(--accent-color);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(140, 82, 255, 0.20);
+  font-family: inherit;
+  caret-color: #ffffff;
+}
+
+.layer-nav-input:focus {
+  box-shadow: 0 0 0 2px rgba(140, 82, 255, 0.35);
 }
 
 /* ============================================================================
