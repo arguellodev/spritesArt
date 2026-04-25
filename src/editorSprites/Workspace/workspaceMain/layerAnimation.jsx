@@ -114,6 +114,10 @@ const LayerAnimation = ({
   isPlaying,
   setIsPlaying,
 
+  // Bucle global (compartido con PlayAnimation, lift-eado al workspaceContainer)
+  loopEnabled,
+  setLoopEnabled,
+
   // Onion frames config (pasada a ConfigOnionSkin modal)
   onionFramesConfig,
   setOnionFramesConfig,
@@ -148,10 +152,6 @@ const LayerAnimation = ({
   }, [framesResume]);
 
 //==============Lógica para enviar ref de animacion =============================//
-// Estado del bucle global. Declarado aqui (antes de useAnimationPlayer) porque
-// se pasa como prop al motor — la declaracion debe preceder al call site (TDZ).
-// En Plan Task 3 se lift-eara al workspaceContainer y este useState desaparece.
-const [loopEnabled, setLoopEnabled] = useState(true);
 const internalCanvasRef = useRef(null);
 const { frameNumbers, frameCount } = getFramesInfo();
 

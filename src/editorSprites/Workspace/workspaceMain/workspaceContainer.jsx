@@ -301,6 +301,10 @@ const [showScriptRunner, setShowScriptRunner] = useState(false);
 
 // Estado para paneles del dock: animation tags (lista persistible a .pixcalli).
 const [animationTags, setAnimationTags] = useState([]);
+// Bucle global de la animacion. Se lift-ea aqui (no en LayerAnimation)
+// para que tanto el panel de timeline como el reproductor del dock derecho
+// (PlayAnimation) compartan el mismo estado y se persista en .pixcalli.
+const [loopEnabled, setLoopEnabled] = useState(true);
 // Slices (regiones nombradas con bounds/pivot/9-slice); ver slices/sliceLayer.js.
 const [slices, setSlices] = useState([]);
 // Tileset opcional (un documento puede tener cero o un tileset global por ahora).
@@ -10336,6 +10340,8 @@ const cutSelection = useCallback(() => {
         zoom,
         isPlaying,
         setIsPlaying,
+        loopEnabled,
+        setLoopEnabled,
         // onFrameChange: el motor en useAnimationPlayer llama a este callback
         // cada vez que avanza durante playback; el padre guarda frameNumber en
         // `animationTickFrame` y lo pasa a FramesTimeline para resaltar la
@@ -10362,6 +10368,8 @@ const cutSelection = useCallback(() => {
       // viewport, onion-skin no se actualizaba al togglear, etc.).
       frozenProps,
       isPlaying,
+      loopEnabled,
+      setLoopEnabled,
       handleAnimationFrameChange,
       viewportOffset,
       viewportWidth,
@@ -10543,8 +10551,10 @@ const cutSelection = useCallback(() => {
     () => renderPlayAnimation({
       frames,
       playerRef: playAnimationRef,
+      loopEnabled,
+      setLoopEnabled,
     }),
-    [frames]
+    [frames, loopEnabled, setLoopEnabled]
   );
 
   // `onPlayTag` del panel de tags: configura rango + modo del reproductor
