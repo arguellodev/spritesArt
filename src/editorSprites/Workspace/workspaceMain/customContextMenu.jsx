@@ -307,11 +307,16 @@ const calculateMenuPosition = useCallback(() => {
             </>
           )}
           
-          {/* Items del menú */}
+          {/* Items del menú — cuando un input esta activo, ocultamos el resto
+              de items para que el menu no tape la timeline mientras el usuario
+              escribe (modo compacto). Solo se muestra el item activo + su
+              caja de input. */}
           {actions.map((action, index) => {
             const isInputType = action.type && ['text', 'number', 'slider', 'color'].includes(action.type);
             const isActiveInput = activeInput && activeInput === action;
-            
+            // Compact mode: ocultar items que NO son el input activo.
+            if (activeInput && !isActiveInput) return null;
+
             return (
               <div key={action.id || index}>
                 {/* Item del menú */}

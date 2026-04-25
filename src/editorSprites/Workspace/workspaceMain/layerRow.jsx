@@ -326,26 +326,46 @@ const LayerRow = React.memo(function LayerRow({
                 frameNumber - currentFrame <= onionSkinSettings.nextFrames)
             );
 
+          // Visual de seleccion:
+          //  - `selected-frame`  → toda capa cuya celda este en selectedFrames
+          //    (asi el usuario ve consistentemente que frames estan
+          //    seleccionados al arrastrar entre filas).
+          //  - `current`         → reservado para la celda activa de la capa
+          //    activa (frame "actual" del editor).
+          //  - `selected-frame--active-layer` → acento extra en la capa
+          //    activa, para distinguirla del resto de capas que comparten la
+          //    misma seleccion global de frames.
           const className =
             `timeline-frame ${isGroup ? 'group-frame' : ''}` +
             ` ${isEmpty && !hasGroups ? 'empty' : 'filled'}` +
             ` ${isVisibleInFrame ? 'visible' : 'hidden'}` +
-            ` ${isSelectedInActiveLayer ? 'current selected-frame' : ''}` +
+            ` ${isSelectedGlobal ? 'selected-frame' : ''}` +
+            ` ${isSelectedInActiveLayer ? 'current selected-frame--active-layer' : ''}` +
             ` ${isActive ? 'active' : ''}` +
             ` ${isKeyframe ? 'keyframe' : ''}`;
 
           // Convenio del parent: frameIndex = frameNumber - 1 en mouseDown.
+          //
+          // Right-click sobre un frame YA seleccionado (en cualquier capa o
+          // multi-seleccion): NO tocar la seleccion — el menu actua sobre
+          // todos los frames seleccionados. Antes el contextmenu re-llamaba
+          // onFrameMouseDown si la capa no era la activa, lo cual reseteaba
+          // toda la seleccion al frame clickeado.
           const onCellContextMenu = (e) => {
             handlers.onFrameContextMenu(e, 'frame');
-            if (!isSelectedInActiveLayer) {
+            if (!isSelectedGlobal) {
+              // Frame fuera de la seleccion: lo seleccionamos para que el
+              // menu tenga un blanco coherente.
               handlers.onFrameMouseDown(layer.id, frameNumber - 1, e);
             }
           };
           const onCellClick = (e) => e.stopPropagation();
           const onCellMouseDown = (e) => {
-            // Guarda: right-click con selección múltiple no re-selecciona
-            // (el contextmenu maneja la acción).
-            if (e.button === 2 && selectedFrames.length > 1) {
+            // Right-click sobre un frame YA seleccionado: short-circuit para
+            // que el handler del onClick original no resetee la seleccion.
+            // El contextmenu (arriba) decide solo si reemplazar la seleccion
+            // o preservarla, segun isSelectedGlobal.
+            if (e.button === 2 && isSelectedGlobal) {
               e.preventDefault();
               e.stopPropagation();
               return;

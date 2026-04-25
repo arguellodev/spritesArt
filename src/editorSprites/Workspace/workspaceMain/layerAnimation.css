@@ -1107,7 +1107,17 @@ margin-right: 20px;
   background-color: var(--layer-hover);
 }
 
-.timeline-frame.current {
+/* Frame seleccionado en CUALQUIER capa — tinte tenue para que el usuario
+ * vea el rango sin importar en que fila de capa este el cursor durante
+ * un drag-select. La capa activa ademas tiene el modificador
+ * --active-layer (debajo) que pinta el acento mas saturado. */
+.timeline-frame.selected-frame {
+  background: linear-gradient(135deg, rgba(140, 82, 255, 0.18), rgba(140, 82, 255, 0.06));
+  box-shadow: inset 0 -2px 0 rgba(140, 82, 255, 0.55);
+}
+
+.timeline-frame.current,
+.timeline-frame.selected-frame--active-layer {
   background: linear-gradient(135deg, rgba(140, 82, 255, 0.3), rgba(140, 82, 255, 0.1));
   border-right-color: var(--accent-color);
   box-shadow: inset 0 -2px 0 var(--accent-color);
