@@ -148,6 +148,10 @@ const LayerAnimation = ({
   }, [framesResume]);
 
 //==============Lógica para enviar ref de animacion =============================//
+// Estado del bucle global. Declarado aqui (antes de useAnimationPlayer) porque
+// se pasa como prop al motor — la declaracion debe preceder al call site (TDZ).
+// En Plan Task 3 se lift-eara al workspaceContainer y este useState desaparece.
+const [loopEnabled, setLoopEnabled] = useState(true);
 const internalCanvasRef = useRef(null);
 const { frameNumbers, frameCount } = getFramesInfo();
 
@@ -208,8 +212,6 @@ const handlePause = useCallback(() => {
 // selección multi-frame por capa. Se consumían únicamente en código que ya
 // eliminé (stubs de copiar/eliminar frames + selectLayerFrame/Range). Si se
 // retoma la feature, estos useState se vuelven a declarar.)
-
-const [loopEnabled, setLoopEnabled] = useState(true);
 
 // (Eliminado: `isOnionActive` useState — el estado real es `onionFramesConfig.enabled`
 // del padre; este local solo se usaba en el antiguo toggle del topbar.)
