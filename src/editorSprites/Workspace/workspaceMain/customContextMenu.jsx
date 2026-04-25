@@ -273,7 +273,7 @@ const calculateMenuPosition = useCallback(() => {
       {/* Menú contextual */}
       <div
         ref={menuRef}
-        className="context-menu"
+        className={`context-menu ${activeInput ? 'has-active-input' : ''}`}
         style={{
           left: `${menuPosition.x}px`,
           top: `${menuPosition.y}px`,
@@ -336,10 +336,15 @@ const calculateMenuPosition = useCallback(() => {
 
                 {/* Contenedor de input activo */}
                 {isActiveInput && (
-                  <div 
+                  <div
                     className="context-menu-input-container"
                     onPointerDown={handleInputContainerPointerDown}
                   >
+                    {activeInput.helperText && (
+                      <div className="context-menu-input-helper">
+                        {activeInput.helperText}
+                      </div>
+                    )}
                     <div className="context-menu-input-wrapper">
                       {activeInput.type === 'slider' ? (
                         <div className="context-menu-slider-container">

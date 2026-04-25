@@ -43,7 +43,15 @@
     transform: scale(0.95) translateY(-8px);
     animation: contextMenuAppear 0.15s cubic-bezier(0.4, 0, 0.2, 1) forwards;
     pointer-events: auto;
-    
+    transition: max-width 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Cuando se activa un input dentro del menu (text/color/etc), el menu se
+   * expande para que el input + acciones (✓ ✕) no se aplasten contra el
+   * borde — sin forzar un re-layout brusco gracias al transition de arriba. */
+  .context-menu.has-active-input {
+    max-width: 380px;
+    min-width: 320px;
   }
   
   /* Animación de aparición del menú */
@@ -382,19 +390,42 @@
 
 /* Contenedor del input */
 .context-menu-input-container {
-  padding: 8px 12px 12px 12px;
+  padding: 10px 12px 12px 12px;
   margin: 4px 0;
   background: var(--bg-tertiary);
   border-radius: 6px;
   border: 1px solid var(--border-color);
 }
 
-/* Wrapper del input */
-.context-menu-input-wrapper {
+/* Helper text por encima del input — usado p.ej. para mostrar el rango de
+ * frames al crear un tag ("5 frames: 1 → 5") sin depender de la label del
+ * item, que cambia de fuente/color al activarse. */
+.context-menu-input-helper {
   display: flex;
   align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
+  letter-spacing: 0.2px;
+  user-select: none;
+}
+
+/* Wrapper del input — antes era flex-row con el input y los botones en
+ * misma fila, lo que aplastaba el input. Ahora apilamos el input arriba y
+ * la fila de acciones abajo: input ocupa todo el ancho del menu expandido. */
+.context-menu-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
 }
+
 
 /* Input básico */
 .context-menu-input {
@@ -516,10 +547,12 @@
   box-shadow: 0 0 0 1px rgba(140, 82, 255, 0.2);
 }
 
-/* Acciones del input */
+/* Acciones del input — alineadas a la derecha porque ahora el wrapper
+ * apila input arriba y acciones debajo (antes iban en misma fila). */
 .context-menu-input-actions {
   display: flex;
-  gap: 4px;
+  justify-content: flex-end;
+  gap: 6px;
   flex-shrink: 0;
 }
 

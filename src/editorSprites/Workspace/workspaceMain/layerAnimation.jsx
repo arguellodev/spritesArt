@@ -390,12 +390,15 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
     }*/,
     {
       label: selRange
-        ? `Crear tag (frames ${selRange.from}–${selRange.to})`
+        ? `Crear tag · ${selRange.to - selRange.from + 1} frame${selRange.to - selRange.from + 1 === 1 ? '' : 's'} (${selRange.from}–${selRange.to})`
         : 'Crear tag con seleccion',
       icon: '+',
       disabled: !selRange,
       type: 'text',
-      placeholder: 'Nombre del tag',
+      placeholder: 'Nombre del tag (p. ej. walk)',
+      helperText: selRange
+        ? `${selRange.to - selRange.from + 1} frame${selRange.to - selRange.from + 1 === 1 ? '' : 's'}:  ${selRange.from} → ${selRange.to}`
+        : null,
       getValue: () => '',
       setValue: (name) => {
         const trimmed = String(name).trim();
@@ -409,7 +412,7 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
     },
     {
       label: selRange && selectedFrames.length >= 2
-        ? `Reproducir ${selRange.from}–${selRange.to} en bucle`
+        ? `Reproducir ${selRange.to - selRange.from + 1} frames (${selRange.from}–${selRange.to}) en bucle`
         : 'Reproducir rango en bucle',
       icon: '↻',
       disabled: !(selRange && selectedFrames.length >= 2),

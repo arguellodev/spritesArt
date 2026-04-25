@@ -435,15 +435,23 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
     ? { from: Math.min(...selectedFrames), to: Math.max(...selectedFrames) }
     : null;
 
+  // Conteo de frames del rango seleccionado (inclusivo en ambos extremos).
+  const rangeCount = selRange ? selRange.to - selRange.from + 1 : 0;
+
   const menuHeaderActions = [
     {
       label: selRange
-        ? `Crear tag (frames ${selRange.from}–${selRange.to})`
+        ? `Crear tag · ${rangeCount} frame${rangeCount === 1 ? '' : 's'} (${selRange.from}–${selRange.to})`
         : 'Crear tag con seleccion',
       icon: '+',
       disabled: !selRange,
       type: 'text',
       placeholder: 'Nombre del tag (p. ej. walk)',
+      // Helper visible arriba del input al activarse: deja claro el alcance
+      // del tag mientras el usuario escribe el nombre.
+      helperText: selRange
+        ? `${rangeCount} frame${rangeCount === 1 ? '' : 's'}:  ${selRange.from} → ${selRange.to}`
+        : null,
       getValue: () => '',
       setValue: (name) => {
         const trimmed = String(name).trim();
@@ -454,7 +462,7 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
     },
     {
       label: selRange && selectedFrames.length >= 2
-        ? `Reproducir ${selRange.from}–${selRange.to} en bucle`
+        ? `Reproducir ${rangeCount} frames (${selRange.from}–${selRange.to}) en bucle`
         : 'Reproducir rango en bucle',
       icon: '↻',
       disabled: !(selRange && selectedFrames.length >= 2),
