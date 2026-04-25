@@ -37,7 +37,7 @@ import {
   
 } from "react-icons/lu";
 import { BiSolidLayerPlus } from "react-icons/bi";
-import { createTag, addTag, removeTag, updateTag } from '../animation/animationTags';
+import { createTag, addTag, removeTag, updateTag, findOverlappingTag } from '../animation/animationTags';
 import TagBand from '../animation/TagBand';
 
 // Destructura minimal: solo las props realmente consumidas. El wrapper
@@ -438,24 +438,37 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
   // Conteo de frames del rango seleccionado (inclusivo en ambos extremos).
   const rangeCount = selRange ? selRange.to - selRange.from + 1 : 0;
 
+  // Aseprite-like: NO permitir solapamiento entre tags. Si el rango actual
+  // pisa un tag existente, "Crear tag" queda deshabilitado y el label/helper
+  // dice con cual choca.
+  const conflictTag = selRange
+    ? findOverlappingTag(animationTags, selRange.from, selRange.to)
+    : null;
+
   const menuHeaderActions = [
     {
-      label: selRange
-        ? `Crear tag · ${rangeCount} frame${rangeCount === 1 ? '' : 's'} (${selRange.from}–${selRange.to})`
-        : 'Crear tag con seleccion',
+      label: !selRange
+        ? 'Crear tag con seleccion'
+        : conflictTag
+          ? `Crear tag · choca con «${conflictTag.name}»`
+          : `Crear tag · ${rangeCount} frame${rangeCount === 1 ? '' : 's'} (${selRange.from}–${selRange.to})`,
       icon: '+',
-      disabled: !selRange,
+      disabled: !selRange || !!conflictTag,
       type: 'text',
       placeholder: 'Nombre del tag (p. ej. walk)',
       // Helper visible arriba del input al activarse: deja claro el alcance
-      // del tag mientras el usuario escribe el nombre.
-      helperText: selRange
+      // del tag mientras el usuario escribe el nombre. Si hay conflicto,
+      // el item esta disabled y el helper no se muestra.
+      helperText: selRange && !conflictTag
         ? `${rangeCount} frame${rangeCount === 1 ? '' : 's'}:  ${selRange.from} → ${selRange.to}`
         : null,
       getValue: () => '',
       setValue: (name) => {
         const trimmed = String(name).trim();
         if (!trimmed || !selRange) return;
+        // Re-check de overlap por si el rango cambio entre render y confirm
+        // (paranoia: el menu tiene una vida corta pero no imposible).
+        if (findOverlappingTag(animationTags, selRange.from, selRange.to)) return;
         const tag = createTag({ name: trimmed, from: selRange.from, to: selRange.to });
         setAnimationTags?.(addTag(animationTags, tag));
       }
@@ -486,6 +499,21 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
           handlePlayTag?.(tag);
           setContextMenuHeader(prev => ({ ...prev, isVisible: false }));
         }
+      },
+      {
+        // Renombrar: getValue = nombre actual (lo trae al input al activar);
+        // setValue valida no-vacio y aplica updateTag inmutablemente.
+        label: `Renombrar tag «${tag.name}»`,
+        icon: '✎',
+        type: 'text',
+        placeholder: 'Nuevo nombre',
+        helperText: `Frames: ${tag.from} → ${tag.to}`,
+        getValue: () => tag.name,
+        setValue: (name) => {
+          const trimmed = String(name).trim();
+          if (!trimmed) return;
+          setAnimationTags?.(updateTag(animationTags, tag.id, { name: trimmed }));
+        },
       },
       {
         // Picker de color: pre-carga el color actual del tag, en confirm

@@ -40,7 +40,7 @@ import {
 
 } from "react-icons/lu";
 import { BiSolidLayerPlus } from "react-icons/bi";
-import { createTag, addTag, removeTag, updateTag } from '../animation/animationTags';
+import { createTag, addTag, removeTag, updateTag, findOverlappingTag } from '../animation/animationTags';
 
 
 
@@ -388,28 +388,39 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
         handleCloseMenu();
       }
     }*/,
-    {
-      label: selRange
-        ? `Crear tag · ${selRange.to - selRange.from + 1} frame${selRange.to - selRange.from + 1 === 1 ? '' : 's'} (${selRange.from}–${selRange.to})`
-        : 'Crear tag con seleccion',
-      icon: '+',
-      disabled: !selRange,
-      type: 'text',
-      placeholder: 'Nombre del tag (p. ej. walk)',
-      helperText: selRange
-        ? `${selRange.to - selRange.from + 1} frame${selRange.to - selRange.from + 1 === 1 ? '' : 's'}:  ${selRange.from} → ${selRange.to}`
-        : null,
-      getValue: () => '',
-      setValue: (name) => {
-        const trimmed = String(name).trim();
-        if (!trimmed || !selRange) return;
-        setAnimationTags?.(addTag(animationTags, createTag({
-          name: trimmed,
-          from: selRange.from,
-          to: selRange.to,
-        })));
-      }
-    },
+    // Aseprite-like: prohibir solapamiento. Si selRange pisa otro tag, se
+    // deshabilita y el label dice con cual choca.
+    (() => {
+      const rc = selRange ? selRange.to - selRange.from + 1 : 0;
+      const conflictTag = selRange
+        ? findOverlappingTag(animationTags, selRange.from, selRange.to)
+        : null;
+      return {
+        label: !selRange
+          ? 'Crear tag con seleccion'
+          : conflictTag
+            ? `Crear tag · choca con «${conflictTag.name}»`
+            : `Crear tag · ${rc} frame${rc === 1 ? '' : 's'} (${selRange.from}–${selRange.to})`,
+        icon: '+',
+        disabled: !selRange || !!conflictTag,
+        type: 'text',
+        placeholder: 'Nombre del tag (p. ej. walk)',
+        helperText: selRange && !conflictTag
+          ? `${rc} frame${rc === 1 ? '' : 's'}:  ${selRange.from} → ${selRange.to}`
+          : null,
+        getValue: () => '',
+        setValue: (name) => {
+          const trimmed = String(name).trim();
+          if (!trimmed || !selRange) return;
+          if (findOverlappingTag(animationTags, selRange.from, selRange.to)) return;
+          setAnimationTags?.(addTag(animationTags, createTag({
+            name: trimmed,
+            from: selRange.from,
+            to: selRange.to,
+          })));
+        }
+      };
+    })(),
     {
       label: selRange && selectedFrames.length >= 2
         ? `Reproducir ${selRange.to - selRange.from + 1} frames (${selRange.from}–${selRange.to}) en bucle`
@@ -433,6 +444,19 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
         label: `Reproducir tag «${tag.name}»`,
         icon: '▶',
         onClick: () => { handlePlayTag?.(tag); handleCloseMenu(); }
+      },
+      {
+        label: `Renombrar tag «${tag.name}»`,
+        icon: '✎',
+        type: 'text',
+        placeholder: 'Nuevo nombre',
+        helperText: `Frames: ${tag.from} → ${tag.to}`,
+        getValue: () => tag.name,
+        setValue: (name) => {
+          const trimmed = String(name).trim();
+          if (!trimmed) return;
+          setAnimationTags?.(updateTag(animationTags, tag.id, { name: trimmed }));
+        },
       },
       {
         // Picker de color: pre-carga el color actual; confirm aplica updateTag.

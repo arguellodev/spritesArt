@@ -55,6 +55,27 @@ export function tagsAtFrame(tags, frameN) {
 }
 
 /**
+ * Comprueba si dos rangos cerrados (inclusivos) se solapan.
+ *  - No solapan si uno termina antes de que el otro empiece, o viceversa.
+ *  - Solapan en cualquier otro caso (incluso si comparten un solo frame).
+ */
+export function rangesOverlap(a, b) {
+  return !(a.to < b.from || a.from > b.to);
+}
+
+/**
+ * Devuelve el primer tag existente que solapa con el rango [from..to] dado.
+ * `excludeId` permite editar un tag (rename, change color) sin que se
+ * detecte como conflicto consigo mismo.
+ *
+ * @returns {AnimationTag | undefined}
+ */
+export function findOverlappingTag(tags, from, to, excludeId = null) {
+  const range = { from: Math.min(from, to), to: Math.max(from, to) };
+  return tags.find(t => t.id !== excludeId && rangesOverlap(range, t));
+}
+
+/**
  * Calcula la secuencia de frames a reproducir para un tag según dirección/repeat.
  * Útil para el reproductor de animación: recibe un tag y devuelve array de frames
  * en el orden de reproducción.
