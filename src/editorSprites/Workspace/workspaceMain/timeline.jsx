@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import './layerAnimation.css'
 
 import LayerRow, { FrameNumberCell } from './layerRow';
@@ -38,6 +38,7 @@ import {
 } from "react-icons/lu";
 import { BiSolidLayerPlus } from "react-icons/bi";
 import { createTag, addTag, removeTag } from '../animation/animationTags';
+import TagBand from '../animation/TagBand';
 
 // Destructura minimal: solo las props realmente consumidas. El wrapper
 // memoizado sigue pasando más props; React ignora las extras.
@@ -155,6 +156,11 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
     isVisible: false,
     position: { x: 0, y: 0 }
   });
+
+  // Ancho real (en px) de cada FrameNumberCell, leido del DOM via useLayoutEffect.
+  // TagBand lo necesita para alinear las bandas con el grid del strip.
+  const [headerCellWidth, setHeaderCellWidth] = useState(28);
+  const headerFramesRef = useRef(null);
 
   const handleContextMenu = (event,type) => {
     event.preventDefault();
@@ -959,6 +965,16 @@ useEffect(() => {
   };
 }, [isResizingLayers]);
 
+// Medir el ancho real de la primera celda del header tras el layout.
+// Se re-mide cuando cambia el numero de frames (puede afectar el flex/grid).
+useLayoutEffect(() => {
+  const el = headerFramesRef.current?.querySelector('.frame-number-cell');
+  if (el) {
+    const rect = el.getBoundingClientRect();
+    if (rect.width > 0) setHeaderCellWidth(rect.width);
+  }
+}, [frameNumbers.length]);
+
 function handleHeaderFrameSelection(frameNumber, event) {
   const { ctrlKey, metaKey, shiftKey } = event;
   const isCtrlOrCmd = ctrlKey || metaKey;
@@ -1214,27 +1230,48 @@ const renderLayerWithTimeline = (layer) => {
               </button>
             </div>
           </div>
-          <div className="timeline-header-frames">
-            {frameNumbers.map((frameNumber) => {
-              const isSelected = selectedFrames.includes(frameNumber);
-              // Durante playback: iluminar el frame que el motor de animación
-              // está mostrando. Cuando no hay playback: iluminar el frame
-              // seleccionado por el usuario.
-              const isCurrent = isPlaying && animationTickFrame != null
-                ? animationTickFrame === frameNumber
-                : currentFrame === frameNumber;
-              return (
-                <FrameNumberCell
-                  key={frameNumber}
-                  frameNumber={frameNumber}
-                  isCurrent={isCurrent}
-                  isSelected={isSelected}
-                  onMouseDown={stableHeaderFrameMouseDown}
-                  onMouseEnter={stableHeaderFrameMouseEnter}
-                  onContextMenu={(e) => stableHeaderFrameContextMenu(frameNumber, e)}
-                />
-              );
-            })}
+          <div className="timeline-header-frames-wrapper" style={{ display: 'flex', flexDirection: 'column' }}>
+            <TagBand
+              tags={animationTags}
+              frameNumbers={frameNumbers}
+              cellWidth={headerCellWidth}
+              onClickTag={(tag) => {
+                const range = [];
+                for (let f = tag.from; f <= tag.to; f++) range.push(f);
+                setSelectedFrames(range);
+                setActiveFrame(tag.to);
+              }}
+              onDoubleClickTag={(tag) => handlePlayTag?.(tag)}
+              onContextMenuTag={(tag, e) => {
+                if (!selectedFrames.includes(tag.from)) setSelectedFrames([tag.from]);
+                setContextMenuHeader({
+                  isVisible: true,
+                  position: { x: e.clientX, y: e.clientY }
+                });
+              }}
+            />
+            <div className="timeline-header-frames" ref={headerFramesRef}>
+              {frameNumbers.map((frameNumber) => {
+                const isSelected = selectedFrames.includes(frameNumber);
+                // Durante playback: iluminar el frame que el motor de animación
+                // está mostrando. Cuando no hay playback: iluminar el frame
+                // seleccionado por el usuario.
+                const isCurrent = isPlaying && animationTickFrame != null
+                  ? animationTickFrame === frameNumber
+                  : currentFrame === frameNumber;
+                return (
+                  <FrameNumberCell
+                    key={frameNumber}
+                    frameNumber={frameNumber}
+                    isCurrent={isCurrent}
+                    isSelected={isSelected}
+                    onMouseDown={stableHeaderFrameMouseDown}
+                    onMouseEnter={stableHeaderFrameMouseEnter}
+                    onContextMenu={(e) => stableHeaderFrameContextMenu(frameNumber, e)}
+                  />
+                );
+              })}
+            </div>
           </div>
         </div>
 
