@@ -12,13 +12,18 @@ let _nextId = 1;
  * Crea un objeto tag nuevo con un id único.
  * @param {{ name: string, from: number, to: number, color?: string, direction?: string }} opts
  */
+// Paleta default coherente con el path de import Aseprite (workspaceContainer
+// genera tags con #4a90e2 al cargar .ase). Hacer null aqui haria invisible la
+// banda en TagBand cuando se crea desde el menu contextual.
+const DEFAULT_TAG_COLOR = '#4a90e2';
+
 export function createTag({ name, from, to, color, direction = 'forward' }) {
   return {
     id: `tag-${Date.now()}-${_nextId++}`,
     name: String(name).trim(),
     from: Math.min(from, to),
     to:   Math.max(from, to),
-    color: color ?? null,
+    color: color ?? DEFAULT_TAG_COLOR,
     direction,
   };
 }
