@@ -1766,12 +1766,17 @@ margin-right: 20px;
   box-sizing: border-box;
 }
 
-/* Fila header de FramesTimeline: placeholder de capas + strip de frames */
+/* Fila header de FramesTimeline: placeholder de capas + strip de frames.
+ * height: auto + min-height: 28px → el row es 28px sin tags, y crece
+ * cuando TagBand inserta filas (1 row = +18px, 2 rows = +34px).
+ * Antes era height: 28px fijo, lo que aplastaba el strip de numeros
+ * porque la wrapper en column-flex repartia los 28px entre TagBand y
+ * el strip (flex:1 del strip lo dejaba en negativo). */
 .timeline-header-row {
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  height: 28px;
+  height: auto;
   min-height: 28px;
   background: var(--bg-tertiary);
   border-bottom: 2px solid var(--border-color);
@@ -1925,6 +1930,12 @@ margin-right: 20px;
   display: flex;
   align-items: stretch;
   min-width: 0;
+  /* Altura minima para que el strip de numeros no se aplaste cuando
+   * TagBand le suma su altura al wrapper en column-flex. Las celdas
+   * (.frame-number) usan height: 100% asi que necesitan que el padre
+   * tenga una altura definida por algun lado — antes la heredaba del
+   * row de 28px fijo, pero ahora el row es auto. */
+  min-height: 28px;
   overflow: hidden;
 }
 

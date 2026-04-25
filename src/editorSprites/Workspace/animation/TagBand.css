@@ -27,6 +27,11 @@
   position: absolute;
   top: 0;
   height: 100%;
+  /* border-box: el border de 1px entra DENTRO del width inline calculado
+   * por TagBand (startIdx*cellWidth..endIdx). Sin esto el border (1px izq +
+   * 1px der) se sumaba por fuera y la banda sobresalia 2px del rango de
+   * frames real (efecto "se pasa un cachito por la derecha"). */
+  box-sizing: border-box;
   border-radius: 3px;
   padding: 0 6px;
   font-size: 10px;
