@@ -10261,7 +10261,29 @@ const cutSelection = useCallback(() => {
     }
   }, [currentFrame, activeLayerId, frameCount, layers, frames, selectedPixels, dragOffset]);
 
-  
+  // handlePlayTag declarado ANTES que MemoizedLayerAnimation y
+  // MemoizedFramesTimeline porque esos useMemo lo capturan en sus factory.
+  // useMemo evalua la factory sincronamente durante render — un const
+  // declarado abajo lanza TDZ ReferenceError. Mismo patron que handleProjectLoaded
+  // (linea ~630).
+  //
+  // `onPlayTag` del panel de tags: configura rango + modo del reproductor
+  // y arranca la reproducción usando el API imperativo expuesto por PlayAnimation.
+  // Mapeo de direcciones de tag → playbackMode soportado. `pingpong-reverse`
+  // no existe en el reproductor (es `pingpong` con primer paso inverso); por
+  // ahora se degrada a `pingpong`.
+  const handlePlayTag = useCallback((tag) => {
+    const api = playAnimationRef.current;
+    if (!api || !tag) return;
+    const mode = tag.direction === 'reverse' ? 'reverse'
+               : tag.direction === 'pingpong' || tag.direction === 'pingpong-reverse' ? 'pingpong'
+               : 'forward';
+    api.setFrameRange?.({ start: tag.from, end: tag.to });
+    api.setPlaybackMode?.(mode);
+    api.setFrame?.(mode === 'reverse' ? tag.to : tag.from);
+    api.play?.();
+  }, []);
+
   const MemoizedLayerAnimation = useMemo(
     () =>
       renderLayerAnimation({
@@ -10572,26 +10594,6 @@ const cutSelection = useCallback(() => {
     }),
     [frames, loopEnabled, setLoopEnabled]
   );
-
-  // `onPlayTag` del panel de tags: configura rango + modo del reproductor
-  // y arranca la reproducción usando el API imperativo expuesto por PlayAnimation.
-  // Mapeo de direcciones de tag → playbackMode soportado. `pingpong-reverse`
-  // no existe en el reproductor (es `pingpong` con primer paso inverso); por
-  // ahora se degrada a `pingpong`.
-  const handlePlayTag = useCallback((tag) => {
-    const api = playAnimationRef.current;
-    if (!api || !tag) return;
-    const mode = tag.direction === 'reverse' ? 'reverse'
-               : tag.direction === 'pingpong' || tag.direction === 'pingpong-reverse' ? 'pingpong'
-               : 'forward';
-    api.setFrameRange?.({ start: tag.from, end: tag.to });
-    api.setPlaybackMode?.(mode);
-    api.setFrame?.(mode === 'reverse' ? tag.to : tag.from);
-    api.play?.();
-  }, []);
-
- 
- 
 
   //autoguardado
   /*
