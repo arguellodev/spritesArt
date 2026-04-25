@@ -243,3 +243,188 @@
 .pc-right-panel svg {
   stroke-width: 2px;
 }
+
+/* ============================================================
+ * MOBILE / TABLET (<= 767px) — bottom-sheet drawer
+ *
+ * En mobile el panel deja de ser un sidebar de 300px (los telefonos no
+ * tienen ancho para eso) y pasa a comportarse como un bottom sheet:
+ *
+ *   - Cerrado: NO se renderea el aside; el componente devuelve un FAB
+ *     redondo (.pc-rp-fab) abajo a la derecha. Tap → abrir.
+ *   - Abierto: el aside ocupa el ancho completo de la viewport, sube
+ *     desde abajo, hasta 80vh de alto, con esquinas redondeadas y un
+ *     drag-handle visual arriba.
+ *   - Backdrop semi-transparente (.pc-rp-backdrop) cubre el editor; tap
+ *     fuera del panel cierra el drawer.
+ *
+ * Touch targets: todos los botones interactivos suben a min 44x44 px
+ * para cumplir con guidelines WCAG / iOS / Material.
+ * ============================================================ */
+
+@media (max-width: 767px) {
+  /* Backdrop: full screen overlay translucido detras del drawer. */
+  .pc-rp-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 99;
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    animation: pc-rp-backdrop-in 200ms ease;
+  }
+
+  @keyframes pc-rp-backdrop-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* Panel mobile: bottom sheet flotante. Sobrescribe el sidebar fijo. */
+  .pc-right-panel-mobile {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    /* 85vh deja un poco de viewport visible arriba como contexto, asi
+     * el usuario no pierde la referencia de donde esta el editor. */
+    height: 85vh;
+    max-height: 85vh;
+    border-left: none;
+    border-top: 1px solid var(--border-color, #333);
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.45);
+    z-index: 100;
+    /* Slide-up al montarse (cuando se abre el drawer). */
+    animation: pc-rp-sheet-up 240ms cubic-bezier(0.32, 0.72, 0, 1);
+    /* Evita el rubber-band scroll en iOS cuando el panel se scrollea. */
+    overscroll-behavior: contain;
+    /* Quita el delay de 300ms del tap en mobile. */
+    touch-action: manipulation;
+  }
+
+  @keyframes pc-rp-sheet-up {
+    from {
+      transform: translateY(100%);
+      opacity: 0.6;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  /* Drag-handle: barrita gris arriba del sheet, affordance de "se puede
+   * arrastrar". Funcional via tap-en-X o backdrop por simplicidad. */
+  .pc-rp-drag-handle {
+    flex-shrink: 0;
+    width: 44px;
+    height: 4px;
+    margin: 8px auto 4px auto;
+    background: var(--border-color, #555);
+    border-radius: 2px;
+    opacity: 0.5;
+  }
+
+  /* Header del panel: titulo + boton X bien separados, touch-friendly. */
+  .pc-right-panel-mobile .pc-rp-header {
+    padding: 8px 16px 12px 16px;
+    border-bottom: 1px solid var(--border-color, #333);
+  }
+
+  .pc-right-panel-mobile .pc-rp-header-title {
+    font-size: 14px;
+    letter-spacing: 0.08em;
+    opacity: 1;
+  }
+
+  /* Toggle / close button: 44x44 touch target. */
+  .pc-right-panel-mobile .pc-rp-toggle {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    opacity: 0.85;
+  }
+
+  /* Headers de cada seccion: 44px de alto para tap comodo, padding mas
+   * generoso. La fuente sube a 12px para legibilidad sin agrandar
+   * demasiado. */
+  .pc-right-panel-mobile .pc-rp-section-header {
+    min-height: 44px;
+    height: auto;
+    padding: 10px 16px;
+    font-size: 12px;
+  }
+
+  /* Section body: padding holgado para que los controles internos
+   * (sliders, color pickers, listas) queden con margenes touch-friendly. */
+  .pc-right-panel-mobile .pc-rp-section-body {
+    padding: 14px 16px;
+  }
+
+  /* FAB (panel cerrado en mobile): boton redondo abajo a la derecha. */
+  .pc-rp-fab {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    width: 56px;
+    height: 56px;
+    padding: 0;
+    border: 1px solid var(--border-color, #333);
+    border-radius: 50%;
+    background: var(--bg-tertiary, #262626);
+    color: var(--text-primary, #eaeaea);
+    box-shadow:
+      0 6px 16px rgba(0, 0, 0, 0.4),
+      0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+    cursor: pointer;
+    z-index: 90;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 140ms ease, background 140ms ease;
+    touch-action: manipulation;
+  }
+
+  .pc-rp-fab:hover {
+    background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  }
+
+  .pc-rp-fab:active {
+    transform: scale(0.94);
+  }
+
+  .pc-rp-fab:focus-visible {
+    outline: 2px solid #4aa9ff;
+    outline-offset: 2px;
+  }
+
+  /* En mobile NO renderear la barra colapsada lateral (la del desktop a
+   * 40px), por si el JSX la dejara visible por algun edge case. */
+  .pc-right-panel-collapsed:not(.pc-right-panel-mobile) {
+    display: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pc-right-panel-mobile,
+    .pc-rp-backdrop {
+      animation: none;
+    }
+    .pc-rp-fab {
+      transition: none;
+    }
+    .pc-rp-fab:active {
+      transform: none;
+    }
+  }
+}
+
+/* En desktop el FAB y el backdrop nunca se renderean (el JSX los emite
+ * solo bajo isMobile), pero defendemos por si acaso. */
+@media (min-width: 768px) {
+  .pc-rp-fab,
+  .pc-rp-backdrop,
+  .pc-rp-drag-handle {
+    display: none;
+  }
+}

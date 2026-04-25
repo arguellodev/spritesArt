@@ -1,8 +1,27 @@
 "use no memo";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LuChevronLeft, LuChevronRight, LuChevronDown } from "react-icons/lu";
+import { LuChevronLeft, LuChevronRight, LuChevronDown, LuLayoutPanelLeft, LuX } from "react-icons/lu";
 import "./rightPanel.css";
+
+// Hook minimo para detectar viewport mobile (< 768px). Sirve para decidir
+// si el panel se renderea como sidebar fijo o como bottom-sheet drawer.
+// Usa matchMedia con listener para reaccionar a rotaciones / resize en
+// vez de leer window.innerWidth una sola vez.
+function useIsMobile(maxWidth = 767) {
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia(`(max-width: ${maxWidth}px)`).matches;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia(`(max-width: ${maxWidth}px)`);
+    const onChange = (e) => setIsMobile(e.matches);
+    mql.addEventListener?.("change", onChange);
+    return () => mql.removeEventListener?.("change", onChange);
+  }, [maxWidth]);
+  return isMobile;
+}
 
 const STORAGE_KEY = "pixcalli.rightPanel.v2";
 // La anchura del panel se persiste aparte porque la modifica el módulo de
@@ -88,9 +107,15 @@ function guardarEstado(estado) {
 // El estado persiste en localStorage por key `pixcalli.rightPanel.v2`.
 export function RightPanel({ paneles }) {
   const MODULOS = buildModulos(paneles);
+  const isMobile = useIsMobile();
 
   const [expandido, setExpandido] = useState(() => {
     const saved = cargarEstado();
+    // En mobile el default es CERRADO (no queremos que el drawer tape el
+    // editor al cargar). En desktop preserva la preferencia guardada.
+    if (typeof window !== "undefined" && window.matchMedia?.("(max-width: 767px)").matches) {
+      return false;
+    }
     return saved && typeof saved.expandido === "boolean" ? saved.expandido : true;
   });
   const [secciones, setSecciones] = useState(() => {
@@ -134,7 +159,25 @@ export function RightPanel({ paneles }) {
   const styleAncho =
     anchoPersistido && expandido ? { width: `${anchoPersistido}px` } : undefined;
 
+  // En mobile el panel es un bottom-sheet flotante. Cuando esta cerrado, en
+  // vez de mostrar la tira lateral del desktop, mostramos un FAB en la
+  // esquina inferior derecha para abrirlo. Esto deja la viewport entera
+  // libre para el editor mientras no se necesite el panel.
   if (!expandido) {
+    if (isMobile) {
+      return (
+        <button
+          type="button"
+          className="pc-rp-fab"
+          onClick={() => setExpandido(true)}
+          title="Abrir paneles"
+          aria-label="Abrir paneles"
+          aria-expanded={false}
+        >
+          <LuLayoutPanelLeft size={20} />
+        </button>
+      );
+    }
     return (
       <aside className="pc-right-panel pc-right-panel-collapsed" aria-label="Panel derecho colapsado">
         <button
@@ -166,20 +209,40 @@ export function RightPanel({ paneles }) {
   }
 
   return (
-    <aside className="pc-right-panel" aria-label="Panel derecho" style={styleAncho}>
-      <div className="pc-rp-header">
-        <span className="pc-rp-header-title">Paneles</span>
-        <button
-          type="button"
-          className="pc-rp-toggle"
+    <>
+      {/* Backdrop solo en mobile cuando el drawer esta abierto: cubre el
+          editor para que el tap fuera del panel lo cierre. CSS lo oculta
+          en desktop (display: none arriba de 768px). */}
+      {isMobile && (
+        <div
+          className="pc-rp-backdrop"
           onClick={() => setExpandido(false)}
-          title="Colapsar panel"
-          aria-label="Colapsar panel"
-          aria-expanded={true}
-        >
-          <LuChevronRight size={16} />
-        </button>
-      </div>
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        className={`pc-right-panel ${isMobile ? "pc-right-panel-mobile" : ""}`}
+        aria-label="Panel derecho"
+        style={isMobile ? undefined : styleAncho}
+        role={isMobile ? "dialog" : undefined}
+        aria-modal={isMobile ? "true" : undefined}
+      >
+        {/* Drag handle visual en mobile (no funcional, solo affordance):
+            indica al usuario que el panel se puede arrastrar para cerrar. */}
+        {isMobile && <div className="pc-rp-drag-handle" aria-hidden="true" />}
+        <div className="pc-rp-header">
+          <span className="pc-rp-header-title">Paneles</span>
+          <button
+            type="button"
+            className="pc-rp-toggle"
+            onClick={() => setExpandido(false)}
+            title={isMobile ? "Cerrar" : "Colapsar panel"}
+            aria-label={isMobile ? "Cerrar" : "Colapsar panel"}
+            aria-expanded={true}
+          >
+            {isMobile ? <LuX size={18} /> : <LuChevronRight size={16} />}
+          </button>
+        </div>
       <div className="pc-rp-sections">
         {MODULOS.map((m) => {
           const abierto = !!secciones[m.id];
@@ -215,5 +278,6 @@ export function RightPanel({ paneles }) {
         })}
       </div>
     </aside>
+    </>
   );
 }

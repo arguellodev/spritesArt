@@ -2833,3 +2833,54 @@ margin-right: 20px;
     transform: none;
   }
 }
+
+
+/* ============================================================
+ * MOBILE / TABLET (<= 767px) — touch-friendly animation bar
+ *
+ * Las celdas del timeline (.timeline-frame, .frame-number) se quedan en
+ * su tamano original porque expandirlas a 44px deformaria la grilla y
+ * obligaria a un scroll horizontal masivo. En su lugar el usuario puede
+ * tocar la celda directamente — un tap sigue siendo viable a 28px y
+ * pinch-zoom queda disponible si necesita precision.
+ *
+ * Lo que SI escalamos a 44x44: los botones discretos del toolbar
+ * (playback, settings, frame controls). Tienen identidad propia y no
+ * forman parte de una grilla densa; la regla touch-target de 44px se
+ * aplica con coste cero porque la animation-bar no es densa.
+ * ============================================================ */
+
+@media (max-width: 767px) {
+  .control-btn,
+  .play-btn,
+  .setting-btn,
+  .frame-control-btn {
+    min-width: 44px;
+    min-height: 44px;
+    width: auto;
+    height: auto;
+    /* Quita el delay de 300ms que iOS/Android aplican por default. */
+    touch-action: manipulation;
+  }
+
+  /* Spacing entre botones touch-friendly: 8px minimo segun guidelines. */
+  .toolbar-group {
+    gap: 8px;
+  }
+
+  /* Selects necesitan altura suficiente para que el OS-native picker
+   * no quede comprimido al desplegarse. */
+  .speed-select-overlay,
+  .frame-rate-select {
+    min-height: 44px;
+    font-size: 14px;
+  }
+
+  /* Loop-range-chip: el boton X tiene 18px en desktop. En mobile
+   * lo subimos a 28px para tap comodo sin agrandar el chip entero. */
+  .loop-range-chip__close {
+    width: 28px;
+    height: 28px;
+    font-size: 13px;
+  }
+}

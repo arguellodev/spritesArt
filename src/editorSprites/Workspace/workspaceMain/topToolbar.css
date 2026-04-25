@@ -191,3 +191,54 @@
     display: none;
   }
 }
+
+
+/* ============================================================
+ * MOBILE / TABLET (<= 767px) — top toolbar
+ *
+ * En mobile el toolbar es la fuente principal de comandos: archivos,
+ * edicion, vista, etc. Necesita ser scrollable horizontalmente para no
+ * comerse el ancho del editor, y los items necesitan tap targets mas
+ * grandes que los 30px del desktop.
+ * ============================================================ */
+@media (max-width: 767px) {
+  .topToolbar-container {
+    /* Scroll horizontal para que los menus dropdown no se trunquen y
+     * el usuario pueda alcanzarlos todos sin reordenar nada. */
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    /* Esconde la barra de scroll horizontal (UX mas limpio); el gesto
+     * sigue funcionando con un swipe. */
+    scrollbar-width: none;
+  }
+  .topToolbar-container::-webkit-scrollbar {
+    display: none;
+  }
+
+  .topToolbar-left {
+    flex-wrap: nowrap;
+  }
+
+  .dropdown-trigger {
+    min-height: 44px;
+    padding: 8px 14px;
+    font-size: 14px;
+    touch-action: manipulation;
+  }
+
+  /* Items del dropdown: 44px de alto para que se puedan tap-ear sin
+   * acertar a un target de 24px. Padding mas generoso en horizontal. */
+  .dropdown-item {
+    min-height: 44px;
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+
+  /* Dropdown menu: ancho minimo razonable y limite de viewport. */
+  .dropdown-menu {
+    min-width: 200px;
+    max-width: 90vw;
+  }
+}
