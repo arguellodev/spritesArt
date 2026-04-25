@@ -94,6 +94,7 @@ export function renderFramesTimeline(props) {
       setAnimationTags={props.setAnimationTags}
       handlePlayTag={props.handlePlayTag}
       playerApiRef={props.playerApiRef}
+      setLoopEnabled={props.setLoopEnabled}
     />
   );
 }

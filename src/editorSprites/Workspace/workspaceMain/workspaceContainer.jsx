@@ -10519,6 +10519,7 @@ const cutSelection = useCallback(() => {
         setAnimationTags,
         handlePlayTag,
         playerApiRef: playAnimationRef,
+        setLoopEnabled,
       }),
     [
       // Mismas deps que MemoizedLayerAnimation: ambos builders consumen el
@@ -10543,6 +10544,7 @@ const cutSelection = useCallback(() => {
       onionSkinEnabled,
       onionSkinSettings,
       animationTags,
+      setLoopEnabled,
     ]
   );
 
