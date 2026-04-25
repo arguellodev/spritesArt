@@ -10271,11 +10271,20 @@ const cutSelection = useCallback(() => {
     const mode = tag.direction === 'reverse' ? 'reverse'
                : tag.direction === 'pingpong' || tag.direction === 'pingpong-reverse' ? 'pingpong'
                : 'forward';
-    api.setFrameRange?.({ start: tag.from, end: tag.to });
+    // El reproductor (useAnimationPlayer) usa INDICES 0-based; los tags
+    // guardan FRAME NUMBERS 1-based. Convertir aqui o el rango y el frame
+    // de arranque caen un frame mas adelante de lo deseado y, peor, salen
+    // del rango cuando tag.to == frameCount (clamp lo deja en lastIndex).
+    const startIdx = tag.from - 1;
+    const endIdx   = tag.to   - 1;
+    // Asegurar bucle ON: con loop desactivado el reproductor frena al final
+    // del primer ciclo y "no funciona" desde la perspectiva del usuario.
+    setLoopEnabled(true);
+    api.setFrameRange?.({ start: startIdx, end: endIdx });
     api.setPlaybackMode?.(mode);
-    api.setFrame?.(mode === 'reverse' ? tag.to : tag.from);
+    api.setFrame?.(mode === 'reverse' ? endIdx : startIdx);
     api.play?.();
-  }, []);
+  }, [setLoopEnabled]);
 
   const MemoizedLayerAnimation = useMemo(
     () =>

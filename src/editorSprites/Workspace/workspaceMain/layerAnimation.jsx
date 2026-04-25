@@ -431,10 +431,15 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
         if (!selRange) return;
         const api = playerApiRef?.current;
         if (!api) return;
+        // Conversion frameNumber (1-based) -> index (0-based) que espera el
+        // reproductor. Sin esto el rango queda desplazado y el play arranca
+        // fuera del rango deseado.
+        const startIdx = selRange.from - 1;
+        const endIdx   = selRange.to   - 1;
         setLoopEnabled?.(true);
-        api.setFrameRange?.({ start: selRange.from, end: selRange.to });
+        api.setFrameRange?.({ start: startIdx, end: endIdx });
         api.setPlaybackMode?.('forward');
-        api.setFrame?.(selRange.from);
+        api.setFrame?.(startIdx);
         api.play?.();
         handleCloseMenu();
       }
