@@ -987,8 +987,13 @@ useEffect(() => {
 
 // Medir el ancho real de la primera celda del header tras el layout.
 // Se re-mide cuando cambia el numero de frames (puede afectar el flex/grid).
+// La clase real del DOM es `.frame-number` (ver FrameNumberCell en
+// layerRow.jsx). Antes el selector era `.frame-number-cell` (clase
+// inexistente) → querySelector devolvia null, headerCellWidth quedaba en
+// 28px (default del state), y TagBand pintaba bandas desplazadas y
+// comprimidas porque el cell real es 50px (ver --frame-cell-width).
 useLayoutEffect(() => {
-  const el = headerFramesRef.current?.querySelector('.frame-number-cell');
+  const el = headerFramesRef.current?.querySelector('.frame-number');
   if (el) {
     const rect = el.getBoundingClientRect();
     if (rect.width > 0) setHeaderCellWidth(rect.width);
@@ -1018,6 +1023,15 @@ function handleHeaderFrameSelection(frameNumber, event) {
 }
 
 function handleHeaderFrameMouseDown(frameNumber, event) {
+  // Right-click sobre un frame ya seleccionado: NO tocar la seleccion. El
+  // contextmenu (onContextMenu del headerHandlersRef) operara sobre todos
+  // los frames seleccionados. Antes esta rama caia en el `else` y
+  // reseteaba la seleccion a [frameNumber], descartando el resto.
+  if (event.button === 2 && selectedFrames.includes(frameNumber)) {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    return;
+  }
   clearCurrentSelection();
   const { ctrlKey, metaKey, shiftKey } = event;
   const isCtrlOrCmd = ctrlKey || metaKey;
