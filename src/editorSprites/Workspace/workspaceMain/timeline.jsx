@@ -34,7 +34,10 @@ import {
   LuDelete,
   LuTrash,
   LuEraser,
-  
+  LuMonitor,
+  LuPalette,
+  LuPencil,
+  LuTag,
 } from "react-icons/lu";
 import { BiSolidLayerPlus } from "react-icons/bi";
 import { createTag, addTag, removeTag, updateTag, findOverlappingTag } from '../animation/animationTags';
@@ -105,8 +108,12 @@ const FramesTimeline = ({
   // reproductor target ('main' | 'mini'). Centraliza setLoopEnabled +
   // loopInfo + setFrameRange para que ambos chips queden sincronizados.
   handlePlayRange,
+  // playerApiRef y setLoopEnabled se reciben por compatibilidad con el
+  // wrapper memoized pero ya no se consumen aqui directamente — handlePlayRange
+  // los usa internamente. Underscore para que ESLint los tolere.
+  // eslint-disable-next-line no-unused-vars
   playerApiRef,
-  // Loop: activar/desactivar bucle de reproducción (Task 3 lift, Task 6 consume)
+  // eslint-disable-next-line no-unused-vars
   setLoopEnabled,
 }) => {
 
@@ -456,7 +463,7 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
         : conflictTag
           ? `Crear tag · choca con «${conflictTag.name}»`
           : `Crear tag · ${rangeCount} frame${rangeCount === 1 ? '' : 's'} (${selRange.from}–${selRange.to})`,
-      icon: '+',
+      icon: <LuTag size={14} />,
       disabled: !selRange || !!conflictTag,
       type: 'text',
       placeholder: 'Nombre del tag (p. ej. walk)',
@@ -484,7 +491,7 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
       label: selRange && selectedFrames.length >= 2
         ? `Reproducir aqui ${rangeCount} frames (${selRange.from}–${selRange.to})`
         : 'Reproducir rango aqui',
-      icon: '↻',
+      icon: <LuRotateCcw size={14} />,
       disabled: !(selRange && selectedFrames.length >= 2),
       onClick: () => {
         if (!selRange) return;
@@ -496,7 +503,7 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
       label: selRange && selectedFrames.length >= 2
         ? `Reproducir en panel ${rangeCount} frames (${selRange.from}–${selRange.to})`
         : 'Reproducir rango en panel',
-      icon: '🪟',
+      icon: <LuMonitor size={14} />,
       disabled: !(selRange && selectedFrames.length >= 2),
       onClick: () => {
         if (!selRange) return;
@@ -507,7 +514,7 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
     ...tagsHere.flatMap(tag => [
       {
         label: `Reproducir aqui «${tag.name}»`,
-        icon: '▶',
+        icon: <LuPlay size={14} />,
         onClick: () => {
           handlePlayTag?.(tag, 'main');
           setContextMenuHeader(prev => ({ ...prev, isVisible: false }));
@@ -515,7 +522,7 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
       },
       {
         label: `Reproducir en panel «${tag.name}»`,
-        icon: '🪟',
+        icon: <LuMonitor size={14} />,
         onClick: () => {
           handlePlayTag?.(tag, 'mini');
           setContextMenuHeader(prev => ({ ...prev, isVisible: false }));
@@ -525,7 +532,7 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
         // Renombrar: getValue = nombre actual (lo trae al input al activar);
         // setValue valida no-vacio y aplica updateTag inmutablemente.
         label: `Renombrar tag «${tag.name}»`,
-        icon: '✎',
+        icon: <LuPencil size={14} />,
         type: 'text',
         placeholder: 'Nuevo nombre',
         helperText: `Frames: ${tag.from} → ${tag.to}`,
@@ -541,7 +548,7 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
         // actualiza el tag por id (inmutable). El menu se cierra al confirmar
         // porque CustomContextMenu desactiva el input tras setValue.
         label: `Color del tag «${tag.name}»`,
-        icon: '🎨',
+        icon: <LuPalette size={14} />,
         type: 'color',
         getValue: () => tag.color || '#4a90e2',
         setValue: (color) => {
@@ -550,7 +557,7 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
       },
       {
         label: `Eliminar tag «${tag.name}»`,
-        icon: '×',
+        icon: <LuX size={14} />,
         danger: true,
         onClick: () => {
           setAnimationTags?.(removeTag(animationTags, tag.id));

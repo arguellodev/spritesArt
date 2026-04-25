@@ -1,7 +1,7 @@
 import { useRef, forwardRef, useImperativeHandle } from "react";
 import "./playAnimation.css";
 import { CiStop1 } from "react-icons/ci";
-import { LuPlay, LuPause, LuRotateCcw } from "react-icons/lu";
+import { LuPlay, LuPause, LuRotateCcw, LuX, LuLogOut } from "react-icons/lu";
 
 import { useAnimationPlayer, formatPlayerTime } from "./useAnimationPlayer";
 
@@ -121,7 +121,7 @@ const PlayAnimation = forwardRef(function PlayAnimation(
 
         {/* Chip de bucle activo: solo cuando este reproductor (mini) es el
             target. Muestra el nombre del tag si proviene de un tag, sino el
-            rango. El boton ✕ pausa el reproductor y restablece frameRange a
+            rango. El boton X pausa el reproductor y restablece frameRange a
             full-range via onClearLoop('mini'). */}
         {loopInfo?.target === 'mini' && (
           <div
@@ -133,7 +133,9 @@ const PlayAnimation = forwardRef(function PlayAnimation(
                 : `Bucle: frames ${loopInfo.from}–${loopInfo.to}`
             }
           >
-            <span className="player-loop-chip__icon">↻</span>
+            <span className="player-loop-chip__icon" aria-hidden="true">
+              <LuRotateCcw size={12} />
+            </span>
             <span className="player-loop-chip__label">
               {loopInfo.tagName ? `«${loopInfo.tagName}»` : 'Bucle'}
             </span>
@@ -147,7 +149,7 @@ const PlayAnimation = forwardRef(function PlayAnimation(
               aria-label="Salir del bucle"
               title="Salir del bucle"
             >
-              ✕
+              <LuX size={12} />
             </button>
           </div>
         )}
@@ -182,6 +184,23 @@ const PlayAnimation = forwardRef(function PlayAnimation(
             >
               <LuRotateCcw />
             </button>
+
+            {/* Boton "Salir del bucle": siempre disponible cuando hay un
+                bucle activo en este reproductor. Complementa el chip de
+                arriba — el chip transmite el contexto (nombre/rango), este
+                boton da una accion accesible desde la barra de controles
+                aun cuando el chip esta tapado por otra UI o el usuario no
+                lo encontro. */}
+            {loopInfo?.target === 'mini' && (
+              <button
+                className="control-btn-overlay exit-loop"
+                onClick={() => onClearLoop?.('mini')}
+                title="Salir del bucle"
+                aria-label="Salir del bucle"
+              >
+                <LuLogOut />
+              </button>
+            )}
 
             <div className="speed-control-overlay">
               <select

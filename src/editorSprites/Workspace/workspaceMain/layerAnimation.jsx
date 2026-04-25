@@ -37,7 +37,10 @@ import {
   LuDelete,
   LuTrash,
   LuEraser,
-
+  LuMonitor,
+  LuPalette,
+  LuPencil,
+  LuTag,
 } from "react-icons/lu";
 import { BiSolidLayerPlus } from "react-icons/bi";
 import { createTag, addTag, removeTag, updateTag, findOverlappingTag } from '../animation/animationTags';
@@ -431,7 +434,7 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
           : conflictTag
             ? `Crear tag · choca con «${conflictTag.name}»`
             : `Crear tag · ${rc} frame${rc === 1 ? '' : 's'} (${selRange.from}–${selRange.to})`,
-        icon: '+',
+        icon: <LuTag size={14} />,
         disabled: !selRange || !!conflictTag,
         type: 'text',
         placeholder: 'Nombre del tag (p. ej. walk)',
@@ -458,7 +461,7 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
       label: selRange && selectedFrames.length >= 2
         ? `Reproducir aqui ${selRange.to - selRange.from + 1} frames (${selRange.from}–${selRange.to})`
         : 'Reproducir rango aqui',
-      icon: '↻',
+      icon: <LuRotateCcw size={14} />,
       disabled: !(selRange && selectedFrames.length >= 2),
       onClick: () => {
         if (!selRange) return;
@@ -470,7 +473,7 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
       label: selRange && selectedFrames.length >= 2
         ? `Reproducir en panel ${selRange.to - selRange.from + 1} frames (${selRange.from}–${selRange.to})`
         : 'Reproducir rango en panel',
-      icon: '🪟',
+      icon: <LuMonitor size={14} />,
       disabled: !(selRange && selectedFrames.length >= 2),
       onClick: () => {
         if (!selRange) return;
@@ -481,17 +484,17 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
     ...tagsAtFocus.flatMap(tag => [
       {
         label: `Reproducir aqui «${tag.name}»`,
-        icon: '▶',
+        icon: <LuPlay size={14} />,
         onClick: () => { handlePlayTag?.(tag, 'main'); handleCloseMenu(); }
       },
       {
         label: `Reproducir en panel «${tag.name}»`,
-        icon: '🪟',
+        icon: <LuMonitor size={14} />,
         onClick: () => { handlePlayTag?.(tag, 'mini'); handleCloseMenu(); }
       },
       {
         label: `Renombrar tag «${tag.name}»`,
-        icon: '✎',
+        icon: <LuPencil size={14} />,
         type: 'text',
         placeholder: 'Nuevo nombre',
         helperText: `Frames: ${tag.from} → ${tag.to}`,
@@ -505,7 +508,7 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
       {
         // Picker de color: pre-carga el color actual; confirm aplica updateTag.
         label: `Color del tag «${tag.name}»`,
-        icon: '🎨',
+        icon: <LuPalette size={14} />,
         type: 'color',
         getValue: () => tag.color || '#4a90e2',
         setValue: (color) => {
@@ -514,7 +517,7 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
       },
       {
         label: `Eliminar tag «${tag.name}»`,
-        icon: '×',
+        icon: <LuX size={14} />,
         danger: true,
         onClick: () => {
           setAnimationTags?.(removeTag(animationTags, tag.id));
@@ -1377,7 +1380,7 @@ const renderLayerWithTimeline = (layer) => {
                   title="Salir del bucle"
                   aria-label="Salir del bucle"
                 >
-                  ✕
+                  <LuX size={11} />
                 </button>
               </div>
             )}
