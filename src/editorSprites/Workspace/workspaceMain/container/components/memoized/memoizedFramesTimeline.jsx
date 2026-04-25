@@ -90,6 +90,10 @@ export function renderFramesTimeline(props) {
       setIsPlaying={props.setIsPlaying}
       animationTickFrame={props.animationTickFrame}
       eyeDropperColor={props.eyeDropperColor}
+      animationTags={props.animationTags}
+      setAnimationTags={props.setAnimationTags}
+      handlePlayTag={props.handlePlayTag}
+      playerApiRef={props.playerApiRef}
     />
   );
 }

@@ -118,6 +118,13 @@ const LayerAnimation = ({
   loopEnabled,
   setLoopEnabled,
 
+  // Tags + API imperativo del player (para reproducir tags y rangos ad-hoc en
+  // las acciones de los menus contextuales y de TagBand)
+  animationTags = [],
+  setAnimationTags,
+  handlePlayTag,
+  playerApiRef,
+
   // Onion frames config (pasada a ConfigOnionSkin modal)
   onionFramesConfig,
   setOnionFramesConfig,

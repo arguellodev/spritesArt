@@ -10365,6 +10365,10 @@ const cutSelection = useCallback(() => {
         clearTintCache,
         isCollapsed: isLayerAnimationCollapsed,
         onToggleCollapse: toggleLayerAnimationCollapse,
+        animationTags,
+        setAnimationTags,
+        handlePlayTag,
+        playerApiRef: playAnimationRef,
       }),
     [
       // `frozenProps` ya cubre currentFrame/activeLayerId/frameCount/layers/frames
@@ -10396,6 +10400,7 @@ const cutSelection = useCallback(() => {
       onionSkinSettings,
       isLayerAnimationCollapsed,
       toggleLayerAnimationCollapse,
+      animationTags,
     ]
   );
 
@@ -10488,6 +10493,10 @@ const cutSelection = useCallback(() => {
         // en su header-row para iluminar la celda activa.
         animationTickFrame,
         eyeDropperColor,
+        animationTags,
+        setAnimationTags,
+        handlePlayTag,
+        playerApiRef: playAnimationRef,
       }),
     [
       // Mismas deps que MemoizedLayerAnimation: ambos builders consumen el
@@ -10511,6 +10520,7 @@ const cutSelection = useCallback(() => {
       initialWidth,
       onionSkinEnabled,
       onionSkinSettings,
+      animationTags,
     ]
   );
 

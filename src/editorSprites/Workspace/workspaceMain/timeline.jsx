@@ -94,6 +94,12 @@ const FramesTimeline = ({
   // Playback state (del padre): para iluminar el frame en animación.
   isPlaying,
   animationTickFrame,  // frameNumber que el motor de animación está mostrando
+
+  // Tags + API imperativo del player (para acciones de menu contextual y TagBand)
+  animationTags = [],
+  setAnimationTags,
+  handlePlayTag,
+  playerApiRef,
 }) => {
 
   // `frameNumbers` memoizado sobre `framesResume.frames`. Nota: con Immer,
