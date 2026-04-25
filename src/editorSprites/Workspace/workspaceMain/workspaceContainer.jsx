@@ -704,8 +704,15 @@ useKeybindingsListener(keybindingsRegistry);
         });
       }
     }
+
+    // meta.animation.loop: si el proyecto lo trae, restaurarlo. Default true
+    // para compat con .pixcalli antiguos (donde la clave existia hardcoded
+    // y se ignoraba en runtime hasta esta feature).
+    const loopFromMeta = projectData?.animation?.loop;
+    if (typeof loopFromMeta === 'boolean') setLoopEnabled(loopFromMeta);
   }, [restoreFromProjectData, setZoom, setPanOffset,
-      setForegroundColor, setBackgroundColor, setFillColor, setBorderColor, setToolParameters]);
+      setForegroundColor, setBackgroundColor, setFillColor, setBorderColor, setToolParameters,
+      setLoopEnabled]);
 
   // --- Importar .aseprite/.ase ---
   // Abre file picker, parsea con loadAsepriteFile y aplica el documento al
@@ -11730,6 +11737,7 @@ handleRotSprite(rotationAngleSelection, true);
             customPalettes={customPalettes}
             animationTags={animationTags}
             slices={slices}
+            loopEnabled={loopEnabled}
             // Tilesets → dataURL por tile (canvases DOM no serializables directo).
             tilesets={tileset ? serializeTileset(tileset) : null}
             // Metadata + bitmap de cada capa codificado como dataURL (PNG).

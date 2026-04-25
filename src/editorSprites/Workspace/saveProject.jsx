@@ -1,13 +1,14 @@
 import React, { useState, useCallback, useRef } from 'react';
 import './saveProject.css';
 
-const SaveProject = ({ 
-  frames, 
+const SaveProject = ({
+  frames,
   currentFrame,
   framesResume,
   onProjectLoaded,
   projectMetadata = {},
-  className = ""
+  className = "",
+  loopEnabled = true,
 }) => {
   const [projectName, setProjectName] = useState('mi-proyecto');
   const [isLoading, setIsLoading] = useState(false);
@@ -93,7 +94,10 @@ const SaveProject = ({
         },
         
         framesResume: framesResume ? JSON.parse(JSON.stringify(framesResume)) : null,
-        
+
+        // Configuración de animación — se persiste para restaurar al reabrir.
+        animation: { loop: loopEnabled },
+
         metadata: {
           title: projectName,
           author: projectMetadata.author || "",
@@ -135,7 +139,7 @@ const SaveProject = ({
       console.error('Error serializando proyecto:', error);
       throw new Error(`Error al preparar el proyecto: ${error.message}`);
     }
-  }, [frames, currentFrame, framesResume, projectName, projectMetadata, includeCanvas, compressionLevel, additionalNotes, serializeCanvas]);
+  }, [frames, currentFrame, framesResume, projectName, projectMetadata, includeCanvas, compressionLevel, additionalNotes, serializeCanvas, loopEnabled]);
 
   // ✅ Guardar proyecto
   const handleSave = useCallback(async () => {
