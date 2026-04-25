@@ -40,7 +40,7 @@ import {
 
 } from "react-icons/lu";
 import { BiSolidLayerPlus } from "react-icons/bi";
-import { createTag, addTag, removeTag } from '../animation/animationTags';
+import { createTag, addTag, removeTag, updateTag } from '../animation/animationTags';
 
 
 
@@ -430,6 +430,16 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
         label: `Reproducir tag «${tag.name}»`,
         icon: '▶',
         onClick: () => { handlePlayTag?.(tag); handleCloseMenu(); }
+      },
+      {
+        // Picker de color: pre-carga el color actual; confirm aplica updateTag.
+        label: `Color del tag «${tag.name}»`,
+        icon: '🎨',
+        type: 'color',
+        getValue: () => tag.color || '#4a90e2',
+        setValue: (color) => {
+          setAnimationTags?.(updateTag(animationTags, tag.id, { color }));
+        },
       },
       {
         label: `Eliminar tag «${tag.name}»`,

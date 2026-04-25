@@ -37,7 +37,7 @@ import {
   
 } from "react-icons/lu";
 import { BiSolidLayerPlus } from "react-icons/bi";
-import { createTag, addTag, removeTag } from '../animation/animationTags';
+import { createTag, addTag, removeTag, updateTag } from '../animation/animationTags';
 import TagBand from '../animation/TagBand';
 
 // Destructura minimal: solo las props realmente consumidas. El wrapper
@@ -478,6 +478,18 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
           handlePlayTag?.(tag);
           setContextMenuHeader(prev => ({ ...prev, isVisible: false }));
         }
+      },
+      {
+        // Picker de color: pre-carga el color actual del tag, en confirm
+        // actualiza el tag por id (inmutable). El menu se cierra al confirmar
+        // porque CustomContextMenu desactiva el input tras setValue.
+        label: `Color del tag «${tag.name}»`,
+        icon: '🎨',
+        type: 'color',
+        getValue: () => tag.color || '#4a90e2',
+        setValue: (color) => {
+          setAnimationTags?.(updateTag(animationTags, tag.id, { color }));
+        },
       },
       {
         label: `Eliminar tag «${tag.name}»`,

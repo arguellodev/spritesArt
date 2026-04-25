@@ -1,7 +1,16 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import './customContextMenu.css';
 
-const CustomContextMenu = ({ 
+// Paleta de colores para tags estilo Aseprite. Se usa cuando una accion del
+// menu declara `type: 'color'`. Las swatches se complementan con un
+// <input type="color"> nativo para permitir colores arbitrarios.
+const ASEPRITE_TAG_COLORS = [
+  '#FF1F1F', '#FF851B', '#FBA919', '#FFD700',
+  '#2ECC40', '#1FE5E5', '#1F8AFF', '#9D38FF',
+  '#FF6B9D', '#A0522D', '#7F8C8D', '#FFFFFF',
+];
+
+const CustomContextMenu = ({
   isVisible, 
   position, 
   onClose, 
@@ -69,11 +78,12 @@ const calculateMenuPosition = useCallback(() => {
     }
   }, [activeInput, calculateMenuPosition]);
 
-  // Enfocar input cuando se activa
+  // Enfocar input cuando se activa. select() solo en text/number; en slider y
+  // color es no-op o lanza segun el navegador, asi que lo evitamos.
   useEffect(() => {
     if (activeInput && inputRef.current) {
       inputRef.current.focus();
-      if (activeInput.type !== 'slider') {
+      if (activeInput.type !== 'slider' && activeInput.type !== 'color') {
         inputRef.current.select();
       }
     }
@@ -104,6 +114,11 @@ const calculateMenuPosition = useCallback(() => {
       }
     } else if (activeInput.type === 'text') {
       if (finalValue.trim() === '') {
+        finalValue = originalValue;
+      }
+    } else if (activeInput.type === 'color') {
+      // Color: aceptar tal cual si parece hex valido, sino restaurar.
+      if (!/^#[0-9a-fA-F]{6}$/.test(String(finalValue).trim())) {
         finalValue = originalValue;
       }
     }
@@ -215,7 +230,7 @@ const calculateMenuPosition = useCallback(() => {
     if (action.disabled) return;
 
     // Si es un input, activarlo
-    if (action.type && ['text', 'number', 'slider'].includes(action.type)) {
+    if (action.type && ['text', 'number', 'slider', 'color'].includes(action.type)) {
       activateInput(action);
       return;
     }
@@ -294,7 +309,7 @@ const calculateMenuPosition = useCallback(() => {
           
           {/* Items del menú */}
           {actions.map((action, index) => {
-            const isInputType = action.type && ['text', 'number', 'slider'].includes(action.type);
+            const isInputType = action.type && ['text', 'number', 'slider', 'color'].includes(action.type);
             const isActiveInput = activeInput && activeInput === action;
             
             return (
@@ -347,6 +362,37 @@ const calculateMenuPosition = useCallback(() => {
                               className="context-menu-slider-input"
                             />
                           </div>
+                        </div>
+                      ) : activeInput.type === 'color' ? (
+                        // Picker de color: 12 swatches Aseprite + input nativo para
+                        // colores arbitrarios. Click en swatch actualiza el input
+                        // value sin confirmar; el usuario presiona ✓ o Enter.
+                        <div className="context-menu-color-container">
+                          <div className="context-menu-color-swatches">
+                            {ASEPRITE_TAG_COLORS.map(c => (
+                              <button
+                                key={c}
+                                type="button"
+                                className={`context-menu-color-swatch ${
+                                  String(inputValue).toLowerCase() === c.toLowerCase()
+                                    ? 'selected'
+                                    : ''
+                                }`}
+                                style={{ background: c }}
+                                onClick={() => setInputValue(c)}
+                                title={c}
+                                aria-label={`Color ${c}`}
+                              />
+                            ))}
+                          </div>
+                          <input
+                            ref={inputRef}
+                            type="color"
+                            value={/^#[0-9a-fA-F]{6}$/.test(String(inputValue)) ? inputValue : '#4a90e2'}
+                            onChange={handleInputChange}
+                            className="context-menu-color-picker"
+                            title="Color personalizado"
+                          />
                         </div>
                       ) : (
                         <input

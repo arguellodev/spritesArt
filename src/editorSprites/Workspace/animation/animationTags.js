@@ -1,8 +1,16 @@
 // animationTags.js — tags nombrados sobre rangos de frames.
 // Compatible con Aseprite: cada tag tiene nombre, rango, dirección y color.
 
-let _idCounter = 0;
-const newId = () => `tag_${Date.now().toString(36)}_${(_idCounter++).toString(36)}`;
+// React Compiler corre con compilationMode:'all' (vite.config.js); la directiva
+// le dice que NO compile este modulo. Sin ella, una mutacion top-level
+// (let _idCounter++) hacia que el compiler envolviera `createTag` con
+// semantica de hook y reventaba con "Invalid hook call" al invocarlo desde
+// un onClick de menu contextual (i.e. fuera del render).
+"use no memo";
+
+// ID generator puro: sin estado mutable de modulo. Suficiente entropia para
+// no colisionar dentro de un mismo proceso (Date.now ms + 6 chars random).
+const newId = () => `tag_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 /**
  * @typedef {object} AnimationTag
