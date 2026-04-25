@@ -705,11 +705,10 @@ useKeybindingsListener(keybindingsRegistry);
       }
     }
 
-    // meta.animation.loop: si el proyecto lo trae, restaurarlo. Default true
-    // para compat con .pixcalli antiguos (donde la clave existia hardcoded
-    // y se ignoraba en runtime hasta esta feature).
-    const loopFromMeta = projectData?.animation?.loop;
-    if (typeof loopFromMeta === 'boolean') setLoopEnabled(loopFromMeta);
+    // animation.loop: si el proyecto lo trae, restaurarlo. Default true para
+    // compat con .pixcalli antiguos sin la clave (el typeof guard la skip-ea).
+    const loopFromProject = projectData?.animation?.loop;
+    if (typeof loopFromProject === 'boolean') setLoopEnabled(loopFromProject);
   }, [restoreFromProjectData, setZoom, setPanOffset,
       setForegroundColor, setBackgroundColor, setFillColor, setBorderColor, setToolParameters,
       setLoopEnabled]);
@@ -772,7 +771,7 @@ useKeybindingsListener(keybindingsRegistry);
             activeLayerId: pix.layers[0]?.id ?? null,
             currentFrame: framesResumeShape.computed.frameSequence[0] ?? 1,
           },
-          animation: { defaultFrameDuration: 100, frameRate: 10, loop: true },
+          animation: { defaultFrameDuration: 100, frameRate: 10 },
           framesResume: framesResumeShape,
           layers: pix.layers.map((l) => ({
             id: l.id,
@@ -937,7 +936,7 @@ useKeybindingsListener(keybindingsRegistry);
         activeLayerId,
         currentFrame,
       },
-      animation: { defaultFrameDuration: 100, frameRate: 10, loop: true },
+      animation: { defaultFrameDuration: 100, frameRate: 10 },
       framesResume: framesResumeShape,
       layers,
       canvases: {},
