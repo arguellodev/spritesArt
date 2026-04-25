@@ -175,6 +175,8 @@ const {
   setPlaybackSpeed,
   play,
   pause,
+  frameRange,
+  setFrameRange,
 } = useAnimationPlayer({
   frames,
   externalCanvasRef,
@@ -191,6 +193,14 @@ const {
   onFrameChange,
   syncedFrameNumber: currentFrame,
 });
+
+// Chip de "Bucle: A–B": visible cuando el rango activo del reproductor no
+// cubre el total de frames disponibles. Convertimos los indices del player
+// (0-based dentro de frameKeys) a frame-numbers visibles (1-based).
+const totalFrames = frameNumbers.length;
+const isFullRange = frameRange.start === 0 && frameRange.end === Math.max(0, totalFrames - 1);
+const rangeFromFrame = frameNumbers[frameRange.start];
+const rangeToFrame = frameNumbers[frameRange.end];
 
 // El play del panel delega en el motor. `handlePause` además sincroniza el
 // frame activo del editor con donde quedó la reproducción — es una
@@ -1253,6 +1263,20 @@ const renderLayerWithTimeline = (layer) => {
               <option value={2}>2x</option>
               <option value={4}>4x</option>
             </select>
+            {!isFullRange && rangeFromFrame != null && rangeToFrame != null && (
+              <div className="loop-range-chip" title={`Bucle activo: frames ${rangeFromFrame}–${rangeToFrame}`}>
+                <span className="loop-range-chip__label">Bucle</span>
+                <span className="loop-range-chip__value">{rangeFromFrame}–{rangeToFrame}</span>
+                <button
+                  className="loop-range-chip__close"
+                  onClick={() => setFrameRange({ start: 0, end: Math.max(0, totalFrames - 1) })}
+                  title="Reproducir todo el rango"
+                  aria-label="Limpiar rango de bucle"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="toolbar-divider" aria-hidden />
