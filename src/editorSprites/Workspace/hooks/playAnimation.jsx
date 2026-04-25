@@ -21,6 +21,9 @@ const PlayAnimation = forwardRef(function PlayAnimation(
     displaySize = 256,
     isPlaying: isPlayingProp,
     setIsPlaying: setIsPlayingProp,
+    loopEnabled,
+    // eslint-disable-next-line no-unused-vars
+    setLoopEnabled,
   },
   ref
 ) {
@@ -37,6 +40,7 @@ const PlayAnimation = forwardRef(function PlayAnimation(
     displaySize,
     isPlaying: isPlayingProp,
     setIsPlaying: setIsPlayingProp,
+    loopEnabled,
     onTimeUpdate,
     onFrameChange,
   });

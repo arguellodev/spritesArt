@@ -40,6 +40,7 @@ import {
 
 } from "react-icons/lu";
 import { BiSolidLayerPlus } from "react-icons/bi";
+import { createTag, addTag, removeTag } from '../animation/animationTags';
 
 
 
@@ -114,6 +115,17 @@ const LayerAnimation = ({
   isPlaying,
   setIsPlaying,
 
+  // Bucle global (compartido con PlayAnimation, lift-eado al workspaceContainer)
+  loopEnabled,
+  setLoopEnabled,
+
+  // Tags + API imperativo del player (para reproducir tags y rangos ad-hoc en
+  // las acciones de los menus contextuales y de TagBand)
+  animationTags = [],
+  setAnimationTags,
+  handlePlayTag,
+  playerApiRef,
+
   // Onion frames config (pasada a ConfigOnionSkin modal)
   onionFramesConfig,
   setOnionFramesConfig,
@@ -163,6 +175,8 @@ const {
   setPlaybackSpeed,
   play,
   pause,
+  frameRange,
+  setFrameRange,
 } = useAnimationPlayer({
   frames,
   externalCanvasRef,
@@ -174,10 +188,19 @@ const {
   displaySize,
   isPlaying,
   setIsPlaying,
+  loopEnabled,
   onTimeUpdate,
   onFrameChange,
   syncedFrameNumber: currentFrame,
 });
+
+// Chip de "Bucle: A–B": visible cuando el rango activo del reproductor no
+// cubre el total de frames disponibles. Convertimos los indices del player
+// (0-based dentro de frameKeys) a frame-numbers visibles (1-based).
+const totalFrames = frameNumbers.length;
+const isFullRange = frameRange.start === 0 && frameRange.end === Math.max(0, totalFrames - 1);
+const rangeFromFrame = frameNumbers[frameRange.start];
+const rangeToFrame = frameNumbers[frameRange.end];
 
 // El play del panel delega en el motor. `handlePause` además sincroniza el
 // frame activo del editor con donde quedó la reproducción — es una
@@ -207,8 +230,6 @@ const handlePause = useCallback(() => {
 // selección multi-frame por capa. Se consumían únicamente en código que ya
 // eliminé (stubs de copiar/eliminar frames + selectLayerFrame/Range). Si se
 // retoma la feature, estos useState se vuelven a declarar.)
-
-const [loopEnabled, setLoopEnabled] = useState(true);
 
 // (Eliminado: `isOnionActive` useState — el estado real es `onionFramesConfig.enabled`
 // del padre; este local solo se usaba en el antiguo toggle del topbar.)
@@ -249,6 +270,13 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
     setContextMenuFrame(prev => ({ ...prev, isVisible: false }));
     setContextMenuLayer(prev => ({ ...prev, isVisible: false }));
   };
+
+  // Derivados para las entradas de tag/loop del menú contextual de celda de frame
+  const focusFrame = selectedFrames.length === 1 ? selectedFrames[0] : currentFrame;
+  const tagsAtFocus = animationTags.filter(t => focusFrame >= t.from && focusFrame <= t.to);
+  const selRange = selectedFrames.length >= 1
+    ? { from: Math.min(...selectedFrames), to: Math.max(...selectedFrames) }
+    : null;
 
   const menuFrameActions = [
     {
@@ -359,7 +387,60 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
         }
         handleCloseMenu();
       }
-    }*/
+    }*/,
+    {
+      label: selRange
+        ? `Crear tag (frames ${selRange.from}–${selRange.to})`
+        : 'Crear tag con seleccion',
+      icon: '+',
+      disabled: !selRange,
+      type: 'text',
+      placeholder: 'Nombre del tag',
+      getValue: () => '',
+      setValue: (name) => {
+        const trimmed = String(name).trim();
+        if (!trimmed || !selRange) return;
+        setAnimationTags?.(addTag(animationTags, createTag({
+          name: trimmed,
+          from: selRange.from,
+          to: selRange.to,
+        })));
+      }
+    },
+    {
+      label: selRange && selectedFrames.length >= 2
+        ? `Reproducir ${selRange.from}–${selRange.to} en bucle`
+        : 'Reproducir rango en bucle',
+      icon: '↻',
+      disabled: !(selRange && selectedFrames.length >= 2),
+      onClick: () => {
+        if (!selRange) return;
+        const api = playerApiRef?.current;
+        if (!api) return;
+        setLoopEnabled?.(true);
+        api.setFrameRange?.({ start: selRange.from, end: selRange.to });
+        api.setPlaybackMode?.('forward');
+        api.setFrame?.(selRange.from);
+        api.play?.();
+        handleCloseMenu();
+      }
+    },
+    ...tagsAtFocus.flatMap(tag => [
+      {
+        label: `Reproducir tag «${tag.name}»`,
+        icon: '▶',
+        onClick: () => { handlePlayTag?.(tag); handleCloseMenu(); }
+      },
+      {
+        label: `Eliminar tag «${tag.name}»`,
+        icon: '×',
+        danger: true,
+        onClick: () => {
+          setAnimationTags?.(removeTag(animationTags, tag.id));
+          handleCloseMenu();
+        }
+      }
+    ])
   ];
 
   const menuLayerActions = [
@@ -1182,6 +1263,20 @@ const renderLayerWithTimeline = (layer) => {
               <option value={2}>2x</option>
               <option value={4}>4x</option>
             </select>
+            {!isFullRange && rangeFromFrame != null && rangeToFrame != null && (
+              <div className="loop-range-chip" title={`Bucle activo: frames ${rangeFromFrame}–${rangeToFrame}`}>
+                <span className="loop-range-chip__label">Bucle</span>
+                <span className="loop-range-chip__value">{rangeFromFrame}–{rangeToFrame}</span>
+                <button
+                  className="loop-range-chip__close"
+                  onClick={() => setFrameRange({ start: 0, end: Math.max(0, totalFrames - 1) })}
+                  title="Reproducir todo el rango"
+                  aria-label="Limpiar rango de bucle"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="toolbar-divider" aria-hidden />

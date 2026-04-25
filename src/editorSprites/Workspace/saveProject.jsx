@@ -98,6 +98,8 @@ const SaveProject = ({
   projectMetadata = {},
   canvasWidth,
   canvasHeight,
+  // toggle de bucle del reproductor — se persiste para restaurar al reabrir.
+  loopEnabled = true,
 }) => {
   const [projectName, setProjectName] = useState('mi-proyecto');
   const [isLoading, setIsLoading] = useState(false);
@@ -197,7 +199,7 @@ const SaveProject = ({
       animation: {
         defaultFrameDuration: framesResume?.metadata?.defaultFrameDuration ?? 100,
         frameRate: framesResume?.metadata?.frameRate ?? 10,
-        loop: true,
+        loop: loopEnabled,
       },
       framesResume: framesResume ? JSON.parse(JSON.stringify(framesResume)) : null,
       layers: serializedLayers,
@@ -239,7 +241,7 @@ const SaveProject = ({
     onionSkinSettings, onionFramesConfig, onionSkinEnabled,
     projectName, additionalNotes, projectMetadata, serializeCanvas,
     customPalettes, animationTags, slices, tilesets, referenceLayerMeta, guides,
-    canvasWidth, canvasHeight,
+    canvasWidth, canvasHeight, loopEnabled,
   ]);
 
   // ---- Guardar ----

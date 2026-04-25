@@ -301,6 +301,10 @@ const [showScriptRunner, setShowScriptRunner] = useState(false);
 
 // Estado para paneles del dock: animation tags (lista persistible a .pixcalli).
 const [animationTags, setAnimationTags] = useState([]);
+// Bucle global de la animacion. Se lift-ea aqui (no en LayerAnimation)
+// para que tanto el panel de timeline como el reproductor del dock derecho
+// (PlayAnimation) compartan el mismo estado y se persista en .pixcalli.
+const [loopEnabled, setLoopEnabled] = useState(true);
 // Slices (regiones nombradas con bounds/pivot/9-slice); ver slices/sliceLayer.js.
 const [slices, setSlices] = useState([]);
 // Tileset opcional (un documento puede tener cero o un tileset global por ahora).
@@ -693,8 +697,14 @@ useKeybindingsListener(keybindingsRegistry);
         });
       }
     }
+
+    // animation.loop: si el proyecto lo trae, restaurarlo. Default true para
+    // compat con .pixcalli antiguos sin la clave (el typeof guard la skip-ea).
+    const loopFromProject = projectData?.animation?.loop;
+    if (typeof loopFromProject === 'boolean') setLoopEnabled(loopFromProject);
   }, [restoreFromProjectData, setZoom, setPanOffset,
-      setForegroundColor, setBackgroundColor, setFillColor, setBorderColor, setToolParameters]);
+      setForegroundColor, setBackgroundColor, setFillColor, setBorderColor, setToolParameters,
+      setLoopEnabled]);
 
   // --- Importar .aseprite/.ase ---
   // Abre file picker, parsea con loadAsepriteFile y aplica el documento al
@@ -754,7 +764,7 @@ useKeybindingsListener(keybindingsRegistry);
             activeLayerId: pix.layers[0]?.id ?? null,
             currentFrame: framesResumeShape.computed.frameSequence[0] ?? 1,
           },
-          animation: { defaultFrameDuration: 100, frameRate: 10, loop: true },
+          animation: { defaultFrameDuration: 100, frameRate: 10 },
           framesResume: framesResumeShape,
           layers: pix.layers.map((l) => ({
             id: l.id,
@@ -919,7 +929,7 @@ useKeybindingsListener(keybindingsRegistry);
         activeLayerId,
         currentFrame,
       },
-      animation: { defaultFrameDuration: 100, frameRate: 10, loop: true },
+      animation: { defaultFrameDuration: 100, frameRate: 10 },
       framesResume: framesResumeShape,
       layers,
       canvases: {},
@@ -10244,7 +10254,29 @@ const cutSelection = useCallback(() => {
     }
   }, [currentFrame, activeLayerId, frameCount, layers, frames, selectedPixels, dragOffset]);
 
-  
+  // handlePlayTag declarado ANTES que MemoizedLayerAnimation y
+  // MemoizedFramesTimeline porque esos useMemo lo capturan en sus factory.
+  // useMemo evalua la factory sincronamente durante render — un const
+  // declarado abajo lanza TDZ ReferenceError. Mismo patron que handleProjectLoaded
+  // (linea ~630).
+  //
+  // `onPlayTag` del panel de tags: configura rango + modo del reproductor
+  // y arranca la reproducción usando el API imperativo expuesto por PlayAnimation.
+  // Mapeo de direcciones de tag → playbackMode soportado. `pingpong-reverse`
+  // no existe en el reproductor (es `pingpong` con primer paso inverso); por
+  // ahora se degrada a `pingpong`.
+  const handlePlayTag = useCallback((tag) => {
+    const api = playAnimationRef.current;
+    if (!api || !tag) return;
+    const mode = tag.direction === 'reverse' ? 'reverse'
+               : tag.direction === 'pingpong' || tag.direction === 'pingpong-reverse' ? 'pingpong'
+               : 'forward';
+    api.setFrameRange?.({ start: tag.from, end: tag.to });
+    api.setPlaybackMode?.(mode);
+    api.setFrame?.(mode === 'reverse' ? tag.to : tag.from);
+    api.play?.();
+  }, []);
+
   const MemoizedLayerAnimation = useMemo(
     () =>
       renderLayerAnimation({
@@ -10329,6 +10361,8 @@ const cutSelection = useCallback(() => {
         zoom,
         isPlaying,
         setIsPlaying,
+        loopEnabled,
+        setLoopEnabled,
         // onFrameChange: el motor en useAnimationPlayer llama a este callback
         // cada vez que avanza durante playback; el padre guarda frameNumber en
         // `animationTickFrame` y lo pasa a FramesTimeline para resaltar la
@@ -10346,6 +10380,10 @@ const cutSelection = useCallback(() => {
         clearTintCache,
         isCollapsed: isLayerAnimationCollapsed,
         onToggleCollapse: toggleLayerAnimationCollapse,
+        animationTags,
+        setAnimationTags,
+        handlePlayTag,
+        playerApiRef: playAnimationRef,
       }),
     [
       // `frozenProps` ya cubre currentFrame/activeLayerId/frameCount/layers/frames
@@ -10355,6 +10393,8 @@ const cutSelection = useCallback(() => {
       // viewport, onion-skin no se actualizaba al togglear, etc.).
       frozenProps,
       isPlaying,
+      loopEnabled,
+      setLoopEnabled,
       handleAnimationFrameChange,
       viewportOffset,
       viewportWidth,
@@ -10375,6 +10415,7 @@ const cutSelection = useCallback(() => {
       onionSkinSettings,
       isLayerAnimationCollapsed,
       toggleLayerAnimationCollapse,
+      animationTags,
     ]
   );
 
@@ -10467,6 +10508,11 @@ const cutSelection = useCallback(() => {
         // en su header-row para iluminar la celda activa.
         animationTickFrame,
         eyeDropperColor,
+        animationTags,
+        setAnimationTags,
+        handlePlayTag,
+        playerApiRef: playAnimationRef,
+        setLoopEnabled,
       }),
     [
       // Mismas deps que MemoizedLayerAnimation: ambos builders consumen el
@@ -10490,6 +10536,8 @@ const cutSelection = useCallback(() => {
       initialWidth,
       onionSkinEnabled,
       onionSkinSettings,
+      animationTags,
+      setLoopEnabled,
     ]
   );
 
@@ -10536,29 +10584,11 @@ const cutSelection = useCallback(() => {
     () => renderPlayAnimation({
       frames,
       playerRef: playAnimationRef,
+      loopEnabled,
+      setLoopEnabled,
     }),
-    [frames]
+    [frames, loopEnabled, setLoopEnabled]
   );
-
-  // `onPlayTag` del panel de tags: configura rango + modo del reproductor
-  // y arranca la reproducción usando el API imperativo expuesto por PlayAnimation.
-  // Mapeo de direcciones de tag → playbackMode soportado. `pingpong-reverse`
-  // no existe en el reproductor (es `pingpong` con primer paso inverso); por
-  // ahora se degrada a `pingpong`.
-  const handlePlayTag = useCallback((tag) => {
-    const api = playAnimationRef.current;
-    if (!api || !tag) return;
-    const mode = tag.direction === 'reverse' ? 'reverse'
-               : tag.direction === 'pingpong' || tag.direction === 'pingpong-reverse' ? 'pingpong'
-               : 'forward';
-    api.setFrameRange?.({ start: tag.from, end: tag.to });
-    api.setPlaybackMode?.(mode);
-    api.setFrame?.(mode === 'reverse' ? tag.to : tag.from);
-    api.play?.();
-  }, []);
-
- 
- 
 
   //autoguardado
   /*
@@ -11713,6 +11743,7 @@ handleRotSprite(rotationAngleSelection, true);
             customPalettes={customPalettes}
             animationTags={animationTags}
             slices={slices}
+            loopEnabled={loopEnabled}
             // Tilesets → dataURL por tile (canvases DOM no serializables directo).
             tilesets={tileset ? serializeTileset(tileset) : null}
             // Metadata + bitmap de cada capa codificado como dataURL (PNG).

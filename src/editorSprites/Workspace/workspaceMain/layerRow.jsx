@@ -419,6 +419,7 @@ export const FrameNumberCell = React.memo(function FrameNumberCell({
   isSelected,
   onMouseDown,
   onMouseEnter,
+  onContextMenu,
 }) {
   const handleMouseDown = (e) => onMouseDown(frameNumber, e);
   const handleMouseEnter = () => onMouseEnter(frameNumber);
@@ -427,6 +428,7 @@ export const FrameNumberCell = React.memo(function FrameNumberCell({
       className={`frame-number ${isCurrent ? 'current' : ''} ${isSelected ? 'selected' : ''}`}
       onMouseDown={handleMouseDown}
       onMouseEnter={handleMouseEnter}
+      onContextMenu={onContextMenu}
       style={{ userSelect: 'none' }}
       title={`Frame ${frameNumber}\nArrastrar para seleccionar múltiples`}
     >

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import './layerAnimation.css'
 
 import LayerRow, { FrameNumberCell } from './layerRow';
@@ -37,6 +37,8 @@ import {
   
 } from "react-icons/lu";
 import { BiSolidLayerPlus } from "react-icons/bi";
+import { createTag, addTag, removeTag } from '../animation/animationTags';
+import TagBand from '../animation/TagBand';
 
 // Destructura minimal: solo las props realmente consumidas. El wrapper
 // memoizado sigue pasando más props; React ignora las extras.
@@ -94,6 +96,14 @@ const FramesTimeline = ({
   // Playback state (del padre): para iluminar el frame en animación.
   isPlaying,
   animationTickFrame,  // frameNumber que el motor de animación está mostrando
+
+  // Tags + API imperativo del player (para acciones de menu contextual y TagBand)
+  animationTags = [],
+  setAnimationTags,
+  handlePlayTag,
+  playerApiRef,
+  // Loop: activar/desactivar bucle de reproducción (Task 3 lift, Task 6 consume)
+  setLoopEnabled,
 }) => {
 
   // `frameNumbers` memoizado sobre `framesResume.frames`. Nota: con Immer,
@@ -141,6 +151,17 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
     position: { x: 0, y: 0 }
   });
 
+  // Menú contextual del strip de frame-numbers (header del timeline)
+  const [contextMenuHeader, setContextMenuHeader] = useState({
+    isVisible: false,
+    position: { x: 0, y: 0 }
+  });
+
+  // Ancho real (en px) de cada FrameNumberCell, leido del DOM via useLayoutEffect.
+  // TagBand lo necesita para alinear las bandas con el grid del strip.
+  const [headerCellWidth, setHeaderCellWidth] = useState(28);
+  const headerFramesRef = useRef(null);
+
   const handleContextMenu = (event,type) => {
     event.preventDefault();
     if(type==='frame'){
@@ -161,6 +182,7 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
   const handleCloseMenu = () => {
     setContextMenuFrame(prev => ({ ...prev, isVisible: false }));
     setContextMenuLayer(prev => ({ ...prev, isVisible: false }));
+    setContextMenuHeader(prev => ({ ...prev, isVisible: false }));
   };
 
   const menuFrameActions = [
@@ -405,8 +427,71 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
   // (Eliminado: `handleCreateGroupFromMenu` — duplicaba `handleCreateGroup`
   // pero no tenía call site; la versión viva está más abajo.)
 
+  // --- Menú contextual del header (strip de frame-numbers) ---
+  // Derivados usados tanto en menuHeaderActions como en el <CustomContextMenu> header.
+  const focusFrame = selectedFrames.length === 1 ? selectedFrames[0] : currentFrame;
+  const tagsHere = animationTags.filter(t => focusFrame >= t.from && focusFrame <= t.to);
+  const selRange = selectedFrames.length >= 1
+    ? { from: Math.min(...selectedFrames), to: Math.max(...selectedFrames) }
+    : null;
 
-   
+  const menuHeaderActions = [
+    {
+      label: selRange
+        ? `Crear tag (frames ${selRange.from}–${selRange.to})`
+        : 'Crear tag con seleccion',
+      icon: '+',
+      disabled: !selRange,
+      type: 'text',
+      placeholder: 'Nombre del tag (p. ej. walk)',
+      getValue: () => '',
+      setValue: (name) => {
+        const trimmed = String(name).trim();
+        if (!trimmed || !selRange) return;
+        const tag = createTag({ name: trimmed, from: selRange.from, to: selRange.to });
+        setAnimationTags?.(addTag(animationTags, tag));
+      }
+    },
+    {
+      label: selRange && selectedFrames.length >= 2
+        ? `Reproducir ${selRange.from}–${selRange.to} en bucle`
+        : 'Reproducir rango en bucle',
+      icon: '↻',
+      disabled: !(selRange && selectedFrames.length >= 2),
+      onClick: () => {
+        if (!selRange) return;
+        const api = playerApiRef?.current;
+        if (!api) return;
+        setLoopEnabled?.(true);
+        api.setFrameRange?.({ start: selRange.from, end: selRange.to });
+        api.setPlaybackMode?.('forward');
+        api.setFrame?.(selRange.from);
+        api.play?.();
+        setContextMenuHeader(prev => ({ ...prev, isVisible: false }));
+      }
+    },
+    ...tagsHere.flatMap(tag => [
+      {
+        label: `Reproducir tag «${tag.name}»`,
+        icon: '▶',
+        onClick: () => {
+          handlePlayTag?.(tag);
+          setContextMenuHeader(prev => ({ ...prev, isVisible: false }));
+        }
+      },
+      {
+        label: `Eliminar tag «${tag.name}»`,
+        icon: '×',
+        danger: true,
+        onClick: () => {
+          setAnimationTags?.(removeTag(animationTags, tag.id));
+          setContextMenuHeader(prev => ({ ...prev, isVisible: false }));
+        }
+      }
+    ])
+  ];
+
+
 //-------GESTION DEL MENU CONTEXTUAL AL DAR CLICK DERECHO -----------------------//
 
 
@@ -880,6 +965,16 @@ useEffect(() => {
   };
 }, [isResizingLayers]);
 
+// Medir el ancho real de la primera celda del header tras el layout.
+// Se re-mide cuando cambia el numero de frames (puede afectar el flex/grid).
+useLayoutEffect(() => {
+  const el = headerFramesRef.current?.querySelector('.frame-number-cell');
+  if (el) {
+    const rect = el.getBoundingClientRect();
+    if (rect.width > 0) setHeaderCellWidth(rect.width);
+  }
+}, [frameNumbers.length]);
+
 function handleHeaderFrameSelection(frameNumber, event) {
   const { ctrlKey, metaKey, shiftKey } = event;
   const isCtrlOrCmd = ctrlKey || metaKey;
@@ -946,6 +1041,18 @@ useEffect(() => {
   headerHandlersRef.current = {
     onMouseDown: handleHeaderFrameMouseDown,
     onMouseEnter: handleHeaderFrameMouseEnter,
+    onContextMenu: (frameNumber, e) => {
+      e.preventDefault();
+      // Si el frame clickeado no está en la selección, seleccionarlo en solitario
+      if (!selectedFrames.includes(frameNumber)) {
+        setSelectedFrames([frameNumber]);
+        setActiveFrame(frameNumber);
+      }
+      setContextMenuHeader({
+        isVisible: true,
+        position: { x: e.clientX, y: e.clientY }
+      });
+    },
   };
 });
 const stableHeaderFrameMouseDown = useCallback(
@@ -954,6 +1061,10 @@ const stableHeaderFrameMouseDown = useCallback(
 );
 const stableHeaderFrameMouseEnter = useCallback(
   (frameNumber) => headerHandlersRef.current?.onMouseEnter(frameNumber),
+  []
+);
+const stableHeaderFrameContextMenu = useCallback(
+  (frameNumber, e) => headerHandlersRef.current?.onContextMenu(frameNumber, e),
   []
 );
 
@@ -1037,7 +1148,18 @@ const renderLayerWithTimeline = (layer) => {
         header={{
           title: layers.find(layer => layer.id === activeLayerId)?.name
         }}
-        
+
+      />
+      <CustomContextMenu
+        isVisible={contextMenuHeader.isVisible}
+        position={contextMenuHeader.position}
+        onClose={() => setContextMenuHeader(prev => ({ ...prev, isVisible: false }))}
+        actions={menuHeaderActions}
+        header={{
+          title: selRange && selectedFrames.length >= 2
+            ? `Frames ${selRange.from}–${selRange.to}`
+            : `Frame ${focusFrame}`
+        }}
       />
       <ConfigOnionSkin
        
@@ -1108,26 +1230,48 @@ const renderLayerWithTimeline = (layer) => {
               </button>
             </div>
           </div>
-          <div className="timeline-header-frames">
-            {frameNumbers.map((frameNumber) => {
-              const isSelected = selectedFrames.includes(frameNumber);
-              // Durante playback: iluminar el frame que el motor de animación
-              // está mostrando. Cuando no hay playback: iluminar el frame
-              // seleccionado por el usuario.
-              const isCurrent = isPlaying && animationTickFrame != null
-                ? animationTickFrame === frameNumber
-                : currentFrame === frameNumber;
-              return (
-                <FrameNumberCell
-                  key={frameNumber}
-                  frameNumber={frameNumber}
-                  isCurrent={isCurrent}
-                  isSelected={isSelected}
-                  onMouseDown={stableHeaderFrameMouseDown}
-                  onMouseEnter={stableHeaderFrameMouseEnter}
-                />
-              );
-            })}
+          <div className="timeline-header-frames-wrapper" style={{ display: 'flex', flexDirection: 'column' }}>
+            <TagBand
+              tags={animationTags}
+              frameNumbers={frameNumbers}
+              cellWidth={headerCellWidth}
+              onClickTag={(tag) => {
+                const range = [];
+                for (let f = tag.from; f <= tag.to; f++) range.push(f);
+                setSelectedFrames(range);
+                setActiveFrame(tag.to);
+              }}
+              onDoubleClickTag={(tag) => handlePlayTag?.(tag)}
+              onContextMenuTag={(tag, e) => {
+                if (!selectedFrames.includes(tag.from)) setSelectedFrames([tag.from]);
+                setContextMenuHeader({
+                  isVisible: true,
+                  position: { x: e.clientX, y: e.clientY }
+                });
+              }}
+            />
+            <div className="timeline-header-frames" ref={headerFramesRef}>
+              {frameNumbers.map((frameNumber) => {
+                const isSelected = selectedFrames.includes(frameNumber);
+                // Durante playback: iluminar el frame que el motor de animación
+                // está mostrando. Cuando no hay playback: iluminar el frame
+                // seleccionado por el usuario.
+                const isCurrent = isPlaying && animationTickFrame != null
+                  ? animationTickFrame === frameNumber
+                  : currentFrame === frameNumber;
+                return (
+                  <FrameNumberCell
+                    key={frameNumber}
+                    frameNumber={frameNumber}
+                    isCurrent={isCurrent}
+                    isSelected={isSelected}
+                    onMouseDown={stableHeaderFrameMouseDown}
+                    onMouseEnter={stableHeaderFrameMouseEnter}
+                    onContextMenu={(e) => stableHeaderFrameContextMenu(frameNumber, e)}
+                  />
+                );
+              })}
+            </div>
           </div>
         </div>
 

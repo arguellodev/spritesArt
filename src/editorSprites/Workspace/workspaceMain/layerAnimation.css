@@ -2719,3 +2719,96 @@ margin-right: 20px;
     transition: none;
   }
 }
+
+/* ── Chip "Bucle: A–B" ─────────────────────────────────────────────────────── */
+/* Refinado tras pasada con ui-ux-pro-max:
+ *  - Gradiente sutil + borde violeta para coherencia con --accent-color del editor.
+ *  - Hover sin layout shift (solo background/border).
+ *  - Focus-visible ring del close button accesible por teclado.
+ *  - Reduced-motion respetado. */
+.loop-range-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 4px 0 9px;
+  border-radius: 11px;
+  background:
+    linear-gradient(180deg, rgba(140, 82, 255, 0.22), rgba(140, 82, 255, 0.14));
+  border: 1px solid rgba(157, 109, 255, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.25);
+  color: #e6d8ff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  user-select: none;
+  white-space: nowrap;
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.loop-range-chip:hover {
+  background:
+    linear-gradient(180deg, rgba(140, 82, 255, 0.30), rgba(140, 82, 255, 0.18));
+  border-color: rgba(180, 140, 255, 0.7);
+}
+
+.loop-range-chip__label {
+  opacity: 0.78;
+  text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.6px;
+}
+
+.loop-range-chip__value {
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.loop-range-chip__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 2px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.08);
+  color: #d8c8ff;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  padding: 0;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.loop-range-chip__close:hover {
+  background: rgba(255, 80, 80, 0.30);
+  color: #fff;
+  border-color: rgba(255, 120, 120, 0.55);
+}
+
+.loop-range-chip__close:focus-visible {
+  outline: none;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  border-color: rgba(157, 109, 255, 0.95);
+  box-shadow: 0 0 0 2px rgba(157, 109, 255, 0.45);
+}
+
+.loop-range-chip__close:active {
+  transform: translateY(1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loop-range-chip,
+  .loop-range-chip__close {
+    transition: none;
+  }
+  .loop-range-chip__close:active {
+    transform: none;
+  }
+}

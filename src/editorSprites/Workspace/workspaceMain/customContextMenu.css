@@ -666,3 +666,48 @@
 .context-menu.position-right {
   transform-origin: left top;
 }
+
+/* ── Refinamientos pos ui-ux-pro-max ────────────────────────────────────────
+ * focus-visible en items del menu (severity: High en ux-guidelines): el menu
+ * ya tenia hover/active/disabled bien resueltos pero faltaba un estado claro
+ * para keyboard nav. Tab / Arrow-keys ahora muestran ring violeta coherente.
+ * Tambien refuerza el contraste del item disabled bajo dark-mode (era 0.5
+ * opacity sobre #f0f0f0, lo que pasaba a #787878 contra #2a2a2a — 3.4:1, falla
+ * 4.5:1). Ahora se baja un solo paso a 0.6 y el cursor not-allowed sigue dando
+ * el affordance.
+ */
+.context-menu-item:focus-visible {
+  outline: none;
+  background: var(--layer-hover);
+  box-shadow:
+    inset 3px 0 0 var(--accent-color),
+    0 0 0 1px rgba(140, 82, 255, 0.45);
+}
+
+.context-menu-item.danger:focus-visible {
+  box-shadow:
+    inset 3px 0 0 var(--danger),
+    0 0 0 1px rgba(255, 82, 82, 0.45);
+}
+
+.context-menu-item.disabled {
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .context-menu,
+  .context-menu-item,
+  .context-menu-icon {
+    animation: none !important;
+    transition: none !important;
+  }
+  .context-menu-item:hover:not(.disabled) {
+    transform: none;
+  }
+  .context-menu-item:active:not(.disabled) {
+    transform: none;
+  }
+  .context-menu-item:hover:not(.disabled) .context-menu-icon {
+    transform: none;
+  }
+}
