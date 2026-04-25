@@ -40,6 +40,7 @@ import {
 
 } from "react-icons/lu";
 import { BiSolidLayerPlus } from "react-icons/bi";
+import { createTag, addTag, removeTag } from '../animation/animationTags';
 
 
 
@@ -260,6 +261,13 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
     setContextMenuLayer(prev => ({ ...prev, isVisible: false }));
   };
 
+  // Derivados para las entradas de tag/loop del menú contextual de celda de frame
+  const focusFrame = selectedFrames.length === 1 ? selectedFrames[0] : currentFrame;
+  const tagsAtFocus = animationTags.filter(t => focusFrame >= t.from && focusFrame <= t.to);
+  const selRange = selectedFrames.length >= 1
+    ? { from: Math.min(...selectedFrames), to: Math.max(...selectedFrames) }
+    : null;
+
   const menuFrameActions = [
     {
       label: 'Duplicar Frame',
@@ -369,7 +377,60 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
         }
         handleCloseMenu();
       }
-    }*/
+    }*/,
+    {
+      label: selRange
+        ? `Crear tag (frames ${selRange.from}–${selRange.to})`
+        : 'Crear tag con seleccion',
+      icon: '+',
+      disabled: !selRange,
+      type: 'text',
+      placeholder: 'Nombre del tag',
+      getValue: () => '',
+      setValue: (name) => {
+        const trimmed = String(name).trim();
+        if (!trimmed || !selRange) return;
+        setAnimationTags?.(addTag(animationTags, createTag({
+          name: trimmed,
+          from: selRange.from,
+          to: selRange.to,
+        })));
+      }
+    },
+    {
+      label: selRange && selectedFrames.length >= 2
+        ? `Reproducir ${selRange.from}–${selRange.to} en bucle`
+        : 'Reproducir rango en bucle',
+      icon: '↻',
+      disabled: !(selRange && selectedFrames.length >= 2),
+      onClick: () => {
+        if (!selRange) return;
+        const api = playerApiRef?.current;
+        if (!api) return;
+        setLoopEnabled?.(true);
+        api.setFrameRange?.({ start: selRange.from, end: selRange.to });
+        api.setPlaybackMode?.('forward');
+        api.setFrame?.(selRange.from);
+        api.play?.();
+        handleCloseMenu();
+      }
+    },
+    ...tagsAtFocus.flatMap(tag => [
+      {
+        label: `Reproducir tag «${tag.name}»`,
+        icon: '▶',
+        onClick: () => { handlePlayTag?.(tag); handleCloseMenu(); }
+      },
+      {
+        label: `Eliminar tag «${tag.name}»`,
+        icon: '×',
+        danger: true,
+        onClick: () => {
+          setAnimationTags?.(removeTag(animationTags, tag.id));
+          handleCloseMenu();
+        }
+      }
+    ])
   ];
 
   const menuLayerActions = [
