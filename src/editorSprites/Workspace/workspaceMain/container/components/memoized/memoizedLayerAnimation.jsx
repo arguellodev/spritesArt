@@ -95,7 +95,11 @@ export function renderLayerAnimation(props) {
       animationTags={props.animationTags}
       setAnimationTags={props.setAnimationTags}
       handlePlayTag={props.handlePlayTag}
+      handlePlayRange={props.handlePlayRange}
       playerApiRef={props.playerApiRef}
+      mainPlayerApiRef={props.mainPlayerApiRef}
+      loopInfo={props.loopInfo}
+      onClearLoop={props.onClearLoop}
       onFrameChange={props.onFrameChange}
       eyeDropperColor={props.eyeDropperColor}
       onionFramesConfig={props.onionFramesConfig}

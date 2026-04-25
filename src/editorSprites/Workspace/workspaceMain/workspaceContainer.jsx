@@ -280,9 +280,14 @@ const [rotationAngle, setRotationAngle] = useState(0);
   const rightMirrorCornerRef = useRef(null);
   const animationLayerRef = useRef(null);
   const previewAnimationRef = useRef(null);
-  // Ref imperativo al reproductor `PlayAnimation` para disparar play/setFrame
-  // desde otros paneles (tags, atajos de teclado, etc.).
+  // Ref imperativo al reproductor `PlayAnimation` (mini, en RightPanel).
   const playAnimationRef = useRef(null);
+  // Ref imperativo al reproductor principal (el que vive en LayerAnimation
+  // — el mismo motor que se ve play/pause desde la animation-bar). Se
+  // popula desde layerAnimation.jsx via useEffect. Permite que
+  // handlePlayTag/handlePlayRange dispare bucles en el reproductor
+  // principal y no solo en el mini.
+  const mainPlayerApiRef = useRef(null);
   const rotationHandlerRef = useRef(null);
 
 // Agregar estos refs al inicio del componente CanvasTracker
@@ -305,6 +310,15 @@ const [animationTags, setAnimationTags] = useState([]);
 // para que tanto el panel de timeline como el reproductor del dock derecho
 // (PlayAnimation) compartan el mismo estado y se persista en .pixcalli.
 const [loopEnabled, setLoopEnabled] = useState(true);
+// Info del bucle activo: rango actualmente reproduciendose (con nombre/color
+// si proviene de un tag), y target (cual reproductor lo esta corriendo).
+// Sirve para mostrar chips en cada reproductor con el contexto del bucle y
+// para implementar "salir del bucle" (clear).
+//
+//   { from: number, to: number,
+//     target: 'main' | 'mini',
+//     tagId?: string, tagName?: string, tagColor?: string }
+const [loopInfo, setLoopInfo] = useState(null);
 // Slices (regiones nombradas con bounds/pivot/9-slice); ver slices/sliceLayer.js.
 const [slices, setSlices] = useState([]);
 // Tileset opcional (un documento puede tener cero o un tileset global por ahora).
@@ -10265,26 +10279,68 @@ const cutSelection = useCallback(() => {
   // Mapeo de direcciones de tag → playbackMode soportado. `pingpong-reverse`
   // no existe en el reproductor (es `pingpong` con primer paso inverso); por
   // ahora se degrada a `pingpong`.
-  const handlePlayTag = useCallback((tag) => {
-    const api = playAnimationRef.current;
+  // Reproduce un tag en el reproductor objetivo:
+  //   target = 'main' → motor de LayerAnimation (animation-bar)
+  //   target = 'mini' → motor de PlayAnimation (RightPanel)
+  // Por defecto 'mini' para no romper call-sites previos.
+  //
+  // Convierte tag.from/to (1-based) a indices 0-based porque la API del
+  // reproductor (setFrame, setFrameRangeSafe) trabaja con indices.
+  // Activa loopEnabled y publica loopInfo para que ambos chips muestren
+  // contexto (nombre de tag + rango) y exista un punto de "salir del bucle".
+  const handlePlayTag = useCallback((tag, target = 'mini') => {
+    const ref = target === 'main' ? mainPlayerApiRef : playAnimationRef;
+    const api = ref.current;
     if (!api || !tag) return;
     const mode = tag.direction === 'reverse' ? 'reverse'
                : tag.direction === 'pingpong' || tag.direction === 'pingpong-reverse' ? 'pingpong'
                : 'forward';
-    // El reproductor (useAnimationPlayer) usa INDICES 0-based; los tags
-    // guardan FRAME NUMBERS 1-based. Convertir aqui o el rango y el frame
-    // de arranque caen un frame mas adelante de lo deseado y, peor, salen
-    // del rango cuando tag.to == frameCount (clamp lo deja en lastIndex).
     const startIdx = tag.from - 1;
     const endIdx   = tag.to   - 1;
-    // Asegurar bucle ON: con loop desactivado el reproductor frena al final
-    // del primer ciclo y "no funciona" desde la perspectiva del usuario.
     setLoopEnabled(true);
+    setLoopInfo({
+      from: tag.from, to: tag.to,
+      target,
+      tagId: tag.id, tagName: tag.name, tagColor: tag.color,
+    });
     api.setFrameRange?.({ start: startIdx, end: endIdx });
     api.setPlaybackMode?.(mode);
     api.setFrame?.(mode === 'reverse' ? endIdx : startIdx);
     api.play?.();
   }, [setLoopEnabled]);
+
+  // Reproduce un rango ad-hoc (sin tag) en el reproductor objetivo. Mismo
+  // contrato que handlePlayTag: from/to son frame numbers 1-based.
+  const handlePlayRange = useCallback((from, to, target = 'mini') => {
+    const ref = target === 'main' ? mainPlayerApiRef : playAnimationRef;
+    const api = ref.current;
+    if (!api) return;
+    const startIdx = from - 1;
+    const endIdx   = to   - 1;
+    setLoopEnabled(true);
+    setLoopInfo({ from, to, target });
+    api.setFrameRange?.({ start: startIdx, end: endIdx });
+    api.setPlaybackMode?.('forward');
+    api.setFrame?.(startIdx);
+    api.play?.();
+  }, [setLoopEnabled]);
+
+  // Salir del bucle activo en un reproductor concreto. Cada chip (uno en
+  // LayerAnimation, otro en PlayAnimation) llama con su propio target:
+  //   - main → reset al main player + clear loopInfo si es de main
+  //   - mini → reset al mini player + clear loopInfo si es de mini
+  // El "clear loopInfo solo si coincide" evita que el chip del main borre
+  // un loopInfo que pertenece al mini y viceversa.
+  const handleClearLoop = useCallback((target = 'mini') => {
+    const ref = target === 'main' ? mainPlayerApiRef : playAnimationRef;
+    const api = ref.current;
+    if (api) {
+      api.pause?.();
+      const lastIdx = (api.frameCount ?? 1) - 1;
+      api.setFrameRange?.({ start: 0, end: Math.max(0, lastIdx) });
+    }
+    setLoopInfo(prev => (prev?.target === target ? null : prev));
+  }, []);
 
   const MemoizedLayerAnimation = useMemo(
     () =>
@@ -10392,7 +10448,11 @@ const cutSelection = useCallback(() => {
         animationTags,
         setAnimationTags,
         handlePlayTag,
+        handlePlayRange,
         playerApiRef: playAnimationRef,
+        mainPlayerApiRef,
+        loopInfo,
+        onClearLoop: handleClearLoop,
       }),
     [
       // `frozenProps` ya cubre currentFrame/activeLayerId/frameCount/layers/frames
@@ -10425,6 +10485,9 @@ const cutSelection = useCallback(() => {
       isLayerAnimationCollapsed,
       toggleLayerAnimationCollapse,
       animationTags,
+      handlePlayRange,
+      loopInfo,
+      handleClearLoop,
     ]
   );
 
@@ -10520,6 +10583,7 @@ const cutSelection = useCallback(() => {
         animationTags,
         setAnimationTags,
         handlePlayTag,
+        handlePlayRange,
         playerApiRef: playAnimationRef,
         setLoopEnabled,
       }),
@@ -10547,6 +10611,7 @@ const cutSelection = useCallback(() => {
       onionSkinSettings,
       animationTags,
       setLoopEnabled,
+      handlePlayRange,
     ]
   );
 
@@ -10595,8 +10660,13 @@ const cutSelection = useCallback(() => {
       playerRef: playAnimationRef,
       loopEnabled,
       setLoopEnabled,
+      // Chip de bucle activo dentro del mini player. Solo se renderea
+      // cuando loopInfo.target === 'mini' (asi no compite con el chip de
+      // LayerAnimation que cubre target === 'main').
+      loopInfo,
+      onClearLoop: handleClearLoop,
     }),
-    [frames, loopEnabled, setLoopEnabled]
+    [frames, loopEnabled, setLoopEnabled, loopInfo, handleClearLoop]
   );
 
   //autoguardado

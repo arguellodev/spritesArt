@@ -124,7 +124,17 @@ const LayerAnimation = ({
   animationTags = [],
   setAnimationTags,
   handlePlayTag,
+  handlePlayRange,
   playerApiRef,
+  // Ref que el padre (workspaceContainer) provee para que LayerAnimation
+  // exponga su API imperativa de player (el "main player") y handlePlayTag
+  // pueda dirigir bucles a este reproductor en vez del mini.
+  mainPlayerApiRef,
+  // Info del bucle activo (compartido con el chip del mini player). Si
+  // contiene tagName, lo mostramos en el chip principal junto con el rango.
+  loopInfo,
+  // Limpia loopInfo + reset frameRange a full. Compartido con el ✕ del chip.
+  onClearLoop,
 
   // Onion frames config (pasada a ConfigOnionSkin modal)
   onionFramesConfig,
@@ -175,8 +185,13 @@ const {
   setPlaybackSpeed,
   play,
   pause,
+  stop,
   frameRange,
   setFrameRange,
+  setFrame,
+  setFrameRangeSafe,
+  setPlaybackModeSafe,
+  setPlaybackSpeedSafe,
 } = useAnimationPlayer({
   frames,
   externalCanvasRef,
@@ -192,6 +207,21 @@ const {
   onTimeUpdate,
   onFrameChange,
   syncedFrameNumber: currentFrame,
+});
+
+// Exposicion del API imperativo del main player al padre via ref. Mismo
+// shape que el de PlayAnimation (mini), asi handlePlayTag puede dispatcher
+// indistintamente a uno u otro segun el target. useEffect sin deps array
+// re-popula en cada render para mantener referencias frescas.
+useEffect(() => {
+  if (!mainPlayerApiRef) return;
+  mainPlayerApiRef.current = {
+    play, pause, stop,
+    setFrame,
+    setFrameRange: setFrameRangeSafe,
+    setPlaybackMode: setPlaybackModeSafe,
+    setPlaybackSpeed: setPlaybackSpeedSafe,
+  };
 });
 
 // Chip de "Bucle: A–B": visible cuando el rango activo del reproductor no
@@ -421,34 +451,43 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
         }
       };
     })(),
+    // Dos entradas: reproducir el rango aqui (main) o en panel (mini).
+    // Delegamos en handlePlayRange (workspaceContainer) que mantiene
+    // loopInfo coherente entre ambos chips.
     {
       label: selRange && selectedFrames.length >= 2
-        ? `Reproducir ${selRange.to - selRange.from + 1} frames (${selRange.from}–${selRange.to}) en bucle`
-        : 'Reproducir rango en bucle',
+        ? `Reproducir aqui ${selRange.to - selRange.from + 1} frames (${selRange.from}–${selRange.to})`
+        : 'Reproducir rango aqui',
       icon: '↻',
       disabled: !(selRange && selectedFrames.length >= 2),
       onClick: () => {
         if (!selRange) return;
-        const api = playerApiRef?.current;
-        if (!api) return;
-        // Conversion frameNumber (1-based) -> index (0-based) que espera el
-        // reproductor. Sin esto el rango queda desplazado y el play arranca
-        // fuera del rango deseado.
-        const startIdx = selRange.from - 1;
-        const endIdx   = selRange.to   - 1;
-        setLoopEnabled?.(true);
-        api.setFrameRange?.({ start: startIdx, end: endIdx });
-        api.setPlaybackMode?.('forward');
-        api.setFrame?.(startIdx);
-        api.play?.();
+        handlePlayRange?.(selRange.from, selRange.to, 'main');
+        handleCloseMenu();
+      }
+    },
+    {
+      label: selRange && selectedFrames.length >= 2
+        ? `Reproducir en panel ${selRange.to - selRange.from + 1} frames (${selRange.from}–${selRange.to})`
+        : 'Reproducir rango en panel',
+      icon: '🪟',
+      disabled: !(selRange && selectedFrames.length >= 2),
+      onClick: () => {
+        if (!selRange) return;
+        handlePlayRange?.(selRange.from, selRange.to, 'mini');
         handleCloseMenu();
       }
     },
     ...tagsAtFocus.flatMap(tag => [
       {
-        label: `Reproducir tag «${tag.name}»`,
+        label: `Reproducir aqui «${tag.name}»`,
         icon: '▶',
-        onClick: () => { handlePlayTag?.(tag); handleCloseMenu(); }
+        onClick: () => { handlePlayTag?.(tag, 'main'); handleCloseMenu(); }
+      },
+      {
+        label: `Reproducir en panel «${tag.name}»`,
+        icon: '🪟',
+        onClick: () => { handlePlayTag?.(tag, 'mini'); handleCloseMenu(); }
       },
       {
         label: `Renombrar tag «${tag.name}»`,
@@ -1306,14 +1345,37 @@ const renderLayerWithTimeline = (layer) => {
               <option value={4}>4x</option>
             </select>
             {!isFullRange && rangeFromFrame != null && rangeToFrame != null && (
-              <div className="loop-range-chip" title={`Bucle activo: frames ${rangeFromFrame}–${rangeToFrame}`}>
-                <span className="loop-range-chip__label">Bucle</span>
+              <div
+                className="loop-range-chip"
+                style={
+                  loopInfo?.target === 'main' && loopInfo?.tagColor
+                    ? { '--loop-chip-accent': loopInfo.tagColor }
+                    : undefined
+                }
+                title={
+                  loopInfo?.target === 'main' && loopInfo?.tagName
+                    ? `Bucle: tag «${loopInfo.tagName}» (frames ${rangeFromFrame}–${rangeToFrame})`
+                    : `Bucle activo: frames ${rangeFromFrame}–${rangeToFrame}`
+                }
+              >
+                <span className="loop-range-chip__label">
+                  {loopInfo?.target === 'main' && loopInfo?.tagName
+                    ? `«${loopInfo.tagName}»`
+                    : 'Bucle'}
+                </span>
                 <span className="loop-range-chip__value">{rangeFromFrame}–{rangeToFrame}</span>
                 <button
                   className="loop-range-chip__close"
-                  onClick={() => setFrameRange({ start: 0, end: Math.max(0, totalFrames - 1) })}
-                  title="Reproducir todo el rango"
-                  aria-label="Limpiar rango de bucle"
+                  onClick={() => {
+                    // Reset frameRange + clear loopInfo (si era target=main).
+                    // Llamamos onClearLoop si existe (provisto por workspaceContainer);
+                    // si no, fallback al reset directo de frameRange para mantener
+                    // compatibilidad con call-sites legacy.
+                    if (onClearLoop) onClearLoop('main');
+                    else setFrameRange({ start: 0, end: Math.max(0, totalFrames - 1) });
+                  }}
+                  title="Salir del bucle"
+                  aria-label="Salir del bucle"
                 >
                   ✕
                 </button>

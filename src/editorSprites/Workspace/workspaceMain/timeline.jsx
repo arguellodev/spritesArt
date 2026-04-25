@@ -101,6 +101,10 @@ const FramesTimeline = ({
   animationTags = [],
   setAnimationTags,
   handlePlayTag,
+  // handlePlayRange(from, to, target): reproduce un rango ad-hoc en el
+  // reproductor target ('main' | 'mini'). Centraliza setLoopEnabled +
+  // loopInfo + setFrameRange para que ambos chips queden sincronizados.
+  handlePlayRange,
   playerApiRef,
   // Loop: activar/desactivar bucle de reproducción (Task 3 lift, Task 6 consume)
   setLoopEnabled,
@@ -473,35 +477,47 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
         setAnimationTags?.(addTag(animationTags, tag));
       }
     },
+    // Reproducir rango en bucle — dos targets: aqui (main) o en panel (mini).
+    // Ambos delegan en handlePlayRange que vive en workspaceContainer y
+    // mantiene loopInfo coherente entre los chips de cada reproductor.
     {
       label: selRange && selectedFrames.length >= 2
-        ? `Reproducir ${rangeCount} frames (${selRange.from}–${selRange.to}) en bucle`
-        : 'Reproducir rango en bucle',
+        ? `Reproducir aqui ${rangeCount} frames (${selRange.from}–${selRange.to})`
+        : 'Reproducir rango aqui',
       icon: '↻',
       disabled: !(selRange && selectedFrames.length >= 2),
       onClick: () => {
         if (!selRange) return;
-        const api = playerApiRef?.current;
-        if (!api) return;
-        // setFrameRange/setFrame esperan indices 0-based; selRange.from/to
-        // son frame numbers 1-based. Sin la conversion el rango queda
-        // desplazado y el play arranca fuera del rango querido.
-        const startIdx = selRange.from - 1;
-        const endIdx   = selRange.to   - 1;
-        setLoopEnabled?.(true);
-        api.setFrameRange?.({ start: startIdx, end: endIdx });
-        api.setPlaybackMode?.('forward');
-        api.setFrame?.(startIdx);
-        api.play?.();
+        handlePlayRange?.(selRange.from, selRange.to, 'main');
+        setContextMenuHeader(prev => ({ ...prev, isVisible: false }));
+      }
+    },
+    {
+      label: selRange && selectedFrames.length >= 2
+        ? `Reproducir en panel ${rangeCount} frames (${selRange.from}–${selRange.to})`
+        : 'Reproducir rango en panel',
+      icon: '🪟',
+      disabled: !(selRange && selectedFrames.length >= 2),
+      onClick: () => {
+        if (!selRange) return;
+        handlePlayRange?.(selRange.from, selRange.to, 'mini');
         setContextMenuHeader(prev => ({ ...prev, isVisible: false }));
       }
     },
     ...tagsHere.flatMap(tag => [
       {
-        label: `Reproducir tag «${tag.name}»`,
+        label: `Reproducir aqui «${tag.name}»`,
         icon: '▶',
         onClick: () => {
-          handlePlayTag?.(tag);
+          handlePlayTag?.(tag, 'main');
+          setContextMenuHeader(prev => ({ ...prev, isVisible: false }));
+        }
+      },
+      {
+        label: `Reproducir en panel «${tag.name}»`,
+        icon: '🪟',
+        onClick: () => {
+          handlePlayTag?.(tag, 'mini');
           setContextMenuHeader(prev => ({ ...prev, isVisible: false }));
         }
       },

@@ -93,6 +93,7 @@ export function renderFramesTimeline(props) {
       animationTags={props.animationTags}
       setAnimationTags={props.setAnimationTags}
       handlePlayTag={props.handlePlayTag}
+      handlePlayRange={props.handlePlayRange}
       playerApiRef={props.playerApiRef}
       setLoopEnabled={props.setLoopEnabled}
     />

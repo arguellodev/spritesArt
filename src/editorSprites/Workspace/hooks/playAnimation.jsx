@@ -24,6 +24,10 @@ const PlayAnimation = forwardRef(function PlayAnimation(
     loopEnabled,
     // eslint-disable-next-line no-unused-vars
     setLoopEnabled,
+    // Info del bucle activo (si target === 'mini' se muestra el chip aqui).
+    loopInfo,
+    // Salir del bucle: el chip llama onClearLoop('mini').
+    onClearLoop,
   },
   ref
 ) {
@@ -114,6 +118,39 @@ const PlayAnimation = forwardRef(function PlayAnimation(
             {currentIndex + 1} / {frameCount}
           </div>
         </div>
+
+        {/* Chip de bucle activo: solo cuando este reproductor (mini) es el
+            target. Muestra el nombre del tag si proviene de un tag, sino el
+            rango. El boton ✕ pausa el reproductor y restablece frameRange a
+            full-range via onClearLoop('mini'). */}
+        {loopInfo?.target === 'mini' && (
+          <div
+            className="player-loop-chip"
+            style={loopInfo.tagColor ? { '--loop-chip-accent': loopInfo.tagColor } : undefined}
+            title={
+              loopInfo.tagName
+                ? `Bucle: tag «${loopInfo.tagName}» (frames ${loopInfo.from}–${loopInfo.to})`
+                : `Bucle: frames ${loopInfo.from}–${loopInfo.to}`
+            }
+          >
+            <span className="player-loop-chip__icon">↻</span>
+            <span className="player-loop-chip__label">
+              {loopInfo.tagName ? `«${loopInfo.tagName}»` : 'Bucle'}
+            </span>
+            <span className="player-loop-chip__value">
+              {loopInfo.from}–{loopInfo.to}
+            </span>
+            <button
+              type="button"
+              className="player-loop-chip__close"
+              onClick={() => onClearLoop?.('mini')}
+              aria-label="Salir del bucle"
+              title="Salir del bucle"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         <canvas ref={internalCanvasRef} className="animation-canvas" />
 
