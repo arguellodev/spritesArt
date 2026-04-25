@@ -174,6 +174,7 @@ const {
   displaySize,
   isPlaying,
   setIsPlaying,
+  loopEnabled,
   onTimeUpdate,
   onFrameChange,
   syncedFrameNumber: currentFrame,
