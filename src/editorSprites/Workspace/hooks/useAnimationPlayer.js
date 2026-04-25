@@ -24,6 +24,7 @@ export function useAnimationPlayer({
   displaySize = 256,
   isPlaying: isPlayingProp,
   setIsPlaying: setIsPlayingProp,
+  loopEnabled = true,
   onTimeUpdate,
   onFrameChange,
   // Si se provee un frameNumber, el hook sincroniza frameIndexRef con él
@@ -206,6 +207,15 @@ export function useAnimationPlayer({
         if (nextRangeIndex === 0) cycleCompleted = true;
       }
 
+      // Loop apagado: si completamos un ciclo, detener al final del rango.
+      // Para forward/reverse: el último frame mostrado es el cierre natural
+      // del rango; nos quedamos ahí. Para pingpong: cycleCompleted se setea
+      // tras el viaje de vuelta a `start`, y nos quedamos en `start`.
+      if (cycleCompleted && !loopEnabled) {
+        setIsPlaying(false);
+        return;
+      }
+
       frameIndexRef.current = frameRange.start + nextRangeIndex;
       lastTimestampRef.current = timestamp;
 
@@ -237,7 +247,7 @@ export function useAnimationPlayer({
     // La re-agenda del próximo tick la hace el useEffect sobre isPlaying; no
     // auto-referenciamos `animateFrames` aquí (evita warnings de TDZ de ESLint
     // y desacopla la vida del loop del cambio de identidad del callback).
-  }, [frameRange, playbackSpeed, playbackMode, frames, drawFrame, onFrameChange, onTimeUpdate]);
+  }, [frameRange, playbackSpeed, playbackMode, frames, drawFrame, onFrameChange, onTimeUpdate, loopEnabled, setIsPlaying]);
 
   // Inicialización y re-sync al cambiar frames (o el frameNumber sincronizado).
   useEffect(() => {
