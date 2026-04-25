@@ -1,103 +1,203 @@
-import React, { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './topToolbar.css';
 
-const TopToolbar = ({ children, companyName = "Argánion", companyLogo = null }) => {
+const EMPTY_MENUS = [];
+
+// Barra superior. Tres slots:
+//  - izquierda: menus desplegables (solo si `menus` trae items)
+//  - centro:    children (acciones principales)
+//  - derecha:   `rightSlot` custom o branding "Powered by"
+const TopToolbar = ({
+  children,
+  companyName = 'Argánion',
+  companyLogo = null,
+  menus = EMPTY_MENUS,
+  rightSlot = null,
+}) => {
   const [activeDropdown, setActiveDropdown] = useState(null);
+  const [focusedIndex, setFocusedIndex] = useState(-1);
+  const containerRef = useRef(null);
+  const triggerRefs = useRef({});
+  const menuItemRefs = useRef({});
 
-  const topActions = {
-    archivo: [
-      { name: 'Nuevo', shortcut: 'Ctrl+N', action: () => console.log('Nuevo archivo') },
-      { name: 'Abrir', shortcut: 'Ctrl+O', action: () => console.log('Abrir archivo') },
-      { name: 'Guardar', shortcut: 'Ctrl+S', action: () => console.log('Guardar archivo') },
-      { name: 'Guardar como...', shortcut: 'Ctrl+Shift+S', action: () => console.log('Guardar como') },
-      { type: 'separator' },
-      { name: 'Cerrar', shortcut: 'Ctrl+W', action: () => console.log('Cerrar archivo') }
-    ],
-    seleccion: [
-      { name: 'Seleccionar todo', shortcut: 'Ctrl+A', action: () => console.log('Seleccionar todo') },
-      { name: 'Deseleccionar', shortcut: 'Ctrl+D', action: () => console.log('Deseleccionar') },
-      { name: 'Invertir selección', shortcut: 'Ctrl+I', action: () => console.log('Invertir selección') },
-      { type: 'separator' },
-      { name: 'Copiar', shortcut: 'Ctrl+C', action: () => console.log('Copiar') },
-      { name: 'Pegar', shortcut: 'Ctrl+V', action: () => console.log('Pegar') }
-    ],
-    exportar: [
-      { name: 'Exportar como PNG', action: () => console.log('Exportar PNG') },
-      { name: 'Exportar como JPG', action: () => console.log('Exportar JPG') },
-      { name: 'Exportar como SVG', action: () => console.log('Exportar SVG') },
-      { name: 'Exportar como PDF', action: () => console.log('Exportar PDF') },
-      { type: 'separator' },
-      { name: 'Configurar exportación', action: () => console.log('Configurar exportación') }
-    ]
-  };
-
-  const toggleDropdown = (dropdown) => {
-    setActiveDropdown(activeDropdown === dropdown ? null : dropdown);
-  };
+  const hasMenus = Array.isArray(menus) && menus.length > 0;
 
   const closeDropdowns = () => {
     setActiveDropdown(null);
+    setFocusedIndex(-1);
+  };
+
+  // Cierre al hacer click fuera (mousedown > click para atrapar antes)
+  useEffect(() => {
+    if (!activeDropdown) return undefined;
+    const handleMouseDown = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        closeDropdowns();
+      }
+    };
+    document.addEventListener('mousedown', handleMouseDown);
+    return () => document.removeEventListener('mousedown', handleMouseDown);
+  }, [activeDropdown]);
+
+  // Mueve el foco al item enfocado (navegacion por teclado)
+  useEffect(() => {
+    if (!activeDropdown || focusedIndex < 0) return;
+    const el = menuItemRefs.current[`${activeDropdown}-${focusedIndex}`];
+    if (el) el.focus();
+  }, [activeDropdown, focusedIndex]);
+
+  const toggleDropdown = (key) => {
+    setActiveDropdown((prev) => (prev === key ? null : key));
+    setFocusedIndex(-1);
+  };
+
+  // Salta separadores y disabled en navegacion por teclado
+  const findNextEnabled = (items, start, step) => {
+    const len = items.length;
+    if (len === 0) return -1;
+    let idx = start;
+    for (let i = 0; i < len; i += 1) {
+      idx = (idx + step + len) % len;
+      if (items[idx].type !== 'separator' && !items[idx].disabled) return idx;
+    }
+    return -1;
+  };
+
+  const handleTriggerKeyDown = (e, key, items) => {
+    if (e.key === 'Escape') {
+      closeDropdowns();
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setActiveDropdown(key);
+      const firstIdx = findNextEnabled(items, -1, 1);
+      setFocusedIndex(firstIdx);
+    }
+  };
+
+  const handleMenuKeyDown = (e, key, items) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeDropdowns();
+      const trigger = triggerRefs.current[key];
+      if (trigger) trigger.focus();
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setFocusedIndex((prev) => findNextEnabled(items, prev, 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setFocusedIndex((prev) => findNextEnabled(items, prev, -1));
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      setFocusedIndex(findNextEnabled(items, -1, 1));
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      setFocusedIndex(findNextEnabled(items, 0, -1));
+    } else if (e.key === 'Tab') {
+      closeDropdowns();
+    }
   };
 
   const handleItemClick = (item) => {
-    if (item.action) {
-      item.action();
-    }
+    if (item.disabled) return;
+    if (item.onClick) item.onClick();
     closeDropdowns();
   };
 
-  const renderDropdownItem = (item, index) => {
+  const renderDropdownItem = (item, index, menuKey) => {
     if (item.type === 'separator') {
-      return <div key={index} className="dropdown-separator" />;
+      return (
+        <div
+          key={`${menuKey}-sep-${index}`}
+          className="dropdown-separator"
+          role="separator"
+        />
+      );
     }
 
     return (
-      <div
-        key={index}
+      <button
+        key={`${menuKey}-${index}`}
+        type="button"
+        role="menuitem"
         className="dropdown-item"
+        disabled={item.disabled}
+        ref={(el) => {
+          menuItemRefs.current[`${menuKey}-${index}`] = el;
+        }}
         onClick={() => handleItemClick(item)}
       >
         <span className="dropdown-item-name">{item.name}</span>
         {item.shortcut && (
           <span className="dropdown-item-shortcut">{item.shortcut}</span>
         )}
+      </button>
+    );
+  };
+
+  const renderRightSlot = () => {
+    if (rightSlot !== null) return rightSlot;
+    if (!companyName && !companyLogo) return null;
+    return (
+      <div className="powered-by" aria-hidden="true">
+        <span>Powered by</span>
+        {companyLogo && (
+          <img src={companyLogo} alt="" className="company-logo" />
+        )}
+        {companyName && <span className="company-name">{companyName}</span>}
       </div>
     );
   };
 
   return (
-    <div className="topToolbar-container" onClick={closeDropdowns}>
-      {/* Sección izquierda - Menús desplegables */}
-      <div className="topToolbar-left">
-        {Object.entries(topActions).map(([key, items]) => (
-          <div key={key} className="dropdown-wrapper">
-            <button
-              className={`dropdown-trigger ${activeDropdown === key ? 'active' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleDropdown(key);
-              }}
-            >
-              {key.charAt(0).toUpperCase() + key.slice(1)}
-            </button>
-            {activeDropdown === key && (
-              <div className="dropdown-menu" onClick={(e) => e.stopPropagation()}>
-                {items.map((item, index) => renderDropdownItem(item, index))}
+    <div className="topToolbar-container" ref={containerRef}>
+      {hasMenus && (
+        <div className="topToolbar-left" role="menubar">
+          {menus.map((menu) => {
+            const key = menu.key || menu.label;
+            const isOpen = activeDropdown === key;
+            return (
+              <div key={key} className="dropdown-wrapper">
+                <button
+                  type="button"
+                  ref={(el) => {
+                    triggerRefs.current[key] = el;
+                  }}
+                  className={`dropdown-trigger ${isOpen ? 'active' : ''}`}
+                  aria-haspopup="menu"
+                  aria-expanded={isOpen}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleDropdown(key);
+                  }}
+                  onKeyDown={(e) => handleTriggerKeyDown(e, key, menu.items)}
+                >
+                  {menu.label}
+                </button>
+                {isOpen && (
+                  <div
+                    className="dropdown-menu"
+                    role="menu"
+                    aria-label={menu.label}
+                    onKeyDown={(e) => handleMenuKeyDown(e, key, menu.items)}
+                  >
+                    {menu.items.map((item, idx) =>
+                      renderDropdownItem(item, idx, key),
+                    )}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        ))}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
-      {/* Sección central - Botones de acción */}
-      <div className="topToolbar-center">
-        {children}
-      </div>
+      <div className="topToolbar-center">{children}</div>
 
-      {/* Sección derecha - Powered by */}
-      <div className="topToolbar-right">
-        
-      </div>
+      <div className="topToolbar-right">{renderRightSlot()}</div>
     </div>
   );
 };

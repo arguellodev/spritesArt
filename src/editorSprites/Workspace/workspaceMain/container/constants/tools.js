@@ -31,6 +31,14 @@ export const TOOLS = {
   blurFinger: "blurFinger",
   smudge: "smudge",
   deblur: "deblur",
+  // Herramientas añadidas por el plan ambicioso (Sprint 2+).
+  // La integración al pointer pipeline se implementa consultando:
+  //   - maskFromMagicWand  (selection/selectionMask.js)
+  //   - combineMasks       (selection/selectionOps.js) para Shift/Alt/Shift+Alt
+  //   - tileTool branch    (tilemap/tilemapLayer.js::paintTile) cuando haya layer tilemap activa
+  magicWand: "magicWand",
+  tile: "tile",
+  text: "text",
 };
 
 export default TOOLS;

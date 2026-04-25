@@ -1,0 +1,151 @@
+.ref-layers-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: #1e1e24;
+  color: #e7e7ea;
+  font-size: 12px;
+}
+
+.ref-layers-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #2c2c34;
+}
+
+.ref-layers-panel__title {
+  text-transform: uppercase;
+  color: #bbb;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.ref-layers-panel__count {
+  font-family: monospace;
+  color: #8a8a95;
+  font-size: 10px;
+}
+
+.ref-layers-panel__empty {
+  font-style: italic;
+  color: #8a8a95;
+  padding: 6px;
+  font-size: 11px;
+}
+
+.ref-layers-panel__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.ref-layers-panel__item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  background: #2a2a33;
+  border-radius: 4px;
+}
+
+.ref-layers-panel__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 4px;
+  align-items: center;
+}
+
+.ref-layers-panel__toggle {
+  background: #1b1b22;
+  border: 1px solid #3a3a45;
+  color: #8a8a95;
+  border-radius: 3px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ref-layers-panel__toggle.is-on {
+  color: #ffd84a;
+  border-color: #ffd84a;
+}
+
+.ref-layers-panel__name {
+  background: transparent;
+  color: #e7e7ea;
+  border: none;
+  outline: none;
+  font-size: 11px;
+  padding: 2px 4px;
+}
+
+.ref-layers-panel__name:focus {
+  background: #1b1b22;
+  border-radius: 2px;
+}
+
+.ref-layers-panel__remove {
+  background: transparent;
+  border: none;
+  color: #c85050;
+  cursor: pointer;
+  padding: 0 6px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.ref-layers-panel__remove:hover {
+  color: #ff7070;
+}
+
+.ref-layers-panel__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ref-layers-panel__controls > label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10px;
+  color: #8a8a95;
+}
+
+.ref-layers-panel__controls input[type="range"] {
+  width: 100%;
+}
+
+.ref-layers-panel__nums {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.ref-layers-panel__nums label {
+  display: flex;
+  flex-direction: column;
+  font-size: 10px;
+  color: #8a8a95;
+  gap: 2px;
+}
+
+.ref-layers-panel__nums input {
+  background: #1b1b22;
+  color: #e7e7ea;
+  border: 1px solid #3a3a45;
+  border-radius: 2px;
+  padding: 2px 4px;
+  font-size: 10px;
+  outline: none;
+  width: 100%;
+}

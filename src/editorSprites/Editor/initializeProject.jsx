@@ -19,13 +19,19 @@ const InitializeProject = ({ onComplete, setLoadedData }) => {
   const supportsFileSystemAccess = 'showDirectoryPicker' in window;
 
   const sizePresets = [
-    { name: 'Minúsculo',  width: 16,   height: 16,   description: 'Iconos de juegos' },
-    { name: 'Pequeño',    width: 32,   height: 32,   description: 'Sprites retro clásicos' },
-    { name: 'Mediano',    width: 64,   height: 64,   description: 'Personajes estándar' },
-    { name: 'Grande',     width: 128,  height: 128,  description: 'Personajes detallados' },
-    { name: 'Gigante',    width: 1000, height: 1000, description: 'Escenarios' },
-    { name: 'Ultra',      width: 2048, height: 2048, description: 'Escenarios gigantes' },
+    { name: 'Minúsculo',     width: 16,   height: 16,   description: 'Iconos de juegos' },
+    { name: 'Pequeño',       width: 32,   height: 32,   description: 'Sprites retro clásicos' },
+    { name: 'Mediano',       width: 64,   height: 64,   description: 'Personajes estándar' },
+    { name: 'Grande',        width: 128,  height: 128,  description: 'Personajes detallados' },
+    { name: 'Gigante',       width: 512,  height: 512,  description: 'Escenarios' },
+    { name: 'Ultra',         width: 2048, height: 2048, description: 'Escenarios gigantes' },
+    { name: 'Personalizado', width: 64,   height: 64,   description: 'Define tu tamaño' },
   ];
+
+  const getDimensions = (data) => ({
+    width:  data?.dimensions?.width  ?? data?.width  ?? 64,
+    height: data?.dimensions?.height ?? data?.height ?? 64,
+  });
 
   const handleSelectFolder = async () => {
     if (!supportsFileSystemAccess) {
@@ -60,7 +66,8 @@ const InitializeProject = ({ onComplete, setLoadedData }) => {
             let dimensions = 'Sin datos';
             try {
               projectData = JSON.parse(content);
-              dimensions = `${projectData.width || 64}×${projectData.height || 64}`;
+              const dim = getDimensions(projectData);
+              dimensions = `${dim.width}×${dim.height}`;
             } catch (parseError) {
               console.warn(`No se pudo parsear ${name}:`, parseError);
             }
@@ -103,7 +110,7 @@ const InitializeProject = ({ onComplete, setLoadedData }) => {
             name: file.name.replace(/\.[^/.]+$/, ""),
             path: file.name,
             lastModified: file.lastModified,
-            dimensions: `${projectData.width || 64}×${projectData.height || 64}`,
+            dimensions: `${getDimensions(projectData).width}×${getDimensions(projectData).height}`,
             data: projectData
           });
         } catch (error) {
@@ -128,7 +135,8 @@ const InitializeProject = ({ onComplete, setLoadedData }) => {
         if (setLoadedData && typeof setLoadedData === 'function') {
           setLoadedData(projectData);
         }
-        onComplete({ name: project.name, width: projectData.width || 64, height: projectData.height || 64, projectData });
+        const { width, height } = getDimensions(projectData);
+        onComplete({ name: project.name, width, height, projectData });
       } else {
         setRecentProjects(prev => {
           const filtered = prev.filter(p => p.path !== project.path);
@@ -162,7 +170,7 @@ const InitializeProject = ({ onComplete, setLoadedData }) => {
 
   const handlePresetSelect = (preset, index) => {
     setSelectedPresetIndex(index);
-    setIsCustom(preset.name === 'Custom');
+    setIsCustom(preset.name === 'Personalizado');
     setCustomWidth(preset.width);
     setCustomHeight(preset.height);
   };
@@ -179,7 +187,7 @@ const InitializeProject = ({ onComplete, setLoadedData }) => {
 
   const isValidSetup = () => {
     if (selectedPresetIndex === null) return false;
-    if (isCustom) return customWidth > 0 && customHeight > 0 && customWidth <= 2048 && customHeight <= 2048;
+    if (isCustom) return customWidth > 0 && customHeight > 0;
     return true;
   };
 
@@ -407,7 +415,6 @@ const InitializeProject = ({ onComplete, setLoadedData }) => {
                         id="custom-width"
                         type="number"
                         min="1"
-                        max="2048"
                         value={customWidth}
                         onChange={(e) => setCustomWidth(parseInt(e.target.value) || 1)}
                       />
@@ -422,7 +429,6 @@ const InitializeProject = ({ onComplete, setLoadedData }) => {
                         id="custom-height"
                         type="number"
                         min="1"
-                        max="2048"
                         value={customHeight}
                         onChange={(e) => setCustomHeight(parseInt(e.target.value) || 1)}
                       />
@@ -430,7 +436,7 @@ const InitializeProject = ({ onComplete, setLoadedData }) => {
                     </div>
                   </div>
                 </div>
-                <p className="custom-hint">Máximo 2048 × 2048 píxeles</p>
+                <p className="custom-hint">Sin límite de tamaño · Valores muy altos pueden afectar el rendimiento</p>
               </div>
             )}
 

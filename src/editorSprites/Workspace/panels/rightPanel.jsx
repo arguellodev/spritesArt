@@ -5,12 +5,63 @@ import { LuChevronLeft, LuChevronRight, LuChevronDown } from "react-icons/lu";
 import "./rightPanel.css";
 
 const STORAGE_KEY = "pixcalli.rightPanel.v2";
+// La anchura del panel se persiste aparte porque la modifica el módulo de
+// color (LayerColor) mediante drag, y debe leerse incluso si el módulo no se
+// monta (caso panel colapsado o sección de color cerrada).
+const WIDTH_STORAGE_KEY = "pixcalli.rightPanel.width";
 
-const MODULOS = [
-  { id: "viewportNavigator", titulo: "Navegador" },
-  { id: "layerColor", titulo: "Color" },
-  { id: "playAnimation", titulo: "Animación" },
+function cargarAncho() {
+  try {
+    const v = parseInt(localStorage.getItem(WIDTH_STORAGE_KEY), 10);
+    if (!Number.isFinite(v)) return null;
+    if (v < 280 || v > 720) return null;
+    return v;
+  } catch {
+    return null;
+  }
+}
+
+// Títulos humanos por id. Si un panel no tiene título aquí, se usa el id mismo.
+const TITLES = {
+  viewportNavigator: "Navegador",
+  layerColor: "Color",
+  playAnimation: "Animación",
+  history: "Historia",
+  tags: "Tags de animación",
+  keybindings: "Atajos",
+  tileset: "Tileset",
+  slices: "Slices",
+  references: "Referencias",
+  magicWand: "Varita Mágica",
+  stabilizer: "Estabilizador de trazo",
+  palette: "Paletas",
+};
+
+// Orden fijo para los módulos conocidos; paneles nuevos se añaden al final.
+const KNOWN_ORDER = [
+  "viewportNavigator",
+  "layerColor",
+  "playAnimation",
+  "stabilizer",
+  "magicWand",
+  "history",
+  "tags",
+  "keybindings",
+  "tileset",
+  "slices",
+  "references",
+  "palette",
 ];
+
+function buildModulos(paneles) {
+  const ids = Object.keys(paneles || {});
+  // Conservar el orden KNOWN_ORDER + agregar desconocidos al final.
+  const sorted = [
+    ...KNOWN_ORDER.filter((id) => ids.includes(id)),
+    ...ids.filter((id) => !KNOWN_ORDER.includes(id)),
+  ];
+  return sorted.map((id) => ({ id, titulo: TITLES[id] ?? id }));
+}
 
 function cargarEstado() {
   try {
@@ -36,14 +87,26 @@ function guardarEstado(estado) {
 //  - Cada módulo: sección con header clickable que oculta/muestra su cuerpo.
 // El estado persiste en localStorage por key `pixcalli.rightPanel.v2`.
 export function RightPanel({ paneles }) {
+  const MODULOS = buildModulos(paneles);
+
   const [expandido, setExpandido] = useState(() => {
     const saved = cargarEstado();
     return saved && typeof saved.expandido === "boolean" ? saved.expandido : true;
   });
   const [secciones, setSecciones] = useState(() => {
     const saved = cargarEstado();
-    const base = { viewportNavigator: true, layerColor: true, playAnimation: true };
-    return saved && saved.secciones ? { ...base, ...saved.secciones } : base;
+    // Default: paneles "core" abiertos; nuevos cerrados por defecto para no saturar la UI.
+    const defaultsOpen = {
+      viewportNavigator: true,
+      layerColor: true,
+      playAnimation: true,
+      history: false,
+      tags: false,
+      keybindings: false,
+      tileset: false,
+      palette: false,
+    };
+    return saved && saved.secciones ? { ...defaultsOpen, ...saved.secciones } : defaultsOpen;
   });
 
   const montadoRef = useRef(false);
@@ -63,6 +126,13 @@ export function RightPanel({ paneles }) {
     setExpandido(true);
     setSecciones((s) => ({ ...s, [id]: true }));
   }, []);
+
+  // Anchura persistida (modificada por LayerColor mediante drag). Aplicada como
+  // inline style para que sobreescriba el `width: 300px` del CSS sin romper
+  // el comportamiento por defecto cuando no hay valor guardado.
+  const anchoPersistido = cargarAncho();
+  const styleAncho =
+    anchoPersistido && expandido ? { width: `${anchoPersistido}px` } : undefined;
 
   if (!expandido) {
     return (
@@ -96,7 +166,7 @@ export function RightPanel({ paneles }) {
   }
 
   return (
-    <aside className="pc-right-panel" aria-label="Panel derecho">
+    <aside className="pc-right-panel" aria-label="Panel derecho" style={styleAncho}>
       <div className="pc-rp-header">
         <span className="pc-rp-header-title">Paneles</span>
         <button

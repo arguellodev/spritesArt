@@ -392,21 +392,14 @@ useKeybindingsListener(keybindingsRegistry);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-  //Inicializadores de color:
-  const [foregroundColor, setForegroundColor] = useState({
-    r: 0,
-    g: 0,
-    b: 0,
-    a: 255,
-  });
-  const [backgroundCOlor, setBackgroundColor] = useState({
-    r: 0,
-    g: 0,
-    b: 0,
-    a: 255,
-  });
-  const [fillColor, setFillColor] = useState({ r: 0, g: 0, b: 0, a: 255 });
-  const [borderColor, setBorderColor] = useState({ r: 0, g: 0, b: 0, a: 255 });
+  //Inicializadores de color: deben coincidir con los defaults internos de
+  // LayerColor (layerColor.jsx:23-28). Si no coinciden y el RightPanel arranca
+  // colapsado, LayerColor nunca se monta, su useEffect de sincronización no
+  // corre y toolParameters se queda con estos valores → todo se pinta en negro.
+  const [foregroundColor, setForegroundColor] = useState({ r: 0, g: 0, b: 0, a: 1 });
+  const [backgroundCOlor, setBackgroundColor] = useState({ r: 255, g: 255, b: 255, a: 1 });
+  const [fillColor, setFillColor] = useState({ r: 255, g: 0, b: 0, a: 1 });
+  const [borderColor, setBorderColor] = useState({ r: 0, g: 0, b: 0, a: 1 });
   const [isolatedPixels, setIsolatedPixels] = useState(null);
   const [toolParameters, setToolParameters] = useState({
     fillColor: fillColor,

@@ -1,525 +1,1175 @@
-/* AnimationExporter Component Styles */
+/* AnimationExporter — PixCalli Studio
+   Design tokens alineados con initializeProject.css:
+   Inter / #1a1a1a base / #8c52ff accent / radius 14px modal
+   Sistema escala 8px, elevacion 4 niveles, WCAG AA en texto. */
 
 .animation-exporter-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(0, 0, 0, 0.8);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-  }
-  
+  /* Scoped design tokens (no contaminan :root) */
+  --ae-space-1: 4px;
+  --ae-space-2: 8px;
+  --ae-space-3: 12px;
+  --ae-space-4: 16px;
+  --ae-space-5: 20px;
+  --ae-space-6: 28px;
+
+  --ae-radius-sm: 6px;
+  --ae-radius-md: 8px;
+  --ae-radius-lg: 12px;
+  --ae-radius-xl: 14px;
+
+  --ae-elev-1: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --ae-elev-2: 0 4px 10px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --ae-elev-3: 0 12px 28px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.35);
+  --ae-elev-4: 0 40px 100px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.06);
+
+  --ae-dur-fast: 120ms;
+  --ae-dur: 180ms;
+  --ae-dur-slow: 280ms;
+  --ae-ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Paleta — reusa vars de initializeProject.css + tokens propios */
+  --ae-surface-0: #151515;
+  --ae-surface-1: #1c1c1c;
+  --ae-surface-2: #222222;
+  --ae-surface-3: #2a2a2a;
+  --ae-surface-4: #333333;
+  --ae-border: rgba(255, 255, 255, 0.07);
+  --ae-border-strong: rgba(255, 255, 255, 0.12);
+  --ae-text-primary: #f0f0f0;
+  --ae-text-secondary: #c0c0c0;
+  --ae-text-muted: #9a9a9a;           /* 4.6:1 sobre #1a1a1a — WCAG AA */
+  --ae-accent: #8c52ff;
+  --ae-accent-hover: #9d6dff;
+  --ae-accent-soft: rgba(140, 82, 255, 0.14);
+  --ae-accent-border: rgba(140, 82, 255, 0.32);
+  --ae-accent-glow: rgba(140, 82, 255, 0.22);
+  --ae-danger: #ff5252;
+  --ae-danger-soft: rgba(255, 82, 82, 0.12);
+  --ae-success: #4ade80;
+  --ae-success-soft: rgba(74, 222, 128, 0.12);
+
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at 30% 60%, rgba(140, 82, 255, 0.08) 0%, rgba(0, 0, 0, 0.78) 65%);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: ae-overlay-in var(--ae-dur-slow) var(--ae-ease);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@keyframes ae-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.animation-exporter-modal {
+  background-color: var(--ae-surface-1);
+  border-radius: var(--ae-radius-xl);
+  box-shadow: var(--ae-elev-4);
+  border: 1px solid var(--ae-border-strong);
+  width: 92%;
+  max-width: 1400px;
+  height: 90%;
+  max-height: 920px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: ae-modal-in 0.42s var(--ae-ease);
+}
+
+@keyframes ae-modal-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.975); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+/* ══════════════════════════════════
+   Header
+   ══════════════════════════════════ */
+.animation-exporter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ae-space-4);
+  padding: var(--ae-space-4) var(--ae-space-5);
+  border-bottom: 1px solid var(--ae-border);
+  background: linear-gradient(180deg, #262626 0%, #1d1d1d 100%);
+  flex-shrink: 0;
+}
+
+.animation-exporter-header-main {
+  display: flex;
+  align-items: center;
+  gap: var(--ae-space-3);
+  min-width: 0;
+}
+
+.animation-exporter-header-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--ae-radius-md);
+  background: linear-gradient(180deg, rgba(140, 82, 255, 0.26) 0%, rgba(140, 82, 255, 0.12) 100%);
+  color: #d8c0ff;
+  border: 1px solid var(--ae-accent-border);
+  flex-shrink: 0;
+  box-shadow: var(--ae-elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.animation-exporter-header-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.animation-exporter-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ae-space-1);
+  min-width: 0;
+}
+
+.animation-exporter-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ae-text-primary);
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.animation-exporter-header-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ae-space-1);
+}
+
+.animation-exporter-header-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #c4a8ff;
+  background-color: var(--ae-accent-soft);
+  border: 1px solid var(--ae-accent-border);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+
+.animation-exporter-header-chip svg {
+  width: 12px;
+  height: 12px;
+}
+
+.animation-exporter-header-chip--muted {
+  color: var(--ae-text-muted);
+  background-color: rgba(255, 255, 255, 0.04);
+  border-color: var(--ae-border);
+}
+
+/* Close button — 40x40 (WCAG touch target) */
+.animation-exporter-close-button {
+  background: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  border-radius: var(--ae-radius-md);
+  color: var(--ae-text-muted);
+  transition: background-color var(--ae-dur) ease,
+              color var(--ae-dur) ease,
+              border-color var(--ae-dur) ease;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.animation-exporter-close-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.animation-exporter-close-button:hover:not(:disabled) {
+  background-color: var(--ae-danger-soft);
+  border-color: rgba(255, 82, 82, 0.32);
+  color: #ff9595;
+}
+
+.animation-exporter-close-button:focus-visible {
+  outline: 2px solid var(--ae-accent);
+  outline-offset: 2px;
+}
+
+.animation-exporter-close-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ══════════════════════════════════
+   Banner inline (success / error)
+   ══════════════════════════════════ */
+.animation-exporter-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--ae-space-3);
+  padding: 10px var(--ae-space-4);
+  margin: var(--ae-space-3) var(--ae-space-5) 0;
+  border-radius: var(--ae-radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: var(--ae-elev-1);
+  animation: ae-banner-in var(--ae-dur) var(--ae-ease);
+}
+
+@keyframes ae-banner-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animation-exporter-banner--success {
+  background-color: var(--ae-success-soft);
+  border: 1px solid rgba(74, 222, 128, 0.32);
+  color: #7ee8a1;
+}
+
+.animation-exporter-banner--error {
+  background-color: var(--ae-danger-soft);
+  border: 1px solid rgba(255, 82, 82, 0.32);
+  color: #ff9595;
+}
+
+.animation-exporter-banner-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.animation-exporter-banner-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.animation-exporter-banner-text {
+  flex: 1;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.animation-exporter-banner-close {
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  padding: var(--ae-space-1);
+  border-radius: var(--ae-radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--ae-dur-fast) ease, opacity var(--ae-dur-fast) ease;
+}
+
+.animation-exporter-banner-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.animation-exporter-banner-close:hover {
+  opacity: 1;
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.animation-exporter-banner-close:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+  opacity: 1;
+}
+
+/* ══════════════════════════════════
+   Layout principal
+   ══════════════════════════════════ */
+.animation-exporter-container {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.animation-exporter-left-panel {
+  width: 340px;
+  padding: var(--ae-space-5);
+  border-right: 1px solid var(--ae-border);
+  overflow-y: auto;
+  background-color: var(--ae-surface-0);
+  flex-shrink: 0;
+}
+
+.animation-exporter-right-panel {
+  flex: 1;
+  padding: var(--ae-space-5);
+  overflow-y: auto;
+  background-color: var(--ae-surface-1);
+  min-width: 0;
+}
+
+.animation-exporter-section {
+  margin-bottom: var(--ae-space-6);
+}
+
+.animation-exporter-section:last-child {
+  margin-bottom: 0;
+}
+
+.animation-exporter-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--ae-space-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  margin: 0 0 var(--ae-space-3);
+  color: var(--ae-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding-bottom: var(--ae-space-2);
+  border-bottom: 1px solid var(--ae-border);
+}
+
+.animation-exporter-section-title svg {
+  width: 14px;
+  height: 14px;
+  color: var(--ae-accent);
+}
+
+.animation-exporter-section-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: #c4a8ff;
+  background-color: var(--ae-accent-soft);
+  border: 1px solid var(--ae-accent-border);
+  border-radius: 999px;
+  padding: 2px 9px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ══════════════════════════════════
+   Tipo de exportacion (cards)
+   ══════════════════════════════════ */
+.animation-exporter-export-type-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--ae-space-2);
+}
+
+.animation-exporter-export-type-button {
+  padding: var(--ae-space-3) var(--ae-space-2);
+  border: 1.5px solid var(--ae-surface-4);
+  border-radius: var(--ae-radius-md);
+  background-color: var(--ae-surface-3);
+  color: var(--ae-text-primary);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color var(--ae-dur) ease,
+              background-color var(--ae-dur) ease,
+              box-shadow var(--ae-dur) ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--ae-space-1);
+  font-family: inherit;
+  min-height: 88px;
+}
+
+.animation-exporter-export-type-button:hover:not(.active) {
+  border-color: var(--ae-border-strong);
+  background-color: #2e2e2e;
+}
+
+.animation-exporter-export-type-button:focus-visible {
+  outline: 2px solid var(--ae-accent);
+  outline-offset: 2px;
+}
+
+.animation-exporter-export-type-button.active {
+  border-color: var(--ae-accent);
+  background: linear-gradient(180deg, rgba(140, 82, 255, 0.22) 0%, rgba(140, 82, 255, 0.10) 100%);
+  box-shadow: var(--ae-elev-2), 0 0 0 1px var(--ae-accent-glow);
+}
+
+.animation-exporter-export-type-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--ae-radius-md);
+  background-color: rgba(255, 255, 255, 0.04);
+  color: var(--ae-text-secondary);
+  border: 1px solid var(--ae-border);
+  transition: color var(--ae-dur) ease, background-color var(--ae-dur) ease, border-color var(--ae-dur) ease;
+}
+
+.animation-exporter-export-type-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.animation-exporter-export-type-button.active .animation-exporter-export-type-icon {
+  background-color: rgba(140, 82, 255, 0.26);
+  color: #d8c0ff;
+  border-color: var(--ae-accent-border);
+}
+
+.animation-exporter-export-type-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ae-text-primary);
+  letter-spacing: 0.005em;
+}
+
+.animation-exporter-export-type-sub {
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--ae-text-muted);
+  line-height: 1.25;
+}
+
+.animation-exporter-export-type-button.active .animation-exporter-export-type-sub {
+  color: #b8a8d9;
+}
+
+/* ══════════════════════════════════
+   Inputs / selects
+   ══════════════════════════════════ */
+.animation-exporter-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.animation-exporter-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.animation-exporter-input-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  min-width: 96px;
+  color: var(--ae-text-secondary);
+  font-weight: 500;
+}
+
+.animation-exporter-input-label svg {
+  width: 13px;
+  height: 13px;
+  color: var(--ae-text-muted);
+}
+
+.animation-exporter-select,
+.animation-exporter-custom-scale-field,
+.animation-exporter-number-input {
+  padding: 7px 10px;
+  border: 1px solid var(--ae-surface-4);
+  border-radius: var(--ae-radius-sm);
+  font-size: 12.5px;
+  background-color: var(--ae-surface-3);
+  color: var(--ae-text-primary);
+  outline: none;
+  font-family: inherit;
+  transition: border-color var(--ae-dur) ease, box-shadow var(--ae-dur) ease;
+  min-height: 32px;
+}
+
+.animation-exporter-select {
+  flex: 1;
+  cursor: pointer;
+}
+
+.animation-exporter-select:hover,
+.animation-exporter-custom-scale-field:hover,
+.animation-exporter-number-input:hover {
+  border-color: var(--ae-border-strong);
+}
+
+.animation-exporter-select:focus-visible,
+.animation-exporter-custom-scale-field:focus,
+.animation-exporter-number-input:focus {
+  border-color: var(--ae-accent);
+  box-shadow: 0 0 0 3px var(--ae-accent-soft);
+}
+
+.animation-exporter-number-input {
+  width: 86px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ══════════════════════════════════
+   Escala (segmented control + presets)
+   ══════════════════════════════════ */
+.animation-exporter-scale-mode-buttons {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background-color: var(--ae-surface-3);
+  border: 1px solid var(--ae-surface-4);
+  border-radius: var(--ae-radius-md);
+}
+
+.animation-exporter-scale-mode-button {
+  padding: 6px var(--ae-space-3);
+  border: none;
+  border-radius: 5px;
+  background-color: transparent;
+  color: var(--ae-text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  transition: background-color var(--ae-dur) ease, color var(--ae-dur) ease;
+  flex: 1;
+  min-height: 28px;
+}
+
+.animation-exporter-scale-mode-button:hover:not(.active) {
+  background-color: rgba(255, 255, 255, 0.04);
+  color: var(--ae-text-primary);
+}
+
+.animation-exporter-scale-mode-button.active {
+  background-color: var(--ae-accent);
+  color: #fff;
+  box-shadow: var(--ae-elev-1);
+}
+
+.animation-exporter-scale-mode-button:focus-visible {
+  outline: 2px solid var(--ae-accent);
+  outline-offset: 2px;
+}
+
+.animation-exporter-custom-scale-input {
+  display: flex;
+  align-items: center;
+  gap: var(--ae-space-2);
+}
+
+.animation-exporter-custom-scale-field {
+  text-align: center;
+  width: 100%;
+}
+
+.animation-exporter-custom-scale-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #c4a8ff;
+}
+
+.animation-exporter-scale-presets {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.animation-exporter-scale-button {
+  padding: 7px 0;
+  border: 1px solid var(--ae-surface-4);
+  border-radius: var(--ae-radius-sm);
+  background-color: var(--ae-surface-3);
+  color: var(--ae-text-primary);
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: inherit;
+  transition: background-color var(--ae-dur-fast) ease,
+              border-color var(--ae-dur-fast) ease,
+              color var(--ae-dur-fast) ease;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  min-height: 28px;
+}
+
+.animation-exporter-scale-button:hover:not(.active) {
+  background-color: #2e2e2e;
+  border-color: var(--ae-border-strong);
+}
+
+.animation-exporter-scale-button.active {
+  background-color: rgba(140, 82, 255, 0.2);
+  border-color: var(--ae-accent);
+  color: #d8c0ff;
+}
+
+.animation-exporter-scale-button:focus-visible {
+  outline: 2px solid var(--ae-accent);
+  outline-offset: 2px;
+}
+
+/* ══════════════════════════════════
+   Info de dimensiones (readout)
+   ══════════════════════════════════ */
+.animation-exporter-dimension-info {
+  padding: 10px var(--ae-space-3);
+  background-color: var(--ae-surface-3);
+  border-radius: var(--ae-radius-md);
+  border: 1px solid var(--ae-border);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: var(--ae-space-1);
+}
+
+.animation-exporter-dimension-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.animation-exporter-dimension-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ae-text-muted);
+  font-weight: 500;
+}
+
+.animation-exporter-dimension-label svg {
+  width: 12px;
+  height: 12px;
+}
+
+.animation-exporter-dimension-value {
+  color: var(--ae-text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.animation-exporter-dimension-value--accent {
+  color: #c4a8ff;
+  font-weight: 700;
+}
+
+.animation-exporter-algorithm-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #b8a8d9;
+  font-style: normal;
+  margin: var(--ae-space-1) 0 0;
+  line-height: 1.45;
+  padding-top: 7px;
+  border-top: 1px dashed var(--ae-accent-border);
+}
+
+.animation-exporter-algorithm-info svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: var(--ae-accent);
+}
+
+/* ══════════════════════════════════
+   Selection modes (segmented)
+   ══════════════════════════════════ */
+.animation-exporter-selection-modes {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background-color: var(--ae-surface-3);
+  border: 1px solid var(--ae-surface-4);
+  border-radius: var(--ae-radius-md);
+  margin-bottom: var(--ae-space-4);
+}
+
+.animation-exporter-mode-button {
+  flex: 1;
+  padding: 7px var(--ae-space-3);
+  border: none;
+  border-radius: 5px;
+  background-color: transparent;
+  color: var(--ae-text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  transition: background-color var(--ae-dur) ease, color var(--ae-dur) ease;
+  min-height: 32px;
+}
+
+.animation-exporter-mode-button:hover:not(.active) {
+  background-color: rgba(255, 255, 255, 0.04);
+  color: var(--ae-text-primary);
+}
+
+.animation-exporter-mode-button.active {
+  background-color: var(--ae-accent);
+  color: #fff;
+  box-shadow: var(--ae-elev-1);
+}
+
+.animation-exporter-mode-button:focus-visible {
+  outline: 2px solid var(--ae-accent);
+  outline-offset: 2px;
+}
+
+.animation-exporter-range-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding: var(--ae-space-3) var(--ae-space-4);
+  background-color: var(--ae-surface-2);
+  border-radius: var(--ae-radius-md);
+  border: 1px solid var(--ae-border);
+  margin-bottom: var(--ae-space-4);
+}
+
+.animation-exporter-apply-range-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px var(--ae-space-4);
+  background-color: var(--ae-accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--ae-radius-sm);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--ae-dur) ease, box-shadow var(--ae-dur) ease;
+  font-family: inherit;
+  margin-left: auto;
+  min-height: 32px;
+  box-shadow: var(--ae-elev-1);
+}
+
+.animation-exporter-apply-range-button svg {
+  width: 13px;
+  height: 13px;
+}
+
+.animation-exporter-apply-range-button:hover {
+  background-color: var(--ae-accent-hover);
+  box-shadow: var(--ae-elev-2);
+}
+
+.animation-exporter-apply-range-button:focus-visible {
+  outline: 2px solid var(--ae-accent);
+  outline-offset: 2px;
+}
+
+.animation-exporter-manual-controls {
+  display: flex;
+  gap: var(--ae-space-2);
+  margin-bottom: var(--ae-space-4);
+}
+
+.animation-exporter-select-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px var(--ae-space-3);
+  border: 1px solid var(--ae-surface-4);
+  border-radius: var(--ae-radius-sm);
+  background-color: var(--ae-surface-3);
+  color: var(--ae-text-primary);
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 500;
+  font-family: inherit;
+  transition: background-color var(--ae-dur) ease, border-color var(--ae-dur) ease;
+  min-height: 32px;
+}
+
+.animation-exporter-select-button svg {
+  width: 13px;
+  height: 13px;
+}
+
+.animation-exporter-select-button:hover {
+  background-color: #2e2e2e;
+  border-color: var(--ae-border-strong);
+}
+
+.animation-exporter-select-button:focus-visible {
+  outline: 2px solid var(--ae-accent);
+  outline-offset: 2px;
+}
+
+/* ══════════════════════════════════
+   Grid de frames
+   ══════════════════════════════════ */
+.animation-exporter-frame-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--ae-space-3);
+  padding: var(--ae-space-4);
+  background-color: var(--ae-surface-2);
+  border-radius: var(--ae-radius-md);
+  border: 1px solid var(--ae-border);
+}
+
+.animation-exporter-frame-card {
+  border: 1.5px solid var(--ae-surface-4);
+  border-radius: var(--ae-radius-md);
+  background-color: var(--ae-surface-3);
+  padding: var(--ae-space-2);
+  transition: border-color var(--ae-dur-fast) ease,
+              background-color var(--ae-dur-fast) ease,
+              box-shadow var(--ae-dur) ease;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.animation-exporter-frame-card.is-clickable {
+  cursor: pointer;
+}
+
+.animation-exporter-frame-card.is-clickable:hover:not(.selected) {
+  border-color: var(--ae-border-strong);
+  background-color: #2e2e2e;
+  box-shadow: var(--ae-elev-1);
+}
+
+.animation-exporter-frame-card.selected {
+  border-color: var(--ae-accent);
+  background: linear-gradient(180deg, rgba(140, 82, 255, 0.18) 0%, rgba(140, 82, 255, 0.08) 100%);
+  box-shadow: var(--ae-elev-2), 0 0 0 1px var(--ae-accent-glow);
+}
+
+.animation-exporter-frame-card:focus-visible {
+  outline: 2px solid var(--ae-accent);
+  outline-offset: 2px;
+}
+
+.animation-exporter-frame-checkbox {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--ae-accent);
+  z-index: 2;
+}
+
+.animation-exporter-frame-check {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: var(--ae-accent);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  box-shadow: 0 2px 8px rgba(140, 82, 255, 0.5);
+}
+
+.animation-exporter-frame-check svg {
+  width: 11px;
+  height: 11px;
+}
+
+.animation-exporter-frame-thumbnail {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--ae-radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--ae-surface-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #2a2a2a;
+}
+
+.animation-exporter-thumbnail-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.animation-exporter-thumbnail-placeholder {
+  color: var(--ae-text-muted);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.animation-exporter-frame-info {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.animation-exporter-frame-number {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ae-text-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.animation-exporter-frame-duration {
+  font-size: 11px;
+  color: var(--ae-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ══════════════════════════════════
+   Footer: progreso + boton principal
+   ══════════════════════════════════ */
+.animation-exporter-footer {
+  padding: var(--ae-space-4) var(--ae-space-5);
+  border-top: 1px solid var(--ae-border);
+  background-color: var(--ae-surface-0);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.animation-exporter-progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.animation-exporter-progress-bar {
+  width: 100%;
+  height: 6px;
+  background-color: var(--ae-surface-3);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+
+.animation-exporter-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--ae-accent) 0%, #b088ff 100%);
+  transition: width var(--ae-dur) ease;
+  border-radius: 3px;
+  box-shadow: 0 0 8px rgba(140, 82, 255, 0.45);
+}
+
+.animation-exporter-progress-text {
+  font-size: 11.5px;
+  color: var(--ae-text-muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.animation-exporter-export-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ae-space-2);
+  width: 100%;
+  padding: 13px;
+  background: linear-gradient(180deg, #9660ff 0%, var(--ae-accent) 100%);
+  color: #fff;
+  border: none;
+  border-radius: var(--ae-radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--ae-dur) ease,
+              box-shadow var(--ae-dur) ease,
+              transform var(--ae-dur-fast) ease;
+  font-family: inherit;
+  letter-spacing: 0.01em;
+  min-height: 48px;
+  box-shadow: var(--ae-elev-2);
+}
+
+.animation-exporter-export-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.animation-exporter-export-button:hover:not(:disabled) {
+  background: linear-gradient(180deg, #a572ff 0%, var(--ae-accent-hover) 100%);
+  transform: translateY(-1px);
+  box-shadow: var(--ae-elev-3);
+}
+
+.animation-exporter-export-button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--ae-elev-1);
+}
+
+.animation-exporter-export-button:focus-visible {
+  outline: 2px solid var(--ae-accent);
+  outline-offset: 3px;
+}
+
+.animation-exporter-export-button:disabled {
+  background: var(--ae-surface-4);
+  color: var(--ae-text-muted);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.animation-exporter-spinner {
+  animation: ae-spin 0.9s linear infinite;
+}
+
+@keyframes ae-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ══════════════════════════════════
+   Scrollbars discretos
+   ══════════════════════════════════ */
+.animation-exporter-left-panel::-webkit-scrollbar,
+.animation-exporter-right-panel::-webkit-scrollbar {
+  width: 10px;
+}
+
+.animation-exporter-left-panel::-webkit-scrollbar-track,
+.animation-exporter-right-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.animation-exporter-left-panel::-webkit-scrollbar-thumb,
+.animation-exporter-right-panel::-webkit-scrollbar-thumb {
+  background: var(--ae-surface-4);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.animation-exporter-left-panel::-webkit-scrollbar-thumb:hover,
+.animation-exporter-right-panel::-webkit-scrollbar-thumb:hover {
+  background: #444;
+  background-clip: content-box;
+}
+
+/* Firefox */
+.animation-exporter-left-panel,
+.animation-exporter-right-panel {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ae-surface-4) transparent;
+}
+
+/* ══════════════════════════════════
+   Responsive
+   ══════════════════════════════════ */
+@media (max-width: 1100px) {
   .animation-exporter-modal {
-    background-color: #1a1a1a;
-    border-radius: 12px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-    border: 1px solid #333;
-    width: 95%;
-    max-width: 1400px;
-    height: 90%;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
+    width: 98%;
+    height: 94%;
   }
-  
-  .animation-exporter-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 20px;
-    border-bottom: 1px solid #333;
-    background-color: #222;
-  }
-  
-  .animation-exporter-title {
-    margin: 0;
-    font-size: 24px;
-    font-weight: bold;
-    color: #fff;
-  }
-  
-  .animation-exporter-close-button {
-    background: none;
-    border: none;
-    font-size: 24px;
-    cursor: pointer;
-    padding: 8px;
-    border-radius: 6px;
-    color: #aaa;
-    transition: all 0.2s ease;
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  
-  .animation-exporter-close-button:hover {
-    background-color: #333;
-    color: #fff;
-  }
-  
+
   .animation-exporter-container {
-    display: flex;
-    flex: 1;
-    overflow: hidden;
+    flex-direction: column;
   }
-  
+
   .animation-exporter-left-panel {
-    width: 320px;
-    padding: 20px;
-    border-right: 1px solid #333;
-    overflow-y: auto;
-    background-color: #1a1a1a;
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--ae-border);
+    max-height: 46%;
   }
-  
-  .animation-exporter-right-panel {
-    flex: 1;
-    padding: 20px;
-    overflow-y: auto;
-    background-color: #1a1a1a;
+}
+
+@media (max-width: 640px) {
+  .animation-exporter-overlay {
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
   }
-  
-  .animation-exporter-section {
-    margin-bottom: 30px;
+
+  .animation-exporter-header {
+    padding: var(--ae-space-3) var(--ae-space-4);
   }
-  
-  .animation-exporter-section-title {
-    font-size: 18px;
-    font-weight: 600;
-    margin-bottom: 15px;
-    color: #fff;
-    border-bottom: 2px solid #444;
-    padding-bottom: 8px;
+
+  .animation-exporter-header-icon {
+    width: 34px;
+    height: 34px;
   }
-  
-  .animation-exporter-export-type-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
+
+  .animation-exporter-header-icon svg {
+    width: 17px;
+    height: 17px;
   }
-  
-  .animation-exporter-export-type-button {
-    padding: 16px;
-    border: 2px solid #444;
-    border-radius: 8px;
-    background-color: #2a2a2a;
-    color: #fff;
-    cursor: pointer;
-    text-align: center;
-    transition: all 0.2s ease;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-  }
-  
-  .animation-exporter-export-type-button:hover {
-    border-color: #666;
-    background-color: #333;
-  }
-  
-  .animation-exporter-export-type-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  
-  .animation-exporter-export-type-button.active {
-    border-color: #8c52ff;
-    background-color: #4b3c7a;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(140, 82, 255, 0.3);
-  }
-  
-  .animation-exporter-export-type-icon {
-    font-size: 28px;
-  }
-  
-  .animation-exporter-export-type-label {
-    font-size: 14px;
-    font-weight: 600;
-  }
-  
-  .animation-exporter-input-group {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  
-  .animation-exporter-scale-mode-buttons {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 12px;
-  }
-  
-  .animation-exporter-scale-mode-button {
-    padding: 8px 16px;
-    border: 1px solid #444;
-    border-radius: 6px;
-    background-color: #2a2a2a;
-    color: #fff;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    transition: all 0.2s ease;
-    flex: 1;
-  }
-  
-  .animation-exporter-scale-mode-button:hover {
-    background-color: #333;
-  }
-  
-  .animation-exporter-scale-mode-button.active {
-    background-color: #8c52ff;
-    border-color: #8c52ff;
-    color: white;
-  }
-  
-  .animation-exporter-custom-scale-input {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  
-  .animation-exporter-custom-scale-field {
-    padding: 8px 12px;
-    border: 1px solid #444;
-    border-radius: 6px;
-    font-size: 14px;
-    background-color: #2a2a2a;
-    color: #fff;
-    outline: none;
-    text-align: center;
-    width: 100px;
-  }
-  
-  .animation-exporter-custom-scale-field:focus {
-    border-color: #8c52ff;
-    box-shadow: 0 0 0 2px rgba(140, 82, 255, 0.2);
-  }
-  
-  .animation-exporter-custom-scale-label {
+
+  .animation-exporter-title {
     font-size: 16px;
-    font-weight: bold;
-    color: #fff;
   }
-  
+
+  .animation-exporter-header-meta {
+    display: none;
+  }
+
+  .animation-exporter-left-panel,
+  .animation-exporter-right-panel,
+  .animation-exporter-footer {
+    padding: var(--ae-space-4);
+  }
+
   .animation-exporter-scale-presets {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 8px;
-    margin-bottom: 12px;
+    grid-template-columns: repeat(4, 1fr);
   }
-  
-  .animation-exporter-scale-button {
-    padding: 8px 12px;
-    border: 1px solid #444;
-    border-radius: 6px;
-    background-color: #2a2a2a;
-    color: #fff;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 600;
-    transition: all 0.2s ease;
-    text-align: center;
+
+  .animation-exporter-export-type-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
   }
-  
-  .animation-exporter-scale-button:hover {
-    background-color: #333;
-    border-color: #666;
+
+  .animation-exporter-export-type-button {
+    min-height: 78px;
+    padding: 10px 6px;
   }
-  
-  .animation-exporter-scale-button.active {
-    background-color: #8c52ff;
-    border-color: #8c52ff;
-    color: white;
+}
+
+/* ══════════════════════════════════
+   Reduced motion — respeta preferencias del usuario
+   ══════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  .animation-exporter-overlay,
+  .animation-exporter-modal,
+  .animation-exporter-banner,
+  .animation-exporter-spinner {
+    animation: none !important;
   }
-  
-  .animation-exporter-dimension-info {
-    padding: 12px;
-    background-color: #2a2a2a;
-    border-radius: 6px;
-    border: 1px solid #444;
-    font-size: 14px;
-    color: #aaa;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+
+  .animation-exporter-overlay *,
+  .animation-exporter-overlay *::before,
+  .animation-exporter-overlay *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
-  
-  .animation-exporter-algorithm-info {
-    font-size: 12px;
-    color: #8c52ff;
-    font-style: italic;
-  }
-  
-  .animation-exporter-input-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  
-  .animation-exporter-input-label {
-    font-size: 14px;
-    min-width: 80px;
-    color: #bbb;
-    font-weight: 500;
-  }
-  
-  .animation-exporter-select {
-    padding: 8px 12px;
-    border: 1px solid #444;
-    border-radius: 6px;
-    font-size: 14px;
-    flex: 1;
-    background-color: #2a2a2a;
-    color: #fff;
-    outline: none;
-  }
-  
-  .animation-exporter-select:focus {
-    border-color: #8c52ff;
-    box-shadow: 0 0 0 2px rgba(140, 82, 255, 0.2);
-  }
-  
-  .animation-exporter-number-input {
-    padding: 8px 12px;
-    border: 1px solid #444;
-    border-radius: 6px;
-    font-size: 14px;
-    width: 80px;
-    background-color: #2a2a2a;
-    color: #fff;
-    outline: none;
-    text-align: center;
-  }
-  
-  .animation-exporter-number-input:focus {
-    border-color: #8c52ff;
-    box-shadow: 0 0 0 2px rgba(140, 82, 255, 0.2);
-  }
-  
-  .animation-exporter-progress-container {
-    margin-bottom: 16px;
-  }
-  
-  .animation-exporter-progress-bar {
-    width: 100%;
-    height: 8px;
-    background-color: #333;
-    border-radius: 4px;
-    overflow: hidden;
-    margin-bottom: 8px;
-  }
-  
-  .animation-exporter-progress-fill {
-    height: 100%;
-    background-color: #8c52ff;
-    transition: width 0.3s ease;
-  }
-  
-  .animation-exporter-progress-text {
-    font-size: 12px;
-    color: #aaa;
-    text-align: center;
-  }
-  
-  .animation-exporter-export-button {
-    width: 100%;
-    padding: 16px;
-    background-color: #8c52ff;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-  
+
   .animation-exporter-export-button:hover:not(:disabled) {
-    background-color: #9d63ff;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(140, 82, 255, 0.4);
-  }
-  
-  .animation-exporter-export-button:disabled {
-    background-color: #444;
-    color: #888;
-    cursor: not-allowed;
     transform: none;
-    box-shadow: none;
   }
-  
-  .animation-exporter-selection-modes {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
-  }
-  
-  .animation-exporter-mode-button {
-    padding: 10px 16px;
-    border: 1px solid #444;
-    border-radius: 6px;
-    background-color: #2a2a2a;
-    color: #fff;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    transition: all 0.2s ease;
-  }
-  
-  .animation-exporter-mode-button:hover {
-    background-color: #333;
-  }
-  
-  .animation-exporter-mode-button.active {
-    background-color: #8c52ff;
-    border-color: #8c52ff;
-    color: white;
-  }
-  
-  .animation-exporter-range-controls {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding: 16px;
-    background-color: #222;
-    border-radius: 8px;
-    border: 1px solid #444;
-    margin-bottom: 16px;
-  }
-  
-  .animation-exporter-apply-range-button {
-    padding: 8px 16px;
-    background-color: #8c52ff;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    align-self: flex-start;
-    transition: all 0.2s ease;
-  }
-  
-  .animation-exporter-apply-range-button:hover {
-    background-color: #9d63ff;
-  }
-  
-  .animation-exporter-manual-controls {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
-  }
-  
-  .animation-exporter-select-button {
-    padding: 8px 16px;
-    border: 1px solid #444;
-    border-radius: 6px;
-    background-color: #2a2a2a;
-    color: #fff;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    transition: all 0.2s ease;
-  }
-  
-  .animation-exporter-select-button:hover {
-    background-color: #333;
-  }
-  
-  .animation-exporter-frame-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 16px;
-    max-height: 60vh;
-    overflow-y: auto;
-    padding: 16px;
-    background-color: #222;
-    border-radius: 8px;
-    border: 1px solid #444;
-  }
-  
-  .animation-exporter-frame-card {
-    border: 2px solid #444;
-    border-radius: 8px;
-    background-color: #2a2a2a;
-    padding: 8px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-  }
-  
-  .animation-exporter-frame-card:hover {
-    border-color: #666;
-    background-color: #333;
-  }
-  
-  .animation-exporter-frame-card.selected {
-    border-color: #8c52ff;
-    background-color: #4b3c7a;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(140, 82, 255, 0.3);
-  }
-  
-  .animation-exporter-frame-checkbox {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 16px;
-    height: 16px;
-    cursor: pointer;
-    accent-color: #8c52ff;
-  }
-  
-  .animation-exporter-frame-thumbnail {
-    width: 80px;
-    height: 80px;
-    border-radius: 4px;
-    overflow: hidden;
-    border: 1px solid #444;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: #333;
-  }
-  
-  .animation-exporter-thumbnail-image {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    image-rendering: pixelated;
-  }
-  
-  .animation-exporter-thumbnail-placeholder {
-    color: #666;
-    font-size: 24px;
-    font-weight: bold;
-  }
-  
-  .animation-exporter-frame-info {
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  
-  .animation-exporter-frame-number {
-    font-size: 14px;
-    font-weight: bold;
-    color: #fff;
-  }
-  
-  .animation-exporter-frame-duration {
-    font-size: 12px;
-    color: #aaa;
-  }
+}

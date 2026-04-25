@@ -16,7 +16,7 @@
   gap: 6px;
 }
 
-/* ── Sección izquierda — Menús desplegables ── */
+/* ── Seccion izquierda — Menus desplegables ── */
 .topToolbar-left {
   display: flex;
   align-items: center;
@@ -49,6 +49,11 @@
   color: var(--text-primary);
 }
 
+.dropdown-trigger:focus-visible {
+  outline: 2px solid rgba(140, 82, 255, 0.55);
+  outline-offset: 1px;
+}
+
 .dropdown-trigger.active {
   background-color: rgba(140, 82, 255, 0.18);
   color: var(--accent-hover);
@@ -58,7 +63,7 @@
   position: absolute;
   top: calc(100% + 3px);
   left: 0;
-  min-width: 192px;
+  min-width: 208px;
   background-color: #232323;
   border: 1px solid #3d3d3d;
   border-radius: 6px;
@@ -66,6 +71,8 @@
   padding: 4px 0;
   z-index: 1001;
   animation: dropdownFadeIn 0.11s ease-out;
+  display: flex;
+  flex-direction: column;
 }
 
 @keyframes dropdownFadeIn {
@@ -77,8 +84,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  width: 100%;
   padding: 6px 12px;
   cursor: pointer;
+  background: none;
+  border: none;
+  text-align: left;
   color: var(--text-primary);
   font-size: 12px;
   font-family: inherit;
@@ -86,8 +97,15 @@
   transition: background-color 0.1s ease;
 }
 
-.dropdown-item:hover {
+.dropdown-item:hover:not(:disabled),
+.dropdown-item:focus-visible {
   background-color: rgba(140, 82, 255, 0.14);
+  outline: none;
+}
+
+.dropdown-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .dropdown-item-name {
@@ -108,7 +126,7 @@
   margin: 3px 6px;
 }
 
-/* ── Sección central — Children (botones de acción) ── */
+/* ── Seccion central — Children (botones de accion) ── */
 .topToolbar-center {
   display: flex;
   align-items: center;
@@ -132,7 +150,7 @@
   align-self: center;
 }
 
-/* ── Sección derecha — Info empresa ── */
+/* ── Seccion derecha — Branding / info ── */
 .topToolbar-right {
   display: flex;
   align-items: center;
@@ -161,3 +179,15 @@
   color: var(--text-secondary);
 }
 
+/* ── Responsive: ventanas estrechas ── */
+@media (max-width: 1200px) {
+  .powered-by > span:first-child {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .powered-by {
+    display: none;
+  }
+}

@@ -29,10 +29,34 @@
       inset 0 1px 0 rgba(255, 255, 255, 0.05);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     width: 100%;
-    padding: 12px;
+    /* Padding-left mayor para reservar espacio del handle de resize horizontal
+       (8px) y que el contenido no quede pegado a él. */
+    padding: 12px 12px 14px 16px;
     box-sizing: border-box;
+    /* min-width 0 evita que hijos con contenido largo (CustomSelect, hex
+       inputs) fuercen un ancho mínimo mayor que el RightPanel. */
+    min-width: 0;
 
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    /* IMPORTANTE: no transicionamos width/height para que el resize no laguee
+       durante el drag. Sí transicionamos colores/sombra/borde. */
+    transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Cuando el módulo tiene una altura manual (resize), recortamos para que
+     el scroll interno del grid de paleta surta efecto. Sin altura fija el
+     módulo crece libremente y el RightPanel scrolea. La distribución
+     interna (rigid FG/BG, scrollable palette) la define .layer-color-content. */
+  .layer-color-container[style*="height"] {
+    overflow: hidden;
+  }
+
+  /* Hijos directos jamás deben hacer overflow horizontal del módulo. */
+  .layer-color-container > * {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
   }
   
 
@@ -68,24 +92,66 @@
     border-radius: 2px;
   }
   
-  /* Content */
+  /* Content. Es un flex-column donde:
+     - .primary-colors-section es RÍGIDO (flex: 0 0 auto): nunca se encoje, sus
+       filas FG/BG/atajos siempre quedan visibles incluso si el módulo se
+       comprime con resize.
+     - .color-palette-container toma el espacio restante (flex: 1 1 auto) y su
+       grid interno es el único que scrollea.
+     De esta forma el resize vertical del módulo solo afecta a cuántos colores
+     de la paleta caben — los controles principales no se ocultan jamás. */
   .layer-color-content {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 14px;
+    min-height: 0;
+    flex: 1 1 auto;
   }
   
-  /* Primary Colors Section */
+  /* Primary Colors Section.
+     Usa container queries: el layout depende del ancho del MÓDULO, no del
+     viewport. Así adaptamos cuando el usuario arrastra el resize del panel.
+     flex: 0 0 auto + min-height implícito = bloque rígido que el resize NO
+     comprime ni oculta. */
   .primary-colors-section {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    container-type: inline-size;
+    container-name: primary-colors;
+    flex: 0 0 auto;
   }
-  
+
+  /* Stack vertical por defecto: cada color es UNA fila completa, sin scroll. */
+  .primary-colors-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Cuando el módulo es ancho (panel expandido), FG y BG van lado a lado y
+     util-colors ocupan toda la fila inferior. */
+  @container primary-colors (min-width: 360px) {
+    .primary-colors-stack {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto auto;
+      column-gap: 8px;
+      row-gap: 6px;
+    }
+    .primary-colors-stack > .layer-util-colors--strip {
+      grid-column: 1 / -1;
+    }
+  }
+
+  /* Compatibilidad: si quedan llamadas viejas a .primary-colors-row se
+     comportan igual que el nuevo stack. */
   .primary-colors-row {
     display: flex;
-    gap: 16px;
-    justify-content: space-between;
+    flex-direction: column;
+    gap: 6px;
   }
   
   /* Layer Color Item */
@@ -632,7 +698,38 @@
   background: var(--layer-bg-primary);
   border-radius: 12px;
   border: 1px solid var(--layer-border-color);
-  transition: all 0.2s ease;
+  /* Toma el espacio restante después del bloque rígido FG/BG/atajos. */
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* La transición sólo en colores; height/flex no se animan para no
+     interferir con el resize ni con el cambio de altura por contenido. */
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+/* Header de la paleta = rígido. */
+ .color-palette-container > .color-palette-header,
+ .color-palette-container > .indexed-palette-controls,
+ .color-palette-container > .indexed-palette-info {
+  flex: 0 0 auto;
+}
+
+/* SOLO el grid de swatches scrollea. */
+ .color-palette-container > .color-palette-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--layer-border-color) transparent;
+}
+ .color-palette-container > .color-palette-grid::-webkit-scrollbar {
+  width: 6px;
+}
+ .color-palette-container > .color-palette-grid::-webkit-scrollbar-thumb {
+  background: var(--layer-border-color);
+  border-radius: 3px;
 }
 
 .color-palette-container:hover {
@@ -663,6 +760,22 @@
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
+  width: 100%;
+  min-width: 0;
+}
+
+/* El CustomSelect (renderizado con width='100%') ocupa su propia fila para
+   que los botones de modo/refresh/edit + el slider de densidad no se vean
+   exprimidos contra el borde del RightPanel a 280-300px de ancho. */
+.palette-controls > :first-child:not(.palette-mode-btn):not(.palette-refresh-btn):not(.palette-edit-btn) {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+/* El slider de densidad se empuja al extremo derecho cuando hay espacio. */
+.palette-controls > .palette-density-control {
+  margin-left: auto;
 }
 
 .palette-mode-btn {
@@ -777,22 +890,48 @@
 }
 
 .color-palette-grid {
-  
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
+  /* Grid auto-fill basado en la variable de tamaño del swatch.
+     A 12px caben ~24 swatches en 280px, mostrando paleta de 64 colores en
+     sólo 3 filas. A 36px caben 7 cómodos para click. El scroll vertical lo
+     hace el RightPanel padre (o el .layer-color-content cuando hay altura
+     manual fijada). */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--pc-swatch-size, 22px));
+  grid-auto-rows: var(--pc-swatch-size, 22px);
   width: 100%;
-  gap: 5px;
+  gap: 4px;
+  justify-content: start;
+  /* min-width:0 propaga la posibilidad de shrink al padre. */
+  min-width: 0;
 }
 
 .palette-color-item {
-min-width: 30px;
-width: auto;
   position: relative;
-  aspect-ratio: 1;
-  border-radius: 8px;
-  overflow: hidden;
-  transition: all 0.2s ease;
+  width: var(--pc-swatch-size, 22px);
+  height: var(--pc-swatch-size, 22px);
+  border-radius: 6px;
+  overflow: visible;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* A densidad muy compacta los radios y bordes se reducen para no comer
+   demasiado del color visible. */
+.color-palette-grid.density-1 .palette-color-item,
+.color-palette-grid.density-2 .palette-color-item {
+  border-radius: 3px;
+}
+.color-palette-grid.density-1 .palette-color-swatch,
+.color-palette-grid.density-2 .palette-color-swatch {
+  border-width: 1px;
+  border-radius: 3px;
+}
+
+/* Los botones de edición/borrado solo se muestran si hay tamaño suficiente. */
+.color-palette-grid.density-1 .palette-edit-indexed-btn,
+.color-palette-grid.density-1 .palette-delete-btn,
+.color-palette-grid.density-2 .palette-edit-indexed-btn,
+.color-palette-grid.density-2 .palette-delete-btn {
+  display: none;
 }
 
 .palette-color-item.editing {
@@ -1926,8 +2065,252 @@ justify-content: space-around;
 
 .util-color-button.layer-active {
   border-color: var(--layer-accent-color);
-  box-shadow: 
+  box-shadow:
     0 4px 16px rgba(124, 77, 255, 0.4),
     0 0 0 3px rgba(124, 77, 255, 0.2);
   transform: scale(1.05);
+}
+
+/* ==================================================================
+   Density slider + resize handles del módulo LayerColor.
+   ================================================================== */
+
+.palette-density-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  background: rgba(15, 15, 22, 0.55);
+  border: 1px solid var(--layer-border-color);
+  border-radius: 6px;
+  height: 26px;
+  /* Permite que se encoja si el ancho del panel es muy pequeño. */
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+.palette-density-icon { color: var(--layer-text-secondary); flex: 0 0 auto; }
+
+.palette-density-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 60px;
+  min-width: 40px;
+  height: 4px;
+  background: #2a2a33;
+  border-radius: 999px;
+  outline: none;
+  cursor: pointer;
+  flex-shrink: 1;
+}
+
+.palette-density-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--layer-accent-color);
+  cursor: pointer;
+  transition: transform 120ms ease;
+}
+.palette-density-slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
+
+.palette-density-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--layer-accent-color);
+  cursor: pointer;
+}
+
+.palette-density-slider:focus-visible {
+  box-shadow: 0 0 0 3px rgba(124, 77, 255, 0.4);
+}
+
+.palette-density-value {
+  font-size: 10px;
+  color: var(--layer-text-secondary);
+  font-family: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+  min-width: 26px;
+  text-align: right;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+
+/* En anchos muy pequeños el sufijo "px" se oculta y queda solo el número. */
+@media (max-width: 320px) {
+  .palette-density-value { display: none; }
+}
+
+/* ----- Resize handles ----- */
+
+.layer-color-resize {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.18);
+  z-index: 5;
+  transition: background 120ms ease, color 120ms ease;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.layer-color-resize:hover {
+  background: rgba(124, 77, 255, 0.25);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.layer-color-resize:active {
+  background: rgba(124, 77, 255, 0.45);
+}
+
+/* Handle horizontal: borde IZQUIERDO del módulo, redimensiona el ancho del
+   panel padre. Pegado al borde redondeado del contenedor. */
+.layer-color-resize-h {
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+  border-radius: 16px 0 0 16px;
+}
+
+/* Handle vertical: borde INFERIOR del módulo, redimensiona el alto del módulo. */
+.layer-color-resize-v {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 8px;
+  cursor: ns-resize;
+  border-radius: 0 0 16px 16px;
+}
+
+/* Pista visual sutil de que el borde es agarrable, sólo en hover del módulo. */
+.layer-color-container:hover .layer-color-resize {
+  color: rgba(255, 255, 255, 0.32);
+}
+.layer-color-container:hover .layer-color-resize-h {
+  background: linear-gradient(90deg, rgba(124, 77, 255, 0.18), transparent);
+}
+.layer-color-container:hover .layer-color-resize-v {
+  background: linear-gradient(0deg, rgba(124, 77, 255, 0.18), transparent);
+}
+
+/* ==================================================================
+   Compact rows para FG/BG. Una sola fila por color: sin scroll, sin
+   overflow, escalan correctamente desde 240px hasta paneles anchos.
+   ================================================================== */
+
+.layer-color-item--compact {
+  /* Override de las propiedades del .layer-color-item original. */
+  display: grid;
+  grid-template-columns: 16px minmax(0, auto) 28px minmax(0, 1fr);
+  grid-template-rows: auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--layer-bg-primary);
+  border-radius: 10px;
+  border: 1px solid var(--layer-border-color);
+  flex: 0 0 auto;
+  min-width: 0;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.layer-color-item--compact:hover {
+  border-color: rgba(124, 77, 255, 0.4);
+  background: linear-gradient(135deg, var(--layer-bg-primary) 0%, rgba(124, 77, 255, 0.06) 100%);
+}
+
+.layer-color-item--compact .layer-color-mouse {
+  color: var(--layer-text-secondary);
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.layer-color-item--compact .layer-color-tag {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--layer-text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* Override del overlay/button para tamaño compacto. */
+.layer-color-item--compact .layer-color-overlay {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  flex: 0 0 auto;
+  background-size: 10px 10px;
+}
+
+.layer-color-item--compact .layer-color-button {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  border-width: 2px;
+}
+
+.layer-color-item--compact .layer-color-hex {
+  font-size: 10px;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  letter-spacing: 0.04em;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  padding: 3px 6px;
+  background: var(--layer-bg-tertiary);
+  border: 1px solid var(--layer-border-color);
+  border-radius: 5px;
+  color: var(--layer-text-secondary);
+  font-weight: 500;
+}
+
+/* Strip horizontal de utils — siempre cabe gracias al wrap. */
+.layer-util-colors--strip {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgba(15, 15, 22, 0.35);
+  border: 1px dashed var(--layer-border-color);
+  border-radius: 8px;
+  height: auto;
+  min-width: 0;
+}
+
+.layer-util-colors--strip .util-color-overlay,
+.layer-util-colors--strip .util-color-button {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  flex: 0 0 auto;
+}
+
+.layer-util-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--layer-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-right: 2px;
+  flex: 0 0 auto;
 }

@@ -1,0 +1,41 @@
+.stabilizer-slider {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0;
+}
+
+.stabilizer-slider.is-compact {
+  padding: 2px 0;
+}
+
+.stabilizer-slider__label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: #cfcfdc;
+}
+
+.stabilizer-slider__value {
+  font-family: monospace;
+  font-size: 10px;
+  color: #ffd84a;
+}
+
+.stabilizer-slider__range {
+  width: 100%;
+  margin: 0;
+}
+
+.stabilizer-slider__indicator {
+  position: absolute;
+  bottom: 4px;
+  left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #4a90e2, #ffd84a);
+  border-radius: 1px;
+  pointer-events: none;
+  opacity: 0.6;
+}

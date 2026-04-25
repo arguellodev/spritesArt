@@ -1,0 +1,217 @@
+/* filtersModal.css — estilos del modal unificado de filtros */
+
+.filters-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filters-modal {
+  background: #1e1e24;
+  color: #e7e7ea;
+  border-radius: 8px;
+  min-width: 640px;
+  max-width: 860px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+}
+
+.filters-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid #2c2c34;
+}
+
+.filters-modal__header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.filters-modal__close {
+  background: transparent;
+  border: none;
+  color: #bbb;
+  font-size: 22px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 6px;
+}
+
+.filters-modal__close:hover {
+  color: #fff;
+}
+
+.filters-modal__tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 14px 0;
+  border-bottom: 1px solid #2c2c34;
+}
+
+.filters-modal__tab {
+  background: transparent;
+  color: #bbb;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.filters-modal__tab:hover {
+  background: #2a2a33;
+  color: #fff;
+}
+
+.filters-modal__tab.is-active {
+  background: #1e1e24;
+  border-color: #2c2c34;
+  color: #fff;
+  position: relative;
+  bottom: -1px;
+}
+
+.filters-modal__body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.filters-modal__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.filters-modal__row {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.filters-modal__row--check {
+  grid-template-columns: auto 1fr;
+}
+
+.filters-modal__row input[type="color"] {
+  width: 36px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #3a3a45;
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+}
+
+.filters-modal__row input[type="range"] {
+  width: 100%;
+}
+
+.filters-modal__btn-group {
+  display: flex;
+  gap: 4px;
+}
+
+.filters-modal__tiny-btn {
+  background: #2a2a33;
+  color: #e7e7ea;
+  border: 1px solid #3a3a45;
+  border-radius: 3px;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.filters-modal__tiny-btn:hover {
+  background: #33333e;
+}
+
+.filters-modal__tiny-btn.is-active {
+  background: #4a90e2;
+  border-color: #4a90e2;
+  color: #fff;
+}
+
+.filters-modal__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  padding: 8px;
+  background: #141418;
+  border: 1px solid #2c2c34;
+  border-radius: 6px;
+}
+
+.filters-modal__preview-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #8a8a95;
+  letter-spacing: 0.05em;
+  align-self: flex-start;
+}
+
+.filters-modal__preview-canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background-image: linear-gradient(45deg, #2a2a33 25%, transparent 25%),
+                    linear-gradient(-45deg, #2a2a33 25%, transparent 25%),
+                    linear-gradient(45deg, transparent 75%, #2a2a33 75%),
+                    linear-gradient(-45deg, transparent 75%, #2a2a33 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  max-width: 100%;
+  height: auto;
+}
+
+.filters-modal__preview-size {
+  font-size: 10px;
+  color: #8a8a95;
+  font-family: monospace;
+}
+
+.filters-modal__footer {
+  padding: 10px 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid #2c2c34;
+}
+
+.filters-modal__btn {
+  background: #3a3a45;
+  color: #e7e7ea;
+  border: 1px solid #4a4a55;
+  border-radius: 4px;
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.filters-modal__btn:hover {
+  background: #4a4a55;
+}
+
+.filters-modal__btn--primary {
+  background: #4a90e2;
+  border-color: #4a90e2;
+  color: #fff;
+}
+
+.filters-modal__btn--primary:hover {
+  background: #5aa0f2;
+}
