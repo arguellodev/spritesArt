@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import './animationExporter.css';
 import VideoExporter from './videoExporter';
 import GifExporter from './gifExporter';
+import { toCompositeOperation, isValidBlendMode, DEFAULT_BLEND_MODE } from '../blendModes';
 import {
   LuX,
   LuImage,
@@ -19,6 +20,13 @@ import {
   LuWandSparkles,
   LuInfinity,
 } from 'react-icons/lu';
+
+function blendModeForLayer(layer) {
+  const override = layer?.blendModeOverride;
+  if (override != null && isValidBlendMode(override)) return override;
+  if (layer?.blendMode && isValidBlendMode(layer.blendMode)) return layer.blendMode;
+  return DEFAULT_BLEND_MODE;
+}
 
 const AnimationExporter = ({
   isOpen,
@@ -246,6 +254,7 @@ const AnimationExporter = ({
       }))
       .sort((a, b) => a.zIndex - b.zIndex);
 
+    let isFirstDrawn = true;
     for (const mainLayer of hierarchicalLayers) {
       const isVisible = mainLayer.visible && (mainLayer.visible[frameNumber] !== false);
       if (!isVisible) continue;
@@ -253,9 +262,14 @@ const AnimationExporter = ({
       const mainCanvas = frameData.canvases[mainLayer.id];
       if (mainCanvas) {
         const layerOpacity = mainLayer.opacity ?? 1.0;
-        if (layerOpacity !== 1.0) originalCtx.globalAlpha = layerOpacity;
+        const blendId = isFirstDrawn ? 'normal' : blendModeForLayer(mainLayer);
+        const composite = toCompositeOperation(blendId);
+        originalCtx.globalAlpha = layerOpacity;
+        originalCtx.globalCompositeOperation = composite;
         originalCtx.drawImage(mainCanvas, 0, 0);
-        if (layerOpacity !== 1.0) originalCtx.globalAlpha = 1.0;
+        originalCtx.globalCompositeOperation = 'source-over';
+        originalCtx.globalAlpha = 1.0;
+        isFirstDrawn = false;
       }
 
       for (const groupLayer of mainLayer.groupLayers) {
@@ -263,9 +277,14 @@ const AnimationExporter = ({
         const groupCanvas = frameData.canvases[groupLayer.id];
         if (groupCanvas) {
           const groupOpacity = groupLayer.opacity ?? 1.0;
-          if (groupOpacity !== 1.0) originalCtx.globalAlpha = groupOpacity;
+          const groupBlendId = isFirstDrawn ? 'normal' : blendModeForLayer(groupLayer);
+          const groupComposite = toCompositeOperation(groupBlendId);
+          originalCtx.globalAlpha = groupOpacity;
+          originalCtx.globalCompositeOperation = groupComposite;
           originalCtx.drawImage(groupCanvas, 0, 0);
-          if (groupOpacity !== 1.0) originalCtx.globalAlpha = 1.0;
+          originalCtx.globalCompositeOperation = 'source-over';
+          originalCtx.globalAlpha = 1.0;
+          isFirstDrawn = false;
         }
       }
     }
@@ -326,6 +345,7 @@ const AnimationExporter = ({
       }))
       .sort((a, b) => a.zIndex - b.zIndex);
 
+    let isFirstDrawn = true;
     for (const mainLayer of hierarchicalLayers) {
       const isVisible = mainLayer.visible && (mainLayer.visible[frameNumber] !== false);
       if (!isVisible) continue;
@@ -333,13 +353,18 @@ const AnimationExporter = ({
       const mainCanvas = frameData.canvases[mainLayer.id];
       if (mainCanvas) {
         const layerOpacity = mainLayer.opacity ?? 1.0;
-        if (layerOpacity !== 1.0) ctx.globalAlpha = layerOpacity;
+        const blendId = isFirstDrawn ? 'normal' : blendModeForLayer(mainLayer);
+        const composite = toCompositeOperation(blendId);
+        ctx.globalAlpha = layerOpacity;
+        ctx.globalCompositeOperation = composite;
         ctx.drawImage(
           mainCanvas,
           0, 0, originalDimensions.width, originalDimensions.height,
           offsetX, offsetY, drawWidth, drawHeight,
         );
-        if (layerOpacity !== 1.0) ctx.globalAlpha = 1.0;
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1.0;
+        isFirstDrawn = false;
       }
 
       for (const groupLayer of mainLayer.groupLayers) {
@@ -347,13 +372,18 @@ const AnimationExporter = ({
         const groupCanvas = frameData.canvases[groupLayer.id];
         if (groupCanvas) {
           const groupOpacity = groupLayer.opacity ?? 1.0;
-          if (groupOpacity !== 1.0) ctx.globalAlpha = groupOpacity;
+          const groupBlendId = isFirstDrawn ? 'normal' : blendModeForLayer(groupLayer);
+          const groupComposite = toCompositeOperation(groupBlendId);
+          ctx.globalAlpha = groupOpacity;
+          ctx.globalCompositeOperation = groupComposite;
           ctx.drawImage(
             groupCanvas,
             0, 0, originalDimensions.width, originalDimensions.height,
             offsetX, offsetY, drawWidth, drawHeight,
           );
-          if (groupOpacity !== 1.0) ctx.globalAlpha = 1.0;
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.globalAlpha = 1.0;
+          isFirstDrawn = false;
         }
       }
     }
