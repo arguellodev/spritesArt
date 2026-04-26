@@ -6324,10 +6324,12 @@ const exportLayersAndFrames = useCallback(() => {
         zIndex: layer.zIndex,
         isGroupLayer: layer.isGroupLayer || false,
         parentLayerId: layer.parentLayerId || null,
-        
+        blendMode: layer.blendMode ?? 'normal',
+        blendModeOverride: layer.blendModeOverride ?? null,
+
         // Contenido pintado
         canvasData: canvasData,
-        
+
         // Grupos de píxeles
         pixelGroups: frame.pixelGroups[layer.id] || {}
       };
@@ -6397,6 +6399,8 @@ const importLayersAndFrames = useCallback((importData) => {
         const layerData = frameData.layers[layerId];
         
         // Recrear capa
+        const rawBlend = layerData.blendMode;
+        const rawOverride = layerData.blendModeOverride;
         const layer = {
           id: layerId,
           name: layerData.name,
@@ -6406,7 +6410,11 @@ const importLayersAndFrames = useCallback((importData) => {
           opacity: layerData.opacity,
           zIndex: layerData.zIndex,
           isGroupLayer: layerData.isGroupLayer,
-          parentLayerId: layerData.parentLayerId
+          parentLayerId: layerData.parentLayerId,
+          blendMode: isValidBlendMode(rawBlend) ? rawBlend : 'normal',
+          blendModeOverride: (rawOverride != null && isValidBlendMode(rawOverride))
+            ? rawOverride
+            : null,
         };
         
         newFrame.layers.push(layer);
