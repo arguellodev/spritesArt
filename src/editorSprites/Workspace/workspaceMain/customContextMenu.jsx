@@ -25,6 +25,29 @@ const CustomContextMenu = ({
   const [inputValue, setInputValue] = useState('');
   const [originalValue, setOriginalValue] = useState('');
 
+  // Estado del submenú
+  const [openSubmenu, setOpenSubmenu] = useState(null); // null o action.id/index del item con submenu abierto
+  const submenuCloseTimeoutRef = useRef(null);
+
+  const openSubmenuFor = useCallback((key) => {
+    if (submenuCloseTimeoutRef.current) {
+      clearTimeout(submenuCloseTimeoutRef.current);
+      submenuCloseTimeoutRef.current = null;
+    }
+    setOpenSubmenu(key);
+  }, []);
+
+  const scheduleSubmenuClose = useCallback(() => {
+    if (submenuCloseTimeoutRef.current) clearTimeout(submenuCloseTimeoutRef.current);
+    submenuCloseTimeoutRef.current = setTimeout(() => setOpenSubmenu(null), 200);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (submenuCloseTimeoutRef.current) clearTimeout(submenuCloseTimeoutRef.current);
+    };
+  }, []);
+
   console.log("se renderizo");
   // Calcular posición del menú para evitar que se salga de la pantalla
 // Calcular posición del menú para evitar que se salga de la pantalla
@@ -229,6 +252,11 @@ const calculateMenuPosition = useCallback(() => {
   const handleItemClick = (action) => {
     if (action.disabled) return;
 
+    // Si es un submenú, no hacer nada en click directo; se controla por hover
+    if (action.type === 'submenu') {
+      return;
+    }
+
     // Si es un input, activarlo
     if (action.type && ['text', 'number', 'slider', 'color'].includes(action.type)) {
       activateInput(action);
@@ -324,11 +352,18 @@ const calculateMenuPosition = useCallback(() => {
                   className={`context-menu-item ${action.disabled ? 'disabled' : ''} ${action.danger ? 'danger' : ''} ${isActiveInput ? 'active-input' : ''}`}
                   onClick={() => handleItemClick(action)}
                   disabled={action.disabled}
+                  onMouseEnter={action.type === 'submenu' ? () => openSubmenuFor(action.id || index) : undefined}
+                  onMouseLeave={action.type === 'submenu' ? scheduleSubmenuClose : undefined}
+                  aria-haspopup={action.type === 'submenu' ? 'menu' : undefined}
+                  aria-expanded={action.type === 'submenu' ? (openSubmenu === (action.id || index)) : undefined}
                 >
                   <span className="context-menu-icon">
                     {action.icon || action.label.charAt(0).toUpperCase()}
                   </span>
                   <span className="context-menu-label">{action.label}</span>
+                  {action.type === 'submenu' && (
+                    <span className="context-menu-submenu-arrow" aria-hidden>▶</span>
+                  )}
                   {action.shortcut && !isInputType && (
                     <span className="context-menu-shortcut">{action.shortcut}</span>
                   )}
@@ -338,6 +373,16 @@ const calculateMenuPosition = useCallback(() => {
                     </span>
                   )}
                 </button>
+
+                {/* Submenú anidado */}
+                {action.type === 'submenu' && action.items && openSubmenu === (action.id || index) && (
+                  <SubmenuPanel
+                    items={action.items}
+                    onClose={() => setOpenSubmenu(null)}
+                    onMouseEnter={() => openSubmenuFor(action.id || index)}
+                    onMouseLeave={scheduleSubmenuClose}
+                  />
+                )}
 
                 {/* Contenedor de input activo */}
                 {isActiveInput && (
@@ -443,5 +488,41 @@ const calculateMenuPosition = useCallback(() => {
     </>
   );
 };
+
+// Componente de panel de submenú anidado
+function SubmenuPanel({ items, onClose, onMouseEnter, onMouseLeave }) {
+  return (
+    <div
+      className="context-menu-submenu"
+      role="menu"
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {items.map((item, idx) => {
+        if (item.divider) {
+          return <div key={`d-${idx}`} className="context-menu-submenu-divider">{item.label}</div>;
+        }
+        return (
+          <button
+            key={item.id || idx}
+            className={`context-menu-submenu-item ${item.disabled ? 'disabled' : ''} ${item.checked ? 'checked' : ''}`}
+            onClick={() => {
+              if (item.disabled) return;
+              item.onClick?.();
+              onClose();
+            }}
+            disabled={item.disabled}
+            role="menuitemradio"
+            aria-checked={!!item.checked}
+          >
+            <span className="context-menu-submenu-check" aria-hidden>{item.checked ? '✓' : ''}</span>
+            <span className="context-menu-submenu-label">{item.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export default CustomContextMenu;
