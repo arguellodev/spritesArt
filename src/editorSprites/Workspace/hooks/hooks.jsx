@@ -6379,6 +6379,7 @@ const importLayersAndFrames = useCallback((importData) => {
         layerVisibility: {},
         layerOpacity: {},
         layerHasContent: {},
+        layerBlendModeOverride: {},
         canvases: {},
         pixelGroups: {},
         duration: frameData.duration || defaultFrameDuration,
@@ -6452,9 +6453,13 @@ const importLayersAndFrames = useCallback((importData) => {
         // Actualizar framesResume para esta capa
         newFramesResume.frames[frameNumber].layerVisibility[layerId] = layerData.visible;
         newFramesResume.frames[frameNumber].layerOpacity[layerId] = layerData.opacity;
-        newFramesResume.frames[frameNumber].layerHasContent[layerId] = 
+        newFramesResume.frames[frameNumber].layerHasContent[layerId] =
           layerData.canvasData && layerData.canvasData.pixels.length > 0;
         newFramesResume.frames[frameNumber].pixelGroups[layerId] = layerData.pixelGroups || {};
+        // Sembrar override per-frame (sin esto, primer Ctrl+Z post-load borra los overrides importados).
+        if (rawOverride != null && isValidBlendMode(rawOverride)) {
+          newFramesResume.frames[frameNumber].layerBlendModeOverride[layerId] = rawOverride;
+        }
         
         // Actualizar resolved frames
         if (!newFramesResume.computed.resolvedFrames[frameNumber]) {
