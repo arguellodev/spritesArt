@@ -12,7 +12,7 @@ import { produce, setAutoFreeze } from 'immer';
 // ("mutaste sin produce"), pero ganamos no romper código viejo.
 setAutoFreeze(false);
 import { useOptimizedFloodFill } from './optimizedFloodFill';
-import { isValidBlendMode, DEFAULT_BLEND_MODE } from '../blendModes';
+import { isValidBlendMode, DEFAULT_BLEND_MODE, toCompositeOperation } from '../blendModes';
 /**
  * Custom hook for tracking pointer/mouse interactions
  */
@@ -709,21 +709,23 @@ const getOnionSkinFrameConfig = useCallback((frameOffset) => {
 const renderCurrentFrameOnly = useCallback((ctx) => {
   const hierarchicalLayers = getHierarchicalLayers();
   const sortedMainLayers = hierarchicalLayers.sort((a, b) => a.zIndex - b.zIndex);
-  
+
+  let isFirstDrawn = true; // primera capa visible siempre va source-over
+
   for (const mainLayer of sortedMainLayers) {
-    // CAMBIO: Usar la visibilidad del frame actual solamente
     const isVisible = mainLayer.visible[currentFrame] ?? true;
     if (!isVisible) continue;
-    
-    // Renderizar capa principal
+
     const mainCanvas = layerCanvasesRef.current[mainLayer.id];
     if (mainCanvas) {
       const layerOpacity = mainLayer.opacity ?? 1.0;
-      
-      if (layerOpacity !== 1.0) {
-        ctx.globalAlpha = layerOpacity;
-      }
-      
+      const blendId = isFirstDrawn
+        ? 'normal'
+        : resolveLayerBlendMode(mainLayer.id, currentFrame);
+      const composite = toCompositeOperation(blendId);
+
+      ctx.globalAlpha = layerOpacity;
+      ctx.globalCompositeOperation = composite;
       ctx.drawImage(
         mainCanvas,
         viewportOffset.x, viewportOffset.y,
@@ -731,24 +733,23 @@ const renderCurrentFrameOnly = useCallback((ctx) => {
         0, 0,
         Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
       );
-      
-      if (layerOpacity !== 1.0) {
-        ctx.globalAlpha = 1.0;
-      }
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1.0;
+      isFirstDrawn = false;
     }
-    
-    // Renderizar capas de grupo
+
     for (const groupLayer of mainLayer.groupLayers) {
       if (!groupLayer.visible) continue;
-      
       const groupCanvas = layerCanvasesRef.current[groupLayer.id];
       if (groupCanvas) {
         const groupOpacity = groupLayer.opacity ?? 1.0;
-        
-        if (groupOpacity !== 1.0) {
-          ctx.globalAlpha = groupOpacity;
-        }
-        
+        const groupBlendId = isFirstDrawn
+          ? 'normal'
+          : resolveLayerBlendMode(groupLayer.id, currentFrame);
+        const groupComposite = toCompositeOperation(groupBlendId);
+
+        ctx.globalAlpha = groupOpacity;
+        ctx.globalCompositeOperation = groupComposite;
         ctx.drawImage(
           groupCanvas,
           viewportOffset.x, viewportOffset.y,
@@ -756,14 +757,13 @@ const renderCurrentFrameOnly = useCallback((ctx) => {
           0, 0,
           Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
         );
-        
-        if (groupOpacity !== 1.0) {
-          ctx.globalAlpha = 1.0;
-        }
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1.0;
+        isFirstDrawn = false;
       }
     }
   }
-}, [getHierarchicalLayers, currentFrame, viewportOffset, viewportWidth, viewportHeight, zoom]);
+}, [getHierarchicalLayers, currentFrame, viewportOffset, viewportWidth, viewportHeight, zoom, resolveLayerBlendMode]);
 
 
 //funcion pseudo onion skin:
