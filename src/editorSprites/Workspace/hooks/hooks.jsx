@@ -1737,7 +1737,7 @@ const historyPush = useCallback((entry) => {
 
 // ---- Firma estructural de framesResume ----
 // Solo incluye campos que el usuario puede deshacer:
-// layers, frames, visibilidad, opacidad, duración, nombre, orden.
+// layers, frames, visibilidad, opacidad, duración, nombre, orden, blend modes.
 // EXCLUYE: layerHasContent, canvases, pixelGroups, computed
 // (esos cambian al pintar y NO deben generar entradas de historial).
 const lastStructuralSigRef = useRef(null);
@@ -1751,10 +1751,12 @@ const _getStructuralSig = (fr) => {
       ln: Object.fromEntries(Object.entries(fr.layers).map(([k, l]) => [k, l.name])),
       lz: Object.fromEntries(Object.entries(fr.layers).map(([k, l]) => [k, l.zIndex])),
       lp: Object.fromEntries(Object.entries(fr.layers).map(([k, l]) => [k, l.parentLayerId ?? null])),
+      lb: Object.fromEntries(Object.entries(fr.layers).map(([k, l]) => [k, l.blendMode ?? 'normal'])),
       fv: Object.fromEntries(Object.entries(fr.frames).map(([k, f]) => [k, f.layerVisibility])),
       fo: Object.fromEntries(Object.entries(fr.frames).map(([k, f]) => [k, f.layerOpacity])),
       fd: Object.fromEntries(Object.entries(fr.frames).map(([k, f]) => [k, f.duration])),
       ft: Object.fromEntries(Object.entries(fr.frames).map(([k, f]) => [k, f.tags])),
+      fbo: Object.fromEntries(Object.entries(fr.frames).map(([k, f]) => [k, f.layerBlendModeOverride ?? {}])),
       fc: fr.metadata?.frameCount,
     });
   } catch {
@@ -1911,6 +1913,8 @@ const syncFramesFromResume = useCallback((snapshot) => {
         zIndex: gl.zIndex,
         isGroupLayer: gl.type === 'group',
         parentLayerId: gl.parentLayerId || null,
+        blendMode: gl.blendMode ?? 'normal',
+        blendModeOverride: resumeFrame.layerBlendModeOverride?.[layerId] ?? null,
       };
     });
 
@@ -2998,6 +3002,16 @@ const setFrameBlendModeOverride = useCallback((layerId, frameNumber, mode) => {
       [frameKey]: { ...frame, layers: newLayers },
     };
   });
+  setFramesResume(prev => produce(prev, draft => {
+    const fr = draft.frames[frameKey];
+    if (!fr) return;
+    if (!fr.layerBlendModeOverride) fr.layerBlendModeOverride = {};
+    if (mode === null) {
+      delete fr.layerBlendModeOverride[layerId];
+    } else {
+      fr.layerBlendModeOverride[layerId] = mode;
+    }
+  }));
   return true;
 }, []);
 
