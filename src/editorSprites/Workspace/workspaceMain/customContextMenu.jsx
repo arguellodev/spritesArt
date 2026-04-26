@@ -48,9 +48,7 @@ const CustomContextMenu = ({
     };
   }, []);
 
-  console.log("se renderizo");
   // Calcular posición del menú para evitar que se salga de la pantalla
-// Calcular posición del menú para evitar que se salga de la pantalla
 const calculateMenuPosition = useCallback(() => {
   
   if (!isVisible || !menuRef.current || !position) return;
@@ -191,17 +189,19 @@ const calculateMenuPosition = useCallback(() => {
     // Si hay input activo, no hacer nada - el menú permanece abierto
   }, [isVisible, activeInput, onClose]);
 
-  // Manejar tecla Escape
+  // Manejar tecla Escape: input activo > submenú abierto > cerrar todo
   const handleKeyDown = useCallback((event) => {
     if (event.key === 'Escape' && isVisible) {
       event.preventDefault();
       if (activeInput) {
         cancelInput();
+      } else if (openSubmenu !== null) {
+        setOpenSubmenu(null);
       } else {
         onClose();
       }
     }
-  }, [isVisible, activeInput, onClose, cancelInput]);
+  }, [isVisible, activeInput, onClose, cancelInput, openSubmenu]);
 
   // Event listeners
   useEffect(() => {
@@ -374,11 +374,11 @@ const calculateMenuPosition = useCallback(() => {
                   )}
                 </button>
 
-                {/* Submenú anidado */}
+                {/* Submenú anidado: al seleccionar item cerrar submenú Y menú padre */}
                 {action.type === 'submenu' && action.items && openSubmenu === (action.id || index) && (
                   <SubmenuPanel
                     items={action.items}
-                    onClose={() => setOpenSubmenu(null)}
+                    onClose={() => { setOpenSubmenu(null); onClose(); }}
                     onMouseEnter={() => openSubmenuFor(action.id || index)}
                     onMouseLeave={scheduleSubmenuClose}
                   />
