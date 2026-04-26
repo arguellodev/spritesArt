@@ -2181,7 +2181,9 @@ const addLayer = useCallback(() => {
     id: newLayerId,
     name: `Layer ${layers.length + 1}`,
     visible: {},
-    zIndex: highestZIndex + 1
+    zIndex: highestZIndex + 1,
+    blendMode: 'normal',
+    blendModeOverride: null,
   };
 
   const updatedFrames = { ...frames };
@@ -2724,7 +2726,9 @@ const duplicateLayer = useCallback((layerId) => {
     id: newLayerId,
     name: newLayerName,
     visible: {}, // Se llenará por frame
-    zIndex: highestZIndex + 1
+    zIndex: highestZIndex + 1,
+    blendMode: originalLayer.blendMode ?? 'normal',
+    blendModeOverride: null, // override por-frame se resetea en la copia
   };
 
   const updatedFrames = { ...frames };
