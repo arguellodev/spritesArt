@@ -2351,14 +2351,22 @@ margin-right: 20px;
   letter-spacing: 0.3px;
 }
 
-/* Input de duración del frame */
+/* Input de duración del frame: contenedor con spin buttons custom */
+.unified-timeline-left .frame-rate-control {
+  display: inline-flex;
+  align-items: stretch;
+  height: 22px;
+  flex-shrink: 0;
+}
+
 .unified-timeline-left .frame-rate-input {
-  width: 48px;
+  width: 42px;
   height: 22px;
   padding: 0 4px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-right: none;
+  border-radius: 4px 0 0 4px;
   color: var(--text-primary);
   font-size: 11px;
   text-align: center;
@@ -2370,6 +2378,69 @@ margin-right: 20px;
 .unified-timeline-left .frame-rate-input:focus {
   border-color: var(--accent-color);
   box-shadow: 0 0 0 2px rgba(140, 82, 255, 0.2);
+  position: relative;
+  z-index: 1;
+}
+
+/* Quitar spinners nativos del input numérico */
+.unified-timeline-left .frame-rate-input::-webkit-inner-spin-button,
+.unified-timeline-left .frame-rate-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+.unified-timeline-left .frame-rate-input {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Spinner vertical custom acoplado al input */
+.unified-timeline-left .frame-rate-spin {
+  display: inline-flex;
+  flex-direction: column;
+  height: 22px;
+  width: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 0 4px 4px 0;
+  background: var(--bg-secondary);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.unified-timeline-left .frame-rate-spin-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  line-height: 0;
+  transition:
+    background 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.unified-timeline-left .frame-rate-spin-btn + .frame-rate-spin-btn {
+  border-top: 1px solid var(--border-color);
+}
+
+.unified-timeline-left .frame-rate-spin-btn:hover {
+  background: var(--button-hover);
+  color: var(--text-primary);
+}
+
+.unified-timeline-left .frame-rate-spin-btn:active {
+  background: var(--accent-color);
+  color: #fff;
+}
+
+.unified-timeline-left .frame-rate-spin-btn svg {
+  width: 9px;
+  height: 9px;
+  stroke-width: 2.5;
 }
 
 .unified-timeline-left .frame-rate-unit {
@@ -2462,9 +2533,11 @@ margin-right: 20px;
 .unified-timeline-right .onion-skin-toggle {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   height: 28px;
   padding: 0 8px;
+  flex: 0 0 auto;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 5px;
@@ -2505,12 +2578,14 @@ margin-right: 20px;
   height: 9px;
   background: white;
   border-radius: 50%;
+  transform: none;
   transition: left 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .unified-timeline-right .toggle-switch.active .toggle-slider {
   left: 14px;
+  transform: none;
 }
 
 .unified-timeline-right .config-button {

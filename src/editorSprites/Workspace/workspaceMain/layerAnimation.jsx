@@ -1400,17 +1400,49 @@ const renderLayerWithTimeline = (layer) => {
             >
               {currentFrame}
             </span>
-            <input
-              type="number"
-              min="10"
-              max="1000"
-              step="10"
-              value={frames[currentFrame.toString()]?.frameDuration ?? 100}
-              onChange={(e) => setFrameDuration(currentFrame, Number(e.target.value))}
-              className="frame-rate-input"
-              title="Duración del frame (ms)"
-              aria-label="Duración del frame en milisegundos"
-            />
+            <div className="frame-rate-control">
+              <input
+                type="number"
+                min="10"
+                max="1000"
+                step="10"
+                value={frames[currentFrame.toString()]?.frameDuration ?? 100}
+                onChange={(e) => setFrameDuration(currentFrame, Number(e.target.value))}
+                onFocus={(e) => e.target.select()}
+                onMouseUp={(e) => e.preventDefault()}
+                className="frame-rate-input"
+                title="Duración del frame (ms)"
+                aria-label="Duración del frame en milisegundos"
+              />
+              <div className="frame-rate-spin" aria-hidden>
+                <button
+                  type="button"
+                  className="frame-rate-spin-btn"
+                  tabIndex={-1}
+                  onClick={() => {
+                    const cur = frames[currentFrame.toString()]?.frameDuration ?? 100;
+                    setFrameDuration(currentFrame, Math.min(1000, cur + 10));
+                  }}
+                  title="Aumentar 10 ms"
+                  aria-label="Aumentar duración"
+                >
+                  <LuChevronUp />
+                </button>
+                <button
+                  type="button"
+                  className="frame-rate-spin-btn"
+                  tabIndex={-1}
+                  onClick={() => {
+                    const cur = frames[currentFrame.toString()]?.frameDuration ?? 100;
+                    setFrameDuration(currentFrame, Math.max(10, cur - 10));
+                  }}
+                  title="Disminuir 10 ms"
+                  aria-label="Disminuir duración"
+                >
+                  <LuChevronDown />
+                </button>
+              </div>
+            </div>
             <span className="frame-rate-unit">ms</span>
             <button onClick={addFrame} title="Añadir frame" className="frame-control-btn">
               <LuPlus />
