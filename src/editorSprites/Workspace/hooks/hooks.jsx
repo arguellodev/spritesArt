@@ -12,6 +12,7 @@ import { produce, setAutoFreeze } from 'immer';
 // ("mutaste sin produce"), pero ganamos no romper código viejo.
 setAutoFreeze(false);
 import { useOptimizedFloodFill } from './optimizedFloodFill';
+import { isValidBlendMode, DEFAULT_BLEND_MODE } from '../blendModes';
 /**
  * Custom hook for tracking pointer/mouse interactions
  */
@@ -2930,6 +2931,75 @@ const getFrameOpacity = useCallback((layerId, frameNumber) => {
 }, [frames]);
 
 
+// === Modos de fusión de capa ===
+//
+// Granularidad: cada capa tiene un blendMode global (denormalizado por frame
+// para seguir el patrón de visible/opacity). Un override opcional por frame
+// vive en `frame.layers[i].blendModeOverride` y, si !== null, gana sobre el
+// blendMode de capa.
+//
+// Helper resolveLayerBlendMode es la única vía válida para consultar el modo
+// efectivo. Lo consumen los 4 sitios de render (live + onion-skin del frame
+// actual + animation exporter + video exporter).
+
+const resolveLayerBlendMode = useCallback((layerId, frameNumber) => {
+  const frame = frames[String(frameNumber)];
+  if (!frame) return DEFAULT_BLEND_MODE;
+  const layer = frame.layers.find(l => l.id === layerId);
+  if (!layer) return DEFAULT_BLEND_MODE;
+  const override = layer.blendModeOverride;
+  if (override != null && isValidBlendMode(override)) return override;
+  return isValidBlendMode(layer.blendMode) ? layer.blendMode : DEFAULT_BLEND_MODE;
+}, [frames]);
+
+// Escritura — modo de capa global, afecta a TODOS los frames.
+// Snapshot único en el historial gracias al setFrames batch.
+const setLayerBlendMode = useCallback((layerId, mode) => {
+  if (!isValidBlendMode(mode)) {
+    console.warn(`[blendMode] modo invalido: ${mode}`);
+    return false;
+  }
+  setFrames(prevFrames => {
+    const updated = { ...prevFrames };
+    Object.keys(updated).forEach(frameKey => {
+      const frame = updated[frameKey];
+      const newLayers = frame.layers.map(layer => {
+        if (layer.id !== layerId) return layer;
+        return { ...layer, blendMode: mode };
+      });
+      updated[frameKey] = { ...frame, layers: newLayers };
+    });
+    return updated;
+  });
+  setFramesResume(prev => produce(prev, draft => {
+    if (draft.layers[layerId]) {
+      draft.layers[layerId].blendMode = mode;
+    }
+  }));
+  return true;
+}, []);
+
+// Escritura — override solo en un frame. mode === null limpia el override.
+const setFrameBlendModeOverride = useCallback((layerId, frameNumber, mode) => {
+  if (mode !== null && !isValidBlendMode(mode)) {
+    console.warn(`[blendMode] override invalido: ${mode}`);
+    return false;
+  }
+  const frameKey = String(frameNumber);
+  setFrames(prevFrames => {
+    const frame = prevFrames[frameKey];
+    if (!frame) return prevFrames;
+    const newLayers = frame.layers.map(layer => {
+      if (layer.id !== layerId) return layer;
+      return { ...layer, blendModeOverride: mode };
+    });
+    return {
+      ...prevFrames,
+      [frameKey]: { ...frame, layers: newLayers },
+    };
+  });
+  return true;
+}, []);
 
 
 
@@ -7360,6 +7430,11 @@ onionFramesConfig, // Recibir la configuración actual del estado principal
 //Gestion de opacida de los frames
 setFrameOpacity,
 getFrameOpacity,
+
+  // === Modos de fusión ===
+  resolveLayerBlendMode,
+  setLayerBlendMode,
+  setFrameBlendModeOverride,
 
     getFramesInfo, // ahora incluye información de duración
 
