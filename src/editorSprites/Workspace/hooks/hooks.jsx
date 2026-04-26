@@ -2728,7 +2728,7 @@ const duplicateLayer = useCallback((layerId) => {
     visible: {}, // Se llenará por frame
     zIndex: highestZIndex + 1,
     blendMode: originalLayer.blendMode ?? 'normal',
-    blendModeOverride: null, // override por-frame se resetea en la copia
+    blendModeOverride: null, // default; cada frame copia su override del original abajo
   };
 
   const updatedFrames = { ...frames };
@@ -2738,13 +2738,15 @@ const duplicateLayer = useCallback((layerId) => {
     const originalLayerInFrame = frame.layers.find(l => l.id === layerId);
     if (!originalLayerInFrame) return;
 
-    // Capa duplicada solo para este frame
+    // Capa duplicada solo para este frame.
+    // Spec: la copia hereda blendModeOverride por frame del original.
     const duplicatedLayer = {
       ...baseLayer,
       visible: {
         ...baseLayer.visible,
         [frameKey]: true
-      }
+      },
+      blendModeOverride: originalLayerInFrame.blendModeOverride ?? null,
     };
 
     frame.layers.push(duplicatedLayer);
@@ -2773,7 +2775,7 @@ const duplicateLayer = useCallback((layerId) => {
       type: originalLayer.isGroupLayer ? 'group' : 'normal',
       parentLayerId: originalLayer.parentLayerId || null,
       zIndex: highestZIndex + 1,
-      blendMode: 'normal',
+      blendMode: originalLayer.blendMode ?? 'normal',
       locked: false,
     };
     Object.keys(draft.frames).forEach(frameKey => {
