@@ -81,6 +81,9 @@ export function renderLayerAnimation(props) {
       defaultFrameDuration={props.defaultFrameDuration}
       setFrameOpacity={props.setFrameOpacity}
       getFrameOpacity={props.getFrameOpacity}
+      resolveLayerBlendMode={props.resolveLayerBlendMode}
+      setLayerBlendMode={props.setLayerBlendMode}
+      setFrameBlendModeOverride={props.setFrameBlendModeOverride}
       framesResume={props.framesResume}
       setFramesResume={props.setFramesResume}
       externalCanvasRef={props.externalCanvasRef}

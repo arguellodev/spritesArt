@@ -535,6 +535,11 @@ useKeybindingsListener(keybindingsRegistry);
     setFrameOpacity,
     getFrameOpacity,
 
+    //modos de fusión:
+    resolveLayerBlendMode,
+    setLayerBlendMode,
+    setFrameBlendModeOverride,
+
     //gestion de informacion de pixeles:
     getLayerPixelData,
     paintPixelsRGBA,
@@ -10417,6 +10422,9 @@ const cutSelection = useCallback(() => {
         defaultFrameDuration,
         setFrameOpacity,
         getFrameOpacity,
+        resolveLayerBlendMode,
+        setLayerBlendMode,
+        setFrameBlendModeOverride,
         framesResume,
         setFramesResume,
         externalCanvasRef: previewAnimationRef,
@@ -10566,6 +10574,9 @@ const cutSelection = useCallback(() => {
         defaultFrameDuration,
         setFrameOpacity,
         getFrameOpacity,
+        resolveLayerBlendMode,
+        setLayerBlendMode,
+        setFrameBlendModeOverride,
         framesResume,
         setFramesResume,
         externalCanvasRef: previewAnimationRef,

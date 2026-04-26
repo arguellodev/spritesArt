@@ -99,6 +99,14 @@ const LayerAnimation = ({
   setFrameOpacity,
   getFrameOpacity,
 
+  // Modos de fusión — TODO Task 12: usar en menuLayerActions
+  // eslint-disable-next-line no-unused-vars
+  resolveLayerBlendMode,
+  // eslint-disable-next-line no-unused-vars
+  setLayerBlendMode,
+  // eslint-disable-next-line no-unused-vars
+  setFrameBlendModeOverride,
+
   // Resumen de frames (data consolidada)
   framesResume,
 
