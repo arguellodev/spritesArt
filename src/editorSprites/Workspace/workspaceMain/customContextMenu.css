@@ -823,3 +823,188 @@
     transform: none;
   }
 }
+/* ============================================================
+ * Submenu (type: 'submenu' en CustomContextMenu)
+ *  - Anclado al item padre via position: absolute left:100% top:0
+ *  - Tema dark, mismo lenguaje visual que .context-menu-content
+ *  - Compacto: 16 items + 5 dividers de grupo deben caber sin scroll
+ * ============================================================ */
+
+/* Indicador ▶ inline al final del item padre */
+.context-menu-submenu-arrow {
+  margin-left: auto;
+  padding-left: 10px;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  flex-shrink: 0;
+  transition: color 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.context-menu-item:hover:not(.disabled) .context-menu-submenu-arrow {
+  color: var(--accent-color);
+  opacity: 1;
+}
+
+/* Panel flotante */
+.context-menu-submenu {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  margin-left: 6px;
+  min-width: 200px;
+  max-width: 260px;
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow:
+    var(--panel-shadow),
+    0 12px 32px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 10001;
+  animation: submenuSlideIn 0.14s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes submenuSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+/* Scrollbar discreto (solo visible al hover si el browser lo soporta) */
+.context-menu-submenu {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+.context-menu-submenu::-webkit-scrollbar {
+  width: 6px;
+}
+.context-menu-submenu::-webkit-scrollbar-track {
+  background: transparent;
+}
+.context-menu-submenu::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+.context-menu-submenu::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* Divider con título de grupo (uppercase, muted) */
+.context-menu-submenu-divider {
+  padding: 8px 10px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-secondary);
+  opacity: 0.65;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Primer divider sin padding-top extra */
+.context-menu-submenu > .context-menu-submenu-divider:first-child {
+  padding-top: 4px;
+}
+
+/* Item de modo */
+.context-menu-submenu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 7px 10px;
+  margin: 1px 0;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+              color 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.context-menu-submenu-item:hover:not(.disabled) {
+  background: var(--layer-hover);
+  color: var(--text-primary);
+  transform: translateX(2px);
+}
+
+.context-menu-submenu-item:active:not(.disabled) {
+  background: var(--layer-selected);
+  transform: translateX(1px) scale(0.99);
+  transition-duration: 0.08s;
+}
+
+.context-menu-submenu-item:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
+.context-menu-submenu-item.disabled {
+  color: var(--text-secondary);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Item activo (modo seleccionado actual) */
+.context-menu-submenu-item.checked {
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+.context-menu-submenu-item.checked:hover:not(.disabled) {
+  background: var(--layer-hover);
+  color: var(--accent-color);
+}
+
+/* Marca ✓ a la izquierda */
+.context-menu-submenu-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-color);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.context-menu-submenu-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Reduced motion: matar animaciones internas del submenu */
+@media (prefers-reduced-motion: reduce) {
+  .context-menu-submenu {
+    animation: none;
+  }
+  .context-menu-submenu-item,
+  .context-menu-submenu-arrow {
+    transition: none;
+  }
+}
