@@ -32,6 +32,9 @@ export const BLEND_GROUP_LABELS = {
   component: 'Componente',
 };
 
+// Alias retro-compat: el spec original usa el nombre BLEND_GROUPS.
+export const BLEND_GROUPS = BLEND_GROUP_LABELS;
+
 const BLEND_MODE_IDS = new Set(BLEND_MODES.map(m => m.id));
 
 export function isValidBlendMode(id) {
