@@ -1050,19 +1050,21 @@ const renderCurrentFrameWithAdjacent = useCallback((ctx) => {
   }
   
   // ============ RENDERIZAR FRAME ACTUAL (mantener tu código existente) ============
+  let isFirstDrawnActive = true;
   for (const mainLayer of sortedMainLayers) {
     const isVisible = mainLayer.visible[currentFrame] ?? true;
     if (!isVisible) continue;
-    
-    // Renderizar capa principal
+
     const mainCanvas = layerCanvasesRef.current[mainLayer.id];
     if (mainCanvas) {
       const layerOpacity = mainLayer.opacity ?? 1.0;
-      
-      if (layerOpacity !== 1.0) {
-        ctx.globalAlpha = layerOpacity;
-      }
-      
+      const blendId = isFirstDrawnActive
+        ? 'normal'
+        : resolveLayerBlendMode(mainLayer.id, currentFrame);
+      const composite = toCompositeOperation(blendId);
+
+      ctx.globalAlpha = layerOpacity;
+      ctx.globalCompositeOperation = composite;
       ctx.drawImage(
         mainCanvas,
         viewportOffset.x, viewportOffset.y,
@@ -1070,24 +1072,23 @@ const renderCurrentFrameWithAdjacent = useCallback((ctx) => {
         0, 0,
         Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
       );
-      
-      if (layerOpacity !== 1.0) {
-        ctx.globalAlpha = 1.0;
-      }
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1.0;
+      isFirstDrawnActive = false;
     }
-    
-    // Renderizar capas de grupo
+
     for (const groupLayer of mainLayer.groupLayers) {
       if (!groupLayer.visible) continue;
-      
       const groupCanvas = layerCanvasesRef.current[groupLayer.id];
       if (groupCanvas) {
         const groupOpacity = groupLayer.opacity ?? 1.0;
-        
-        if (groupOpacity !== 1.0) {
-          ctx.globalAlpha = groupOpacity;
-        }
-        
+        const groupBlendId = isFirstDrawnActive
+          ? 'normal'
+          : resolveLayerBlendMode(groupLayer.id, currentFrame);
+        const groupComposite = toCompositeOperation(groupBlendId);
+
+        ctx.globalAlpha = groupOpacity;
+        ctx.globalCompositeOperation = groupComposite;
         ctx.drawImage(
           groupCanvas,
           viewportOffset.x, viewportOffset.y,
@@ -1095,14 +1096,13 @@ const renderCurrentFrameWithAdjacent = useCallback((ctx) => {
           0, 0,
           Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
         );
-        
-        if (groupOpacity !== 1.0) {
-          ctx.globalAlpha = 1.0;
-        }
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1.0;
+        isFirstDrawnActive = false;
       }
     }
   }
-  
+
   // ============ RENDERIZAR FRAMES SIGUIENTES ============
   // Ordenar por offset descendente para que los más lejanos se rendericen primero
   const enabledNextFrames = onionFramesConfig.nextFrames
@@ -1117,14 +1117,15 @@ const renderCurrentFrameWithAdjacent = useCallback((ctx) => {
 }, [
   onionFramesConfig,
   applyTintToCanvas,
-  getHierarchicalLayers, 
-  currentFrame, 
-  viewportOffset, 
-  viewportWidth, 
-  viewportHeight, 
-  zoom, 
-  frames, 
-  activeLayerId
+  getHierarchicalLayers,
+  currentFrame,
+  viewportOffset,
+  viewportWidth,
+  viewportHeight,
+  zoom,
+  frames,
+  activeLayerId,
+  resolveLayerBlendMode
 ]);
 
 
