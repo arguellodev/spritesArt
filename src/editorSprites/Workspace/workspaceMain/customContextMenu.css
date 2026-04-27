@@ -868,12 +868,12 @@
   opacity: 1;
 }
 
-/* Panel flotante */
+/* Panel flotante.
+   Posicion (left/top) se inyecta inline desde SubmenuPanel via useLayoutEffect
+   con position:fixed — escapa del overflow:auto de .context-menu-content.
+   El position aqui es solo fallback si el JS aun no corrió. */
 .context-menu-submenu {
-  position: absolute;
-  left: 100%;
-  top: 0;
-  margin-left: 6px;
+  position: fixed;
   min-width: 200px;
   max-width: 260px;
   max-height: min(70vh, 520px);
@@ -1029,9 +1029,6 @@
   }
 }
 
-/* Fallback: el wrapper <div key={...}> que envuelve cada item del menu
-   debe ser position:relative para que el submenu .context-menu-submenu
-   con left:100% se ancle al item, no al menu padre completo. */
-.context-menu-content > div {
-  position: relative;
-}
+/* (Eliminado: .context-menu-content > div { position: relative } —
+   ya no aplica porque el submenu usa position:fixed con coordenadas
+   calculadas en JS desde el rect del item padre. Ver SubmenuPanel.) */

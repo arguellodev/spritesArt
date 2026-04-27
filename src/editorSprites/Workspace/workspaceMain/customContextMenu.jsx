@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import './customContextMenu.css';
 
 // Paleta de colores para tags estilo Aseprite. Se usa cuando una accion del
@@ -489,15 +489,56 @@ const calculateMenuPosition = useCallback(() => {
   );
 };
 
-// Componente de panel de submenú anidado
+// Componente de panel de submenú anidado.
+//
+// Render con position:fixed + portal-style: el padre `.context-menu-content`
+// tiene overflow-y:auto para scroll de menus largos, lo que crea un clipping
+// context que recortaba el submenu (position:absolute) al sobresalir.
+// Con position:fixed escapamos del clip; las coordenadas se calculan en
+// useLayoutEffect leyendo el rect del item padre antes del paint para evitar
+// flash inicial.
 function SubmenuPanel({ items, onClose, onMouseEnter, onMouseLeave }) {
+  const panelRef = useRef(null);
+
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    // El parent <div key={...}> envuelve al button + al SubmenuPanel; el
+    // button es siempre el primer hijo .context-menu-item.
+    const wrapper = panel.parentElement;
+    const btn = wrapper?.querySelector('.context-menu-item');
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    const margin = 6;
+
+    // Por defecto: a la derecha del item padre.
+    let left = rect.right + margin;
+    // Si overflow horizontal, fallback a la izquierda.
+    if (left + panelRect.width > window.innerWidth - 4) {
+      left = Math.max(4, rect.left - panelRect.width - margin);
+    }
+
+    // Vertical: alineado al top del item; si overflow inferior, subir.
+    let top = rect.top;
+    if (top + panelRect.height > window.innerHeight - 4) {
+      top = Math.max(4, window.innerHeight - panelRect.height - 4);
+    }
+
+    panel.style.left = `${Math.round(left)}px`;
+    panel.style.top = `${Math.round(top)}px`;
+    panel.style.visibility = 'visible';
+  }, [items]);
+
   return (
     <div
+      ref={panelRef}
       className="context-menu-submenu"
       role="menu"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onContextMenu={(e) => e.preventDefault()}
+      style={{ position: 'fixed', visibility: 'hidden', left: 0, top: 0 }}
     >
       {items.map((item, idx) => {
         if (item.divider) {
