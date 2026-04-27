@@ -11380,6 +11380,16 @@ handleRotSprite(rotationAngleSelection, true);
             <button
               type="button"
               className="grid-control active"
+              title="Importar .gif animado"
+              aria-label="Importar GIF"
+              onClick={handleImportGif}
+            >
+              <span aria-hidden="true" style={{ fontWeight: 700, fontFamily: 'monospace' }}>.gif</span>
+              <p>.gif</p>
+            </button>
+            <button
+              type="button"
+              className="grid-control active"
               title="Importar imagen como capa de referencia"
               aria-label="Importar referencia"
               onClick={handleImportReferenceImage}
