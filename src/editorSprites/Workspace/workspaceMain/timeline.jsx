@@ -321,6 +321,12 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
   // Construye la lista agrupada de modos para el submenu del CustomContextMenu.
   // `currentMode` se marca con `checked: true`. Cada cambio de grupo inserta
   // un divider con el label del grupo (BLEND_GROUP_LABELS).
+  //
+  // onHover: aplica el modo al hover para preview en vivo. Si el usuario
+  // mueve el mouse a otra opcion, el setter se llama con esa otra → preview
+  // se actualiza. Si hace click, onClick (que llama al mismo setter) confirma.
+  // Si cierra el menu sin click, queda con el ultimo modo hovereado — el user
+  // puede usar Ctrl+Z para revertir o re-abrir el menu y elegir otro.
   const buildBlendModeItems = (currentMode, onPick) => {
     const items = [];
     let lastGroup = null;
@@ -333,6 +339,7 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
         id: `blend-${m.id}`,
         label: m.label,
         checked: currentMode === m.id,
+        onHover: () => onPick(m.id),
         onClick: () => onPick(m.id),
       });
     }
@@ -364,6 +371,7 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
       id: 'blend-inherit',
       label: 'Heredar capa',
       checked: frameOverride === null,
+      onHover: () => setFrameBlendModeOverride(activeLayerId, currentFrame, null),
       onClick: () => setFrameBlendModeOverride(activeLayerId, currentFrame, null),
     },
     { divider: true, label: '' },

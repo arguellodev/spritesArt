@@ -192,7 +192,14 @@ const calculateMenuPosition = useCallback(() => {
     if (isInsideMenu || isInsideMenuElement) {
       return; // No cerrar si el clic es dentro del menú
     }
-    
+
+    // El submenu se renderiza via portal a document.body, fuera de menuRef.
+    // Si el click cae dentro de cualquier .context-menu-submenu, no cerrar
+    // — el handler del item ya se encarga de commit + cerrar todo.
+    if (event.target?.closest && event.target.closest('.context-menu-submenu')) {
+      return;
+    }
+
     // CAMBIO IMPORTANTE: Solo cerrar si NO hay input activo
     if (!activeInput) {
       onClose();
@@ -579,6 +586,7 @@ function SubmenuPanel({ anchorEl, items, onClose, onMouseEnter, onMouseLeave }) 
           <button
             key={item.id || idx}
             className={`context-menu-submenu-item ${item.disabled ? 'disabled' : ''} ${item.checked ? 'checked' : ''}`}
+            onMouseEnter={item.disabled ? undefined : item.onHover}
             onClick={() => {
               if (item.disabled) return;
               item.onClick?.();
