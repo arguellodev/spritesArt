@@ -856,6 +856,8 @@ useKeybindingsListener(keybindingsRegistry);
   // restoreFromProjectData (mismo camino que cargar un .pixcalli o .ase).
   // Modelo: una sola capa, N frames del editor (uno por frame del GIF),
   // duraciones nativas del archivo.
+  // Si el GIF tiene tamaño distinto al canvas activo, pregunta antes con
+  // confirm() si reajustar el canvas (mismo patron que handleAutoCrop).
   const handleImportGif = useCallback(async () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -867,21 +869,99 @@ useKeybindingsListener(keybindingsRegistry);
         const doc = await loadGifFile(file);
         const pix = gifDocToPixcalli(doc);
 
-        // Construir el payload con la shape que restoreFromProjectData espera.
-        const framesResumeShape = {
-          frames: {},
-          metadata: { defaultFrameDuration: 100, frameRate: 10 },
-          computed: { frameSequence: [] },
-        };
-        const restoredCanvases = {};
+        // Confirm de reajuste de canvas si el GIF tiene tamaño distinto.
+        // Si el usuario rechaza, abortamos para no dejar el editor en
+        // estado inconsistente (canvas chico + frames grandes).
+        const dimsDiffer = pix.width !== totalWidth || pix.height !== totalHeight;
+        if (dimsDiffer) {
+          const ok = confirm(
+            `El GIF mide ${pix.width}×${pix.height} px y tu canvas actual es ` +
+            `${totalWidth}×${totalHeight} px.\n\n` +
+            `¿Reajustar el canvas al tamaño del GIF? Si elegis "Cancelar" la ` +
+            `importación se aborta.`,
+          );
+          if (!ok) return;
+          setTotalWidth(pix.width);
+          setTotalHeight(pix.height);
+          setDrawableWidth(pix.width);
+          setDrawableHeight(pix.height);
+        }
 
-        for (const [frameKeyStr, frameData] of Object.entries(pix.frames)) {
-          const frameN = Number(frameKeyStr);
-          framesResumeShape.frames[frameN] = {
+        // Frame count y duraciones; el frameRate global se deriva del promedio.
+        const frameKeys = Object.keys(pix.frames).map(Number).sort((a, b) => a - b);
+        const totalMs = frameKeys.reduce((sum, n) => sum + (pix.frames[n].duration ?? 100), 0);
+        const avgMs = totalMs / Math.max(1, frameKeys.length);
+        const frameRate = Math.max(1, Math.round(1000 / avgMs));
+
+        // framesResume con la shape COMPLETA esperada por hooks downstream.
+        // Sin layerHasContent / layerVisibility / layerOpacity / pixelGroups
+        // por frame (y sin computed.resolvedFrames / framesByLayer / keyframes),
+        // los effects de blob-check, layerAnimation y timeline crashean al hacer
+        // Object.entries(undefined). Para GIF, todas las capas (1) son visibles
+        // y todos los frames tienen contenido por construcción.
+        const framesResumeLayers = {};
+        const framesByLayer = {};
+        const keyframes = {};
+        for (const layer of pix.layers) {
+          framesResumeLayers[layer.id] = {
+            id: layer.id,
+            name: layer.name,
+            type: 'normal',
+            parentLayerId: null,
+            zIndex: layer.zIndex ?? 0,
+            blendMode: layer.blendMode ?? 'normal',
+            locked: false,
+          };
+          framesByLayer[layer.id] = [...frameKeys];
+          keyframes[layer.id] = [];
+        }
+
+        const framesResumeFrames = {};
+        const resolvedFrames = {};
+        for (const frameN of frameKeys) {
+          const frameData = pix.frames[frameN];
+          const layerVisibility = {};
+          const layerOpacity = {};
+          const layerHasContent = {};
+          for (const layer of pix.layers) {
+            layerVisibility[layer.id] = true;
+            layerOpacity[layer.id] = layer.opacity ?? 1;
+            layerHasContent[layer.id] = true;
+          }
+          framesResumeFrames[frameN] = {
+            layerVisibility,
+            layerOpacity,
+            layerHasContent,
+            canvases: {},
+            pixelGroups: {},
             duration: frameData.duration ?? 100,
             tags: [],
           };
-          framesResumeShape.computed.frameSequence.push(frameN);
+          resolvedFrames[frameN] = { layerVisibility, layerOpacity, layerHasContent };
+        }
+
+        const framesResumeShape = {
+          metadata: {
+            frameCount: frameKeys.length,
+            defaultFrameDuration: 100,
+            frameRate,
+            totalDuration: totalMs,
+          },
+          layers: framesResumeLayers,
+          frames: framesResumeFrames,
+          computed: {
+            resolvedFrames,
+            framesByLayer,
+            frameSequence: frameKeys,
+            totalFrames: frameKeys.length,
+            keyframes,
+          },
+        };
+
+        // Mapa plano "frame_N_layerId" → canvas, consumido por restoreFromProjectData.
+        const restoredCanvases = {};
+        for (const frameN of frameKeys) {
+          const frameData = pix.frames[frameN];
           for (const layer of pix.layers) {
             const celCanvas = frameData.canvases[layer.id];
             if (celCanvas) {
@@ -895,13 +975,6 @@ useKeybindingsListener(keybindingsRegistry);
           }
         }
 
-        // frameRate global a partir del promedio de duraciones reales.
-        const totalMs = Object.values(framesResumeShape.frames)
-          .reduce((sum, fr) => sum + (fr.duration ?? 100), 0);
-        const avgMs = totalMs / Math.max(1, Object.keys(framesResumeShape.frames).length);
-        const frameRate = Math.max(1, Math.round(1000 / avgMs));
-        framesResumeShape.metadata.frameRate = frameRate;
-
         const projectData = {
           format: { name: 'PixCalli Studio', version: '2.0.0', migratedFrom: 'gif' },
           metadata: { title: doc.fileName },
@@ -909,7 +982,7 @@ useKeybindingsListener(keybindingsRegistry);
             zoom: 1,
             panOffset: { x: 0, y: 0 },
             activeLayerId: pix.layers[0]?.id ?? null,
-            currentFrame: framesResumeShape.computed.frameSequence[0] ?? 1,
+            currentFrame: frameKeys[0] ?? 1,
           },
           animation: { defaultFrameDuration: 100, frameRate },
           framesResume: framesResumeShape,
@@ -950,7 +1023,7 @@ useKeybindingsListener(keybindingsRegistry);
       }
     };
     input.click();
-  }, [handleProjectLoaded]);
+  }, [handleProjectLoaded, totalWidth, totalHeight]);
 
   // --- Importar imagen como capa de referencia ---
   // PNG/JPEG → ReferenceLayer (bloqueada, opacidad 0.5, no exportable).
