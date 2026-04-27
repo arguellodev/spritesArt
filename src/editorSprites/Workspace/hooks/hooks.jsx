@@ -703,6 +703,29 @@ const getOnionSkinFrameConfig = useCallback((frameOffset) => {
 
 
 
+// === Modos de fusión de capa ===
+//
+// Granularidad: cada capa tiene un blendMode global (denormalizado por frame
+// para seguir el patrón de visible/opacity). Un override opcional por frame
+// vive en `frame.layers[i].blendModeOverride` y, si !== null, gana sobre el
+// blendMode de capa.
+//
+// IMPORTANTE: declarado AQUI (no junto a setLayerBlendMode/setFrameBlendModeOverride
+// abajo) porque los useCallback de renderCurrentFrameOnly y
+// renderCurrentFrameWithAdjacent listan resolveLayerBlendMode en su deps array
+// — declararlo abajo causa TDZ ReferenceError al primer render.
+
+const resolveLayerBlendMode = useCallback((layerId, frameNumber) => {
+  const frame = frames[String(frameNumber)];
+  if (!frame) return DEFAULT_BLEND_MODE;
+  const layer = frame.layers.find(l => l.id === layerId);
+  if (!layer) return DEFAULT_BLEND_MODE;
+  const override = layer.blendModeOverride;
+  if (override != null && isValidBlendMode(override)) return override;
+  return isValidBlendMode(layer.blendMode) ? layer.blendMode : DEFAULT_BLEND_MODE;
+}, [frames]);
+
+
 // 4. FUNCIÓN DE RENDERIZADO SIMPLE POR FRAME (NUEVA)
 
 
@@ -2943,26 +2966,8 @@ const getFrameOpacity = useCallback((layerId, frameNumber) => {
 }, [frames]);
 
 
-// === Modos de fusión de capa ===
-//
-// Granularidad: cada capa tiene un blendMode global (denormalizado por frame
-// para seguir el patrón de visible/opacity). Un override opcional por frame
-// vive en `frame.layers[i].blendModeOverride` y, si !== null, gana sobre el
-// blendMode de capa.
-//
-// Helper resolveLayerBlendMode es la única vía válida para consultar el modo
-// efectivo. Lo consumen los 4 sitios de render (live + onion-skin del frame
-// actual + animation exporter + video exporter).
-
-const resolveLayerBlendMode = useCallback((layerId, frameNumber) => {
-  const frame = frames[String(frameNumber)];
-  if (!frame) return DEFAULT_BLEND_MODE;
-  const layer = frame.layers.find(l => l.id === layerId);
-  if (!layer) return DEFAULT_BLEND_MODE;
-  const override = layer.blendModeOverride;
-  if (override != null && isValidBlendMode(override)) return override;
-  return isValidBlendMode(layer.blendMode) ? layer.blendMode : DEFAULT_BLEND_MODE;
-}, [frames]);
+// (resolveLayerBlendMode movido arriba de renderCurrentFrameOnly por TDZ —
+// los renders lo referencian en sus deps arrays. Ver linea ~700.)
 
 // Escritura — modo de capa global, afecta a TODOS los frames.
 // Snapshot único en el historial gracias al setFrames batch.
