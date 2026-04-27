@@ -157,7 +157,9 @@ function cloneCanvas(src) {
  * Convierte un GifDocument a la shape consumida por restoreFromProjectData:
  *   { width, height, layers, frames: { [n]: { duration, canvases: { [layerId]: canvas } } } }
  *
- * Los frames se indexan desde 0 (igual que asepriteDocToPixcalli).
+ * Los frames se indexan desde 1 — convención del editor (currentFrame arranca
+ * en 1, ver useState(1) en hooks.jsx). asepriteDocToPixcalli indexa desde 0
+ * por arrastre histórico; el handler aseprite tiene el mismo bug latente.
  *
  * @param {GifDocument} doc
  * @returns {{ width: number, height: number, layers: object[], frames: object }}
@@ -175,7 +177,7 @@ export function gifDocToPixcalli(doc) {
 
   const frames = {};
   doc.composedFrames.forEach((entry, i) => {
-    frames[i] = {
+    frames[i + 1] = {
       duration: entry.duration,
       canvases: { [layerId]: entry.canvas },
     };
