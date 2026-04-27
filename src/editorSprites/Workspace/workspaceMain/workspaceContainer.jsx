@@ -133,6 +133,7 @@ import SlicesPanel from "../slices/slicesPanel";
 import { drawSlicesOverlay } from "../slices/sliceLayer";
 import { loadReferenceFromFile } from "../layers/referenceLayer";
 import { loadAsepriteFile, asepriteDocToPixcalli } from "../formats/aseprite";
+import { loadGifFile, gifDocToPixcalli } from "../formats/gif";
 import { autoCrop } from "../canvas/autoCrop";
 import MagicWandTool from "../customTool/tools/magicWandTool";
 import ReferenceLayersPanel from "../layers/referenceLayersPanel";
@@ -844,6 +845,108 @@ useKeybindingsListener(keybindingsRegistry);
       } catch (err) {
         console.error('Error importando .aseprite:', err);
         alert(`No se pudo importar el archivo: ${err.message}`);
+      }
+    };
+    input.click();
+  }, [handleProjectLoaded]);
+
+  // --- Importar .gif animado ---
+  // Abre file picker, decodea con loadGifFile (gifuct-js + composición de
+  // disposal types), y aplica el documento al canvas mediante
+  // restoreFromProjectData (mismo camino que cargar un .pixcalli o .ase).
+  // Modelo: una sola capa, N frames del editor (uno por frame del GIF),
+  // duraciones nativas del archivo.
+  const handleImportGif = useCallback(async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.gif,image/gif';
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const doc = await loadGifFile(file);
+        const pix = gifDocToPixcalli(doc);
+
+        // Construir el payload con la shape que restoreFromProjectData espera.
+        const framesResumeShape = {
+          frames: {},
+          metadata: { defaultFrameDuration: 100, frameRate: 10 },
+          computed: { frameSequence: [] },
+        };
+        const restoredCanvases = {};
+
+        for (const [frameKeyStr, frameData] of Object.entries(pix.frames)) {
+          const frameN = Number(frameKeyStr);
+          framesResumeShape.frames[frameN] = {
+            duration: frameData.duration ?? 100,
+            tags: [],
+          };
+          framesResumeShape.computed.frameSequence.push(frameN);
+          for (const layer of pix.layers) {
+            const celCanvas = frameData.canvases[layer.id];
+            if (celCanvas) {
+              restoredCanvases[`frame_${frameN}_${layer.id}`] = celCanvas;
+            } else {
+              const empty = document.createElement('canvas');
+              empty.width = pix.width;
+              empty.height = pix.height;
+              restoredCanvases[`frame_${frameN}_${layer.id}`] = empty;
+            }
+          }
+        }
+
+        // frameRate global a partir del promedio de duraciones reales.
+        const totalMs = Object.values(framesResumeShape.frames)
+          .reduce((sum, fr) => sum + (fr.duration ?? 100), 0);
+        const avgMs = totalMs / Math.max(1, Object.keys(framesResumeShape.frames).length);
+        const frameRate = Math.max(1, Math.round(1000 / avgMs));
+        framesResumeShape.metadata.frameRate = frameRate;
+
+        const projectData = {
+          format: { name: 'PixCalli Studio', version: '2.0.0', migratedFrom: 'gif' },
+          metadata: { title: doc.fileName },
+          viewport: {
+            zoom: 1,
+            panOffset: { x: 0, y: 0 },
+            activeLayerId: pix.layers[0]?.id ?? null,
+            currentFrame: framesResumeShape.computed.frameSequence[0] ?? 1,
+          },
+          animation: { defaultFrameDuration: 100, frameRate },
+          framesResume: framesResumeShape,
+          layers: pix.layers.map((l) => ({
+            id: l.id,
+            name: l.name,
+            visible: l.visible,
+            opacity: l.opacity ?? 1,
+            zIndex: l.zIndex ?? 0,
+            blendMode: l.blendMode ?? 'normal',
+            isGroupLayer: false,
+            parentLayerId: null,
+          })),
+          canvases: {},
+          palette: {
+            foreground: { r: 0, g: 0, b: 0, a: 255 },
+            background: { r: 255, g: 255, b: 255, a: 255 },
+            fillColor: { r: 0, g: 0, b: 0, a: 255 },
+            borderColor: { r: 0, g: 0, b: 0, a: 255 },
+            recentColors: [],
+          },
+          onionSkin: { enabled: false, settings: null, framesConfig: null },
+          dimensions: { width: pix.width, height: pix.height },
+        };
+
+        await handleProjectLoaded({ success: true, projectData, restoredCanvases });
+
+        invalidateCacheRef.current?.();
+        compositeRenderRef.current?.();
+
+        console.log(
+          `[gif] Import OK — ${doc.framesCount} frames, ${doc.width}×${doc.height}, ` +
+          `frameRate≈${frameRate}fps`,
+        );
+      } catch (err) {
+        console.error('Error importando .gif:', err);
+        alert(`No se pudo importar el GIF: ${err.message ?? err}`);
       }
     };
     input.click();
