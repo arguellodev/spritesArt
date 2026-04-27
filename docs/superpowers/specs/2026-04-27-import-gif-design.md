@@ -101,8 +101,8 @@ Sigue el patrón de `formats/aseprite.js`. Exporta:
   framesCount: number,
   layers: [{ id, name, visible: true, opacity: 1, zIndex: 0, blendMode: 'normal' }],
   frames: {
-    1: { duration: 100, canvases: { [layerId]: HTMLCanvasElement } },
-    2: { ... },
+    0: { duration: 100, canvases: { [layerId]: HTMLCanvasElement } },
+    1: { ... },
     ...
   },
 }

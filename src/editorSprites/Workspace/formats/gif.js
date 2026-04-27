@@ -123,6 +123,8 @@ function composeFrames(rawFrames, width, height) {
  * gifuct-js entrega .delay en ms (ya multiplicado x10 desde los cs del archivo).
  * Algunos GIFs declaran delay 0 (o casi 0), que los browsers renderizan a ~100ms
  * para evitar reproducción inestable. Aplicamos la misma regla.
+ * Nota: frames sin extensión GCE (e.g., GIFs estáticos) llegan con delay === undefined.
+ * isFinite captura ese caso y fuerza 100ms.
  *
  * @param {number} delayMs
  * @returns {number}
