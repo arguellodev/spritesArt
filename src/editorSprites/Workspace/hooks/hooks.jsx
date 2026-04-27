@@ -7277,6 +7277,10 @@ const restoreFromProjectData = useCallback(async (projectData, restoredCanvases)
         newFrames[frameNumber] = {
           canvases: frameCanvases,
           layers: perFrameLayers,
+          // pixelGroups: imprescindible aunque venga vacío. Sin este campo,
+          // setActiveFrame y otros hooks llaman setPixelGroups(undefined) y
+          // los components que hacen Object.entries(pixelGroups) crashean.
+          pixelGroups: frameResume.pixelGroups ?? {},
           frameDuration: frameResume.duration ?? (projectData.animation?.defaultFrameDuration ?? 100),
           tags: frameResume.tags ?? [],
         };
