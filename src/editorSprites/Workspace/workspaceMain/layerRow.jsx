@@ -389,23 +389,25 @@ const LayerRow = React.memo(function LayerRow({
 
           // Convenio del parent: frameIndex = frameNumber - 1 en mouseDown.
           //
-          // Reglas de seleccion en right-click:
-          //  1. Capa distinta a la activa → switchear a la capa clickeada
-          //     (selecciona el frame clickeado, resetea multi-seleccion).
-          //     Sin esto, el menu opera sobre la capa equivocada (la activa
-          //     anterior) cuando el frame number coincide con la seleccion.
-          //  2. Misma capa, frame fuera de seleccion → seleccionar ese frame.
-          //  3. Misma capa, frame YA en seleccion (single o multi) → preservar
-          //     toda la seleccion, el menu opera sobre todos los selected.
-          // Importante: setActiveLayerId + setActiveFrame se baten con
-          // setContextMenuFrame, asi que el menu se renderea con el state
-          // nuevo. Llamamos onFrameMouseDown ANTES de onFrameContextMenu para
-          // que el orden de batching sea predecible.
+          // Reglas de seleccion en right-click (3 casos):
+          //  1. Frame fuera de seleccion (en cualquier capa) → onFrameMouseDown
+          //     resetea seleccion al frame clickeado + switchea capa.
+          //  2. Frame en seleccion + capa distinta → SOLO switchea capa con
+          //     onSetActiveLayer; preserva multi-seleccion para que el menu
+          //     opere sobre todos los frames selected en la nueva capa.
+          //  3. Frame en seleccion + misma capa → no toca nada, preserva todo.
+          // Importante: el setState va ANTES del context menu para que React
+          // batch-ee y el menu se renderee con el state actualizado.
           const onCellContextMenu = (e) => {
             const isDifferentLayer = layer.id !== activeLayerId;
-            if (isDifferentLayer || !isSelectedGlobal) {
+            if (!isSelectedGlobal) {
+              // Caso 1: reset + switch
               handlers.onFrameMouseDown(layer.id, frameNumber - 1, e);
+            } else if (isDifferentLayer && handlers.onSetActiveLayer) {
+              // Caso 2: solo switch capa, preserva selection
+              handlers.onSetActiveLayer(layer.id);
             }
+            // Caso 3 implicito (no-op)
             handlers.onFrameContextMenu(e, 'frame');
           };
           const onCellClick = (e) => e.stopPropagation();

@@ -1068,6 +1068,9 @@ useEffect(() => {
       handleLayerFrameMouseDown(layerId, frameIndex, event),
     onFrameMouseEnter: (frameNumber) => handleLayerFrameMouseEnter(frameNumber),
     onSetLayerBlendMode: (layerId, modeId) => setLayerBlendMode(layerId, modeId),
+    // Switchea SOLO la capa activa, sin tocar selectedFrames ni activeFrame.
+    // Lo usa right-click cross-layer para preservar multi-seleccion de frames.
+    onSetActiveLayer: (layerId) => setActiveLayerId(layerId),
   };
 });
 const stableRowHandlers = useMemo(() => ({
@@ -1086,6 +1089,7 @@ const stableRowHandlers = useMemo(() => ({
   onFrameMouseDown: (...args) => rowHandlersRef.current?.onFrameMouseDown(...args),
   onFrameMouseEnter: (...args) => rowHandlersRef.current?.onFrameMouseEnter(...args),
   onSetLayerBlendMode: (...args) => rowHandlersRef.current?.onSetLayerBlendMode(...args),
+  onSetActiveLayer: (...args) => rowHandlersRef.current?.onSetActiveLayer(...args),
 }), []);
 
 // --- Handlers para el HEADER ROW de frame-numbers (top-level, sin layer) ---
