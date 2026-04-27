@@ -66,19 +66,39 @@
     }
   }
   
-  /* Contenido del menú */
+  /* Contenido del menú: scrolleable si supera el viewport (sin esto los
+     items del fondo quedan cortados en menus largos como menuLayerActions
+     con 12+ entradas). */
   .context-menu-content {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 6px;
-    box-shadow: 
+    box-shadow:
       var(--panel-shadow),
       0 8px 32px rgba(0, 0, 0, 0.4),
       0 0 0 1px rgba(255, 255, 255, 0.05) inset;
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    overflow: hidden;
+    max-height: min(80vh, 640px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+  }
+  .context-menu-content::-webkit-scrollbar {
+    width: 6px;
+  }
+  .context-menu-content::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .context-menu-content::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+  }
+  .context-menu-content::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
   }
   
   /* Elementos del menú */
