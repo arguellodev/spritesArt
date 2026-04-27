@@ -14,7 +14,8 @@
 'use no memo';
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { isValidBlendMode, toCompositeOperation, DEFAULT_BLEND_MODE } from '../blendModes';
+import { isValidBlendMode, DEFAULT_BLEND_MODE } from '../blendModes';
+import { drawLayerBlended } from '../pixelBlender';
 
 const DEFAULT_FRAME_DURATION_MS = 100;
 
@@ -126,38 +127,25 @@ export function useAnimationPlayer({
       .filter((layer) => layer.visible?.[frameNumber] !== false)
       .sort((a, b) => a.zIndex - b.zIndex);
 
+    // drawLayerBlended: 'normal' fast-path nativo, otros modos pixel-by-pixel
+    // exacto via pixelBlender. La primera capa visible siempre va 'normal'.
     let isFirstDrawn = true;
     visibleLayers.forEach((layer) => {
       const sourceCanvas = frameData.canvases?.[layer.id];
       if (!sourceCanvas) return;
 
-      ctx.globalAlpha = layer.opacity ?? 1;
-
-      // La primera capa siempre usa source-over para no componer contra vacío.
+      const opacity = layer.opacity ?? 1;
       const blendId = isFirstDrawn ? 'normal' : resolveBlendModeForLayer(layer);
-      ctx.globalCompositeOperation = toCompositeOperation(blendId);
 
+      let srcRect, dstRect;
       if (externalCanvasRef) {
-        ctx.drawImage(
-          sourceCanvas,
-          viewportOffset.x,
-          viewportOffset.y,
-          viewportWidth,
-          viewportHeight,
-          0,
-          0,
-          Math.round(viewportWidth * zoom),
-          Math.round(viewportHeight * zoom)
-        );
+        srcRect = { x: viewportOffset.x, y: viewportOffset.y, w: viewportWidth, h: viewportHeight };
+        dstRect = { w: Math.round(viewportWidth * zoom), h: Math.round(viewportHeight * zoom) };
       } else {
-        ctx.drawImage(
-          sourceCanvas,
-          0, 0, sourceCanvas.width, sourceCanvas.height,
-          0, 0, canvasWidth, canvasHeight
-        );
+        srcRect = { x: 0, y: 0, w: sourceCanvas.width, h: sourceCanvas.height };
+        dstRect = { w: canvasWidth, h: canvasHeight };
       }
-
-      ctx.globalCompositeOperation = 'source-over';
+      drawLayerBlended(ctx, sourceCanvas, blendId, opacity, srcRect, dstRect);
       isFirstDrawn = false;
     });
 

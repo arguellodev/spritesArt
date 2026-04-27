@@ -12,7 +12,8 @@ import { produce, setAutoFreeze } from 'immer';
 // ("mutaste sin produce"), pero ganamos no romper código viejo.
 setAutoFreeze(false);
 import { useOptimizedFloodFill } from './optimizedFloodFill';
-import { isValidBlendMode, DEFAULT_BLEND_MODE, toCompositeOperation } from '../blendModes';
+import { isValidBlendMode, DEFAULT_BLEND_MODE } from '../blendModes';
+import { drawLayerBlended } from '../pixelBlender';
 /**
  * Custom hook for tracking pointer/mouse interactions
  */
@@ -733,7 +734,14 @@ const renderCurrentFrameOnly = useCallback((ctx) => {
   const hierarchicalLayers = getHierarchicalLayers();
   const sortedMainLayers = hierarchicalLayers.sort((a, b) => a.zIndex - b.zIndex);
 
-  let isFirstDrawn = true; // primera capa visible siempre va source-over
+  // Cada layer va via drawLayerBlended: 'normal' fast-path nativo, otros modos
+  // pixel-by-pixel exacto (match Aseprite math). isFirstDrawn fuerza 'normal'
+  // en la primera capa visible (no hay nada debajo para blendear).
+  let isFirstDrawn = true;
+  const dstW = Math.round(viewportWidth * zoom);
+  const dstH = Math.round(viewportHeight * zoom);
+  const srcRect = { x: viewportOffset.x, y: viewportOffset.y, w: viewportWidth, h: viewportHeight };
+  const dstRect = { w: dstW, h: dstH };
 
   for (const mainLayer of sortedMainLayers) {
     const isVisible = mainLayer.visible[currentFrame] ?? true;
@@ -742,22 +750,8 @@ const renderCurrentFrameOnly = useCallback((ctx) => {
     const mainCanvas = layerCanvasesRef.current[mainLayer.id];
     if (mainCanvas) {
       const layerOpacity = mainLayer.opacity ?? 1.0;
-      const blendId = isFirstDrawn
-        ? 'normal'
-        : resolveLayerBlendMode(mainLayer.id, currentFrame);
-      const composite = toCompositeOperation(blendId);
-
-      ctx.globalAlpha = layerOpacity;
-      ctx.globalCompositeOperation = composite;
-      ctx.drawImage(
-        mainCanvas,
-        viewportOffset.x, viewportOffset.y,
-        viewportWidth, viewportHeight,
-        0, 0,
-        Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
-      );
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = 1.0;
+      const blendId = isFirstDrawn ? 'normal' : resolveLayerBlendMode(mainLayer.id, currentFrame);
+      drawLayerBlended(ctx, mainCanvas, blendId, layerOpacity, srcRect, dstRect);
       isFirstDrawn = false;
     }
 
@@ -766,22 +760,8 @@ const renderCurrentFrameOnly = useCallback((ctx) => {
       const groupCanvas = layerCanvasesRef.current[groupLayer.id];
       if (groupCanvas) {
         const groupOpacity = groupLayer.opacity ?? 1.0;
-        const groupBlendId = isFirstDrawn
-          ? 'normal'
-          : resolveLayerBlendMode(groupLayer.id, currentFrame);
-        const groupComposite = toCompositeOperation(groupBlendId);
-
-        ctx.globalAlpha = groupOpacity;
-        ctx.globalCompositeOperation = groupComposite;
-        ctx.drawImage(
-          groupCanvas,
-          viewportOffset.x, viewportOffset.y,
-          viewportWidth, viewportHeight,
-          0, 0,
-          Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
-        );
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = 1.0;
+        const groupBlendId = isFirstDrawn ? 'normal' : resolveLayerBlendMode(groupLayer.id, currentFrame);
+        drawLayerBlended(ctx, groupCanvas, groupBlendId, groupOpacity, srcRect, dstRect);
         isFirstDrawn = false;
       }
     }
@@ -1072,8 +1052,13 @@ const renderCurrentFrameWithAdjacent = useCallback((ctx) => {
     renderFrameWithConfig(frameIndex, config);
   }
   
-  // ============ RENDERIZAR FRAME ACTUAL (mantener tu código existente) ============
+  // ============ RENDERIZAR FRAME ACTUAL ============
+  // Mismo flujo que renderCurrentFrameOnly pero comparte ctx con neighbors.
   let isFirstDrawnActive = true;
+  const _activeDstW = Math.round(viewportWidth * zoom);
+  const _activeDstH = Math.round(viewportHeight * zoom);
+  const _activeSrcRect = { x: viewportOffset.x, y: viewportOffset.y, w: viewportWidth, h: viewportHeight };
+  const _activeDstRect = { w: _activeDstW, h: _activeDstH };
   for (const mainLayer of sortedMainLayers) {
     const isVisible = mainLayer.visible[currentFrame] ?? true;
     if (!isVisible) continue;
@@ -1081,22 +1066,8 @@ const renderCurrentFrameWithAdjacent = useCallback((ctx) => {
     const mainCanvas = layerCanvasesRef.current[mainLayer.id];
     if (mainCanvas) {
       const layerOpacity = mainLayer.opacity ?? 1.0;
-      const blendId = isFirstDrawnActive
-        ? 'normal'
-        : resolveLayerBlendMode(mainLayer.id, currentFrame);
-      const composite = toCompositeOperation(blendId);
-
-      ctx.globalAlpha = layerOpacity;
-      ctx.globalCompositeOperation = composite;
-      ctx.drawImage(
-        mainCanvas,
-        viewportOffset.x, viewportOffset.y,
-        viewportWidth, viewportHeight,
-        0, 0,
-        Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
-      );
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = 1.0;
+      const blendId = isFirstDrawnActive ? 'normal' : resolveLayerBlendMode(mainLayer.id, currentFrame);
+      drawLayerBlended(ctx, mainCanvas, blendId, layerOpacity, _activeSrcRect, _activeDstRect);
       isFirstDrawnActive = false;
     }
 
@@ -1105,22 +1076,8 @@ const renderCurrentFrameWithAdjacent = useCallback((ctx) => {
       const groupCanvas = layerCanvasesRef.current[groupLayer.id];
       if (groupCanvas) {
         const groupOpacity = groupLayer.opacity ?? 1.0;
-        const groupBlendId = isFirstDrawnActive
-          ? 'normal'
-          : resolveLayerBlendMode(groupLayer.id, currentFrame);
-        const groupComposite = toCompositeOperation(groupBlendId);
-
-        ctx.globalAlpha = groupOpacity;
-        ctx.globalCompositeOperation = groupComposite;
-        ctx.drawImage(
-          groupCanvas,
-          viewportOffset.x, viewportOffset.y,
-          viewportWidth, viewportHeight,
-          0, 0,
-          Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
-        );
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = 1.0;
+        const groupBlendId = isFirstDrawnActive ? 'normal' : resolveLayerBlendMode(groupLayer.id, currentFrame);
+        drawLayerBlended(ctx, groupCanvas, groupBlendId, groupOpacity, _activeSrcRect, _activeDstRect);
         isFirstDrawnActive = false;
       }
     }

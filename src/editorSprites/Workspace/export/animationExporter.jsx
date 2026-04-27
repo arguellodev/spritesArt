@@ -2,7 +2,8 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import './animationExporter.css';
 import VideoExporter from './videoExporter';
 import GifExporter from './gifExporter';
-import { toCompositeOperation, isValidBlendMode, DEFAULT_BLEND_MODE } from '../blendModes';
+import { isValidBlendMode, DEFAULT_BLEND_MODE, toCompositeOperation } from '../blendModes';
+import { drawLayerBlended } from '../pixelBlender';
 import {
   LuX,
   LuImage,
@@ -255,6 +256,8 @@ const AnimationExporter = ({
       .sort((a, b) => a.zIndex - b.zIndex);
 
     let isFirstDrawn = true;
+    const _expSrcRect = { x: 0, y: 0, w: originalDimensions.width, h: originalDimensions.height };
+    const _expDstRect = { w: originalDimensions.width, h: originalDimensions.height };
     for (const mainLayer of hierarchicalLayers) {
       const isVisible = mainLayer.visible && (mainLayer.visible[frameNumber] !== false);
       if (!isVisible) continue;
@@ -263,12 +266,7 @@ const AnimationExporter = ({
       if (mainCanvas) {
         const layerOpacity = mainLayer.opacity ?? 1.0;
         const blendId = isFirstDrawn ? 'normal' : blendModeForLayer(mainLayer);
-        const composite = toCompositeOperation(blendId);
-        originalCtx.globalAlpha = layerOpacity;
-        originalCtx.globalCompositeOperation = composite;
-        originalCtx.drawImage(mainCanvas, 0, 0);
-        originalCtx.globalCompositeOperation = 'source-over';
-        originalCtx.globalAlpha = 1.0;
+        drawLayerBlended(originalCtx, mainCanvas, blendId, layerOpacity, _expSrcRect, _expDstRect);
         isFirstDrawn = false;
       }
 
@@ -278,12 +276,7 @@ const AnimationExporter = ({
         if (groupCanvas) {
           const groupOpacity = groupLayer.opacity ?? 1.0;
           const groupBlendId = isFirstDrawn ? 'normal' : blendModeForLayer(groupLayer);
-          const groupComposite = toCompositeOperation(groupBlendId);
-          originalCtx.globalAlpha = groupOpacity;
-          originalCtx.globalCompositeOperation = groupComposite;
-          originalCtx.drawImage(groupCanvas, 0, 0);
-          originalCtx.globalCompositeOperation = 'source-over';
-          originalCtx.globalAlpha = 1.0;
+          drawLayerBlended(originalCtx, groupCanvas, groupBlendId, groupOpacity, _expSrcRect, _expDstRect);
           isFirstDrawn = false;
         }
       }
