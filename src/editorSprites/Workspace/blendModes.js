@@ -1,6 +1,13 @@
+'use no memo';
 // Modos de fusión de capa estilo Aseprite, mapeados 1:1 a los strings
 // que acepta CanvasRenderingContext2D.globalCompositeOperation.
 // 'normal' es alias visible de 'source-over'.
+//
+// NOTA: 'use no memo' opta este archivo fuera del React Compiler (vite
+// config usa compilationMode:'all'). Es un modulo puro sin componentes ni
+// hooks; sin esta directiva el compiler envuelve `BLEND_MODES.map(...)` con
+// useMemoCache a nivel de modulo y crashea en runtime al cargar (useMemoCache
+// es null fuera de un render).
 
 export const DEFAULT_BLEND_MODE = 'normal';
 
