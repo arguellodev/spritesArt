@@ -9,8 +9,17 @@
 // del hook compartan estado de play a través del padre si se desea.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isValidBlendMode, toCompositeOperation, DEFAULT_BLEND_MODE } from '../blendModes';
 
 const DEFAULT_FRAME_DURATION_MS = 100;
+
+// Resuelve el blend mode efectivo de una capa, respetando el override por-frame.
+function resolveBlendModeForLayer(layer) {
+  const override = layer?.blendModeOverride;
+  if (override != null && isValidBlendMode(override)) return override;
+  if (layer?.blendMode && isValidBlendMode(layer.blendMode)) return layer.blendMode;
+  return DEFAULT_BLEND_MODE;
+}
 const TIME_UPDATE_THROTTLE_MS = 100;
 
 export function useAnimationPlayer({
@@ -112,11 +121,16 @@ export function useAnimationPlayer({
       .filter((layer) => layer.visible?.[frameNumber] !== false)
       .sort((a, b) => a.zIndex - b.zIndex);
 
+    let isFirstDrawn = true;
     visibleLayers.forEach((layer) => {
       const sourceCanvas = frameData.canvases?.[layer.id];
       if (!sourceCanvas) return;
 
       ctx.globalAlpha = layer.opacity ?? 1;
+
+      // La primera capa siempre usa source-over para no componer contra vacío.
+      const blendId = isFirstDrawn ? 'normal' : resolveBlendModeForLayer(layer);
+      ctx.globalCompositeOperation = toCompositeOperation(blendId);
 
       if (externalCanvasRef) {
         ctx.drawImage(
@@ -137,6 +151,9 @@ export function useAnimationPlayer({
           0, 0, canvasWidth, canvasHeight
         );
       }
+
+      ctx.globalCompositeOperation = 'source-over';
+      isFirstDrawn = false;
     });
 
     ctx.globalAlpha = 1;

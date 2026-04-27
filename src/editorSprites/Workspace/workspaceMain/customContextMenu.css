@@ -1008,3 +1008,10 @@
     transition: none;
   }
 }
+
+/* Fallback: el wrapper <div key={...}> que envuelve cada item del menu
+   debe ser position:relative para que el submenu .context-menu-submenu
+   con left:100% se ancle al item, no al menu padre completo. */
+.context-menu-content > div {
+  position: relative;
+}

@@ -2793,6 +2793,13 @@ const duplicateLayer = useCallback((layerId) => {
       if (frame.pixelGroups[layerId]) {
         frame.pixelGroups[newLayerId] = structuredClone(frame.pixelGroups[layerId]);
       }
+      // Sembrar override de blend mode por frame: sin esto el siguiente
+      // ciclo de undo (syncFramesFromResume) perdería el override duplicado.
+      const originalOverride = frame.layerBlendModeOverride?.[layerId];
+      if (originalOverride != null) {
+        if (!frame.layerBlendModeOverride) frame.layerBlendModeOverride = {};
+        frame.layerBlendModeOverride[newLayerId] = originalOverride;
+      }
     });
     draft.computed.framesByLayer[newLayerId] = [...(draft.computed.framesByLayer[layerId] || [])];
     draft.computed.keyframes[newLayerId] = [...(draft.computed.keyframes[layerId] || [])];
@@ -7277,9 +7284,23 @@ const restoreFromProjectData = useCallback(async (projectData, restoredCanvases)
           }
         }
 
+        // Reconstruir capas del frame combinando los datos planos (layers) con
+        // los datos por-frame almacenados en framesResume (opacidad, visibilidad,
+        // blend mode override). Sin este merge, los overrides per-frame se pierden
+        // al recargar el proyecto.
+        const perFrameLayers = (projectData.layers ?? []).map((flat) => ({
+          ...flat,
+          visible: typeof flat.visible === 'object'
+            ? flat.visible
+            : { [frameNumber]: frameResume.layerVisibility?.[flat.id] ?? true },
+          opacity: frameResume.layerOpacity?.[flat.id] ?? flat.opacity ?? 1,
+          blendMode: flat.blendMode ?? 'normal',
+          blendModeOverride: frameResume.layerBlendModeOverride?.[flat.id] ?? null,
+        }));
+
         newFrames[frameNumber] = {
           canvases: frameCanvases,
-          layers: projectData.layers ?? [],
+          layers: perFrameLayers,
           frameDuration: frameResume.duration ?? (projectData.animation?.defaultFrameDuration ?? 100),
           tags: frameResume.tags ?? [],
         };
