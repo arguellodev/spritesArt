@@ -7286,7 +7286,9 @@ const restoreFromProjectData = useCallback(async (projectData, restoredCanvases)
     }
 
     // 4. Restaurar frame activo
-    if (projectData.viewport?.currentFrame) {
+    // Nota: comparar con != null en lugar de truthy — frame 0 es valido
+    // (los importers GIF/aseprite usan indices 0-based).
+    if (projectData.viewport?.currentFrame != null) {
       setCurrentFrame(projectData.viewport.currentFrame);
     }
 
