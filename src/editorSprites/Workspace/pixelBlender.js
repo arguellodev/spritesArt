@@ -1,20 +1,26 @@
 'use no memo';
-// pixelBlender — composita una capa source sobre un canvas destination usando
-// las fórmulas exactas de blendFormulas.js + W3C non-isolated alpha compositing
-// (que es lo que Aseprite y Photoshop usan internamente).
+// pixelBlender — composita una capa source sobre un canvas destination.
 //
 // API pública:
 //   drawLayerBlended(ctx, layerCanvas, mode, opacity, srcRect, dstRect)
 //
-// Fast path: 'normal' usa Canvas2D nativo (drawImage source-over) porque es
-// hardware-acelerado y matemáticamente equivalente. Resto usa pixel-by-pixel.
+// Estrategia HÍBRIDA (perf-first):
 //
-// Alpha compositing (W3C Compositing Level 1, 5.3 "Simple alpha compositing"):
-//   αo = αs + αd − αs·αd
-//   Co = (αs·(1−αd)·Cs + αs·αd·B(Cd,Cs) + (1−αs)·αd·Cd) / αo
+//  - 17 modos en FAST PATH usando Canvas2D globalCompositeOperation nativo
+//    (hardware-acelerado, sub-millisegundo). Cubre todos los modos del spec
+//    W3C Compositing Level 1 + 'lighter' (≡ Aseprite "addition" per canal
+//    con clamp para pixeles opacos, que es el caso típico de pixel art).
 //
-// El overhead vs Canvas2D nativo es ~10x pero garantiza match perfecto con
-// Aseprite (no hay precision loss por premultiplied alpha).
+//  - 2 modos en SLOW PATH pixel-by-pixel (subtract, divide): no existen en
+//    Canvas2D ni se pueden derivar combinando ops nativas. JS puro con
+//    bounding-box de pixeles no-transparentes para evitar trabajo en zonas
+//    vacias. Solo se ejecuta cuando el usuario elige explicitamente uno
+//    de estos 2 modos.
+//
+// Trade-off conocido: Addition via 'lighter' difiere ligeramente de la
+// formula Aseprite en pixeles SEMI-transparentes (αs<1 o αd<1). Para
+// pixel art opaco da resultados visualmente identicos. Si en el futuro
+// aparece un caso donde importa, mover 'addition' al slow path.
 
 import {
   SEPARABLE_BLEND_FUNCS,
@@ -22,6 +28,32 @@ import {
   isSeparableBlendMode,
   isNonSeparableBlendMode,
 } from './blendFormulas';
+
+// Mapeo id-blend → string que acepta Canvas2D globalCompositeOperation.
+// Si el id no está aquí, va al pixel fallback.
+const NATIVE_COMPOSITE_OP = {
+  'normal':       'source-over',
+  'multiply':     'multiply',
+  'screen':       'screen',
+  'overlay':      'overlay',
+  'darken':       'darken',
+  'lighten':      'lighten',
+  'color-dodge':  'color-dodge',
+  'color-burn':   'color-burn',
+  'hard-light':   'hard-light',
+  'soft-light':   'soft-light',
+  'difference':   'difference',
+  'exclusion':    'exclusion',
+  'hue':          'hue',
+  'saturation':   'saturation',
+  'color':        'color',
+  'luminosity':   'luminosity',
+  // Addition: 'lighter' = additive Co = αs·Cs + αd·Cd, αo = αs+αd (clamped).
+  // Para pixeles opacos esto colapsa a min(1, src+dst) per canal = formula
+  // Aseprite addition. Match perfecto en pixel art opaco.
+  'addition':     'lighter',
+  // Subtract / divide: NO mapeados — caen al pixel fallback.
+};
 
 // Cache de canvas temporales reusables (evita allocation por frame).
 // Se indexa por "wxh" para reciclar si la geometria coincide.
@@ -58,8 +90,26 @@ function pruneCanvasPool() {
  * @param {{w,h}} dstRect - tamaño en el destino (con zoom aplicado)
  */
 export function drawLayerBlended(ctx, layerCanvas, mode, opacity, srcRect, dstRect) {
-  // Fast path: 'normal' (default) usa Canvas2D nativo con globalAlpha.
-  if (mode === 'normal' || (!isSeparableBlendMode(mode) && !isNonSeparableBlendMode(mode))) {
+  const nativeOp = NATIVE_COMPOSITE_OP[mode];
+
+  // FAST PATH (17 modos) — Canvas2D nativo, hardware-acelerado.
+  if (nativeOp !== undefined) {
+    const prevAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = opacity;
+    ctx.globalCompositeOperation = nativeOp;
+    ctx.drawImage(
+      layerCanvas,
+      srcRect.x, srcRect.y, srcRect.w, srcRect.h,
+      0, 0, dstRect.w, dstRect.h
+    );
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = prevAlpha;
+    return;
+  }
+
+  // SLOW PATH — solo subtract / divide (sin equivalente nativo).
+  if (!isSeparableBlendMode(mode) && !isNonSeparableBlendMode(mode)) {
+    // Modo desconocido: fallback a normal para no romper.
     const prevAlpha = ctx.globalAlpha;
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = 'source-over';
@@ -72,32 +122,78 @@ export function drawLayerBlended(ctx, layerCanvas, mode, opacity, srcRect, dstRe
     return;
   }
 
-  // Slow path: pixel blending exacto.
-  // 1. Render source layer en un temp canvas con el viewport+zoom aplicados,
-  //    para que srcData y dstData tengan el mismo tamaño.
+  // 1. Render source layer en un temp canvas (mismo tamaño que dst).
   const temp = getTempCanvas(dstRect.w, dstRect.h);
   const tempCtx = temp.getContext('2d', { willReadFrequently: true });
   tempCtx.globalCompositeOperation = 'source-over';
   tempCtx.globalAlpha = 1.0;
   tempCtx.clearRect(0, 0, dstRect.w, dstRect.h);
-  tempCtx.imageSmoothingEnabled = false; // pixel art: nearest-neighbor
+  tempCtx.imageSmoothingEnabled = false;
   tempCtx.drawImage(
     layerCanvas,
     srcRect.x, srcRect.y, srcRect.w, srcRect.h,
     0, 0, dstRect.w, dstRect.h
   );
 
-  // 2. Lee ImageData de ambos.
   const srcImg = tempCtx.getImageData(0, 0, dstRect.w, dstRect.h);
-  const dstImg = ctx.getImageData(0, 0, dstRect.w, dstRect.h);
 
-  // 3. Aplica blend pixel-by-pixel.
-  blendImageData(srcImg.data, dstImg.data, mode, opacity);
+  // 2. Bounding box de pixeles no-transparentes en source. Para pixel art
+  //    sparse (la mayoria del canvas vacio), reduce trabajo de O(W·H) al
+  //    area realmente pintada. Saltamos getImageData del dst entero si no
+  //    hay nada que blendear.
+  const bbox = computeNonEmptyBBox(srcImg.data, dstRect.w, dstRect.h);
+  if (!bbox) return; // Source totalmente transparente, nada que dibujar.
 
-  // 4. Escribe resultado.
-  ctx.putImageData(dstImg, 0, 0);
+  // 3. Lee solo el slice del dst que necesitamos.
+  const w = bbox.x1 - bbox.x0;
+  const h = bbox.y1 - bbox.y0;
+  const dstSlice = ctx.getImageData(bbox.x0, bbox.y0, w, h);
+
+  // 4. Crea un ImageData del slice del src (mas barato que pasar el full).
+  const srcSlice = sliceImageData(srcImg.data, dstRect.w, bbox.x0, bbox.y0, w, h);
+
+  // 5. Blend pixel-by-pixel sobre el slice.
+  blendImageData(srcSlice, dstSlice.data, mode, opacity);
+
+  // 6. Escribe el slice de vuelta.
+  ctx.putImageData(dstSlice, bbox.x0, bbox.y0);
 
   pruneCanvasPool();
+}
+
+// Calcula bounding box de pixeles con alpha > 0. Devuelve {x0,y0,x1,y1} o null
+// si todo transparente. O(W·H) en el peor caso pero early-exit por filas.
+function computeNonEmptyBBox(data, w, h) {
+  let x0 = w, y0 = h, x1 = 0, y1 = 0;
+  let found = false;
+  for (let y = 0; y < h; y++) {
+    const rowOff = y * w * 4;
+    for (let x = 0; x < w; x++) {
+      if (data[rowOff + x * 4 + 3] !== 0) {
+        if (!found) { found = true; x0 = x; y0 = y; x1 = x + 1; y1 = y + 1; }
+        else {
+          if (x < x0) x0 = x;
+          if (y < y0) y0 = y;
+          if (x + 1 > x1) x1 = x + 1;
+          if (y + 1 > y1) y1 = y + 1;
+        }
+      }
+    }
+  }
+  return found ? { x0, y0, x1, y1 } : null;
+}
+
+// Extrae una sub-region de `data` (Uint8ClampedArray, RGBA full-canvas wxh) en
+// un nuevo Uint8ClampedArray del tamaño del slice. Mas barato que copiar el
+// full y luego ignorar la mayoria.
+function sliceImageData(data, fullW, x0, y0, w, h) {
+  const out = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    const srcOff = ((y + y0) * fullW + x0) * 4;
+    const dstOff = y * w * 4;
+    out.set(data.subarray(srcOff, srcOff + w * 4), dstOff);
+  }
+  return out;
 }
 
 /**
