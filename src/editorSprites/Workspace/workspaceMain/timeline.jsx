@@ -487,6 +487,18 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
       icon: <LuLayers />,
       type: 'submenu',
       items: layerBlendItems,
+      // Preview-on-hover, commit-on-click: snapshot del modo original al
+      // abrir el submenu, restore en cancel (mouse-out / esc / click-fuera).
+      snapshotOnMount: () => {
+        if (!activeLayerId) return 'normal';
+        const layer = layers.find(l => l.id === activeLayerId);
+        return layer?.blendMode ?? 'normal';
+      },
+      restoreOnCancel: (originalMode) => {
+        if (activeLayerId && originalMode != null) {
+          setLayerBlendMode(activeLayerId, originalMode);
+        }
+      },
     },
     {
       label: frameOverride !== null
@@ -495,6 +507,19 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
       icon: <LuFilm />,
       type: 'submenu',
       items: frameBlendItems,
+      snapshotOnMount: () => {
+        if (!activeLayerId) return null;
+        const frame = frames[currentFrame];
+        const layer = frame?.layers.find(l => l.id === activeLayerId);
+        return layer?.blendModeOverride ?? null;
+      },
+      restoreOnCancel: (originalOverride) => {
+        if (activeLayerId) {
+          // Si el original era null (heredaba), restaurar a null.
+          // Si era un mode string, restaurar ese.
+          setFrameBlendModeOverride(activeLayerId, currentFrame, originalOverride ?? null);
+        }
+      },
     },
     {
       label: 'Eliminar Capa',

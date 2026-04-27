@@ -412,6 +412,8 @@ const calculateMenuPosition = useCallback(() => {
                     onClose={() => { setOpenSubmenu(null); onClose(); }}
                     onMouseEnter={() => openSubmenuFor(action.id || index)}
                     onMouseLeave={scheduleSubmenuClose}
+                    snapshotOnMount={action.snapshotOnMount}
+                    restoreOnCancel={action.restoreOnCancel}
                   />
                 )}
 
@@ -533,9 +535,31 @@ const calculateMenuPosition = useCallback(() => {
 // map de actions). useLayoutEffect mide su rect + el panel rect, calcula
 // posicion (derecha por default, izquierda como fallback si overflow), y
 // hace setPos sincrono antes del paint para evitar flash.
-function SubmenuPanel({ anchorEl, items, onClose, onMouseEnter, onMouseLeave }) {
+function SubmenuPanel({ anchorEl, items, onClose, onMouseEnter, onMouseLeave, snapshotOnMount, restoreOnCancel }) {
   const panelRef = useRef(null);
   const [pos, setPos] = useState({ left: 0, top: 0, measured: false });
+
+  // Preview-only en hover: captura snapshot al montar (antes de cualquier
+  // mutacion por hover). Si el submenu se cierra SIN un click en un item
+  // (mouse-out, esc, click-outside, otro submenu se abre), restoreOnCancel
+  // revierte la mutacion. Click en item marca wasCommittedRef → cleanup
+  // skip-ea el restore.
+  const wasCommittedRef = useRef(false);
+  const snapshotRef = useRef(null);
+  // Refs always-latest para evitar stale-closure issues entre renders.
+  const restoreRef = useRef(restoreOnCancel);
+  restoreRef.current = restoreOnCancel;
+
+  useEffect(() => {
+    snapshotRef.current = snapshotOnMount?.();
+    return () => {
+      if (!wasCommittedRef.current && restoreRef.current) {
+        restoreRef.current(snapshotRef.current);
+      }
+    };
+  // Solo on mount/unmount — cancel-on-close del submenu lifecycle.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useLayoutEffect(() => {
     const panel = panelRef.current;
@@ -589,6 +613,9 @@ function SubmenuPanel({ anchorEl, items, onClose, onMouseEnter, onMouseLeave }) 
             onMouseEnter={item.disabled ? undefined : item.onHover}
             onClick={() => {
               if (item.disabled) return;
+              // Marcar commit ANTES de onClose para que el cleanup del
+              // useEffect en SubmenuPanel skip-ee el restoreOnCancel.
+              wasCommittedRef.current = true;
               item.onClick?.();
               onClose();
             }}
