@@ -7,6 +7,11 @@
 // `isPlaying` puede ser controlado (pasar `isPlaying` + `setIsPlaying` en las
 // opciones) o interno (si se omiten). Esto permite que múltiples instancias
 // del hook compartan estado de play a través del padre si se desea.
+//
+// 'use no memo': opt-out del React Compiler (vite mode:'all'). El compiler
+// envolvía `resolveBlendModeForLayer` con `useMemoCache` y crasheaba al
+// llamarla desde el loop RAF de drawFrame (fuera de un render).
+'use no memo';
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isValidBlendMode, toCompositeOperation, DEFAULT_BLEND_MODE } from '../blendModes';
