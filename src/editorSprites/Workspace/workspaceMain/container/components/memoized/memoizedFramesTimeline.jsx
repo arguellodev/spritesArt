@@ -79,6 +79,10 @@ export function renderFramesTimeline(props) {
       defaultFrameDuration={props.defaultFrameDuration}
       setFrameOpacity={props.setFrameOpacity}
       getFrameOpacity={props.getFrameOpacity}
+      // Modos de fusión
+      resolveLayerBlendMode={props.resolveLayerBlendMode}
+      setLayerBlendMode={props.setLayerBlendMode}
+      setFrameBlendModeOverride={props.setFrameBlendModeOverride}
       framesResume={props.framesResume}
       setFramesResume={props.setFramesResume}
       externalCanvasRef={props.externalCanvasRef}

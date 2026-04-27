@@ -29,6 +29,7 @@ import {
   LuPlus,
   LuCopy,
   LuLayers,
+  LuFilm,
   LuSettings,
   LuRotateCcw,
   LuDelete,
@@ -40,6 +41,7 @@ import {
   LuTag,
 } from "react-icons/lu";
 import { BiSolidLayerPlus } from "react-icons/bi";
+import { BLEND_MODES, BLEND_GROUP_LABELS, getBlendModeLabel } from '../blendModes';
 import { createTag, addTag, removeTag, updateTag, findOverlappingTag } from '../animation/animationTags';
 import TagBand from '../animation/TagBand';
 
@@ -92,6 +94,12 @@ const FramesTimeline = ({
   getFrameDuration,
   setFrameOpacity,
   getFrameOpacity,
+
+  // Modos de fusión
+  // eslint-disable-next-line no-unused-vars
+  resolveLayerBlendMode,
+  setLayerBlendMode,
+  setFrameBlendModeOverride,
 
   // Resumen de frames (data consolidada)
   framesResume,
@@ -308,6 +316,63 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
     }*/
   ];
 
+  // === Items para submenús de modos de fusión ===
+  //
+  // Construye la lista agrupada de modos para el submenu del CustomContextMenu.
+  // `currentMode` se marca con `checked: true`. Cada cambio de grupo inserta
+  // un divider con el label del grupo (BLEND_GROUP_LABELS).
+  const buildBlendModeItems = (currentMode, onPick) => {
+    const items = [];
+    let lastGroup = null;
+    for (const m of BLEND_MODES) {
+      if (m.group !== lastGroup && BLEND_GROUP_LABELS[m.group]) {
+        items.push({ divider: true, label: BLEND_GROUP_LABELS[m.group] });
+      }
+      lastGroup = m.group;
+      items.push({
+        id: `blend-${m.id}`,
+        label: m.label,
+        checked: currentMode === m.id,
+        onClick: () => onPick(m.id),
+      });
+    }
+    return items;
+  };
+
+  // Modo de capa actual (lee del frame.layers[i].blendMode del activo)
+  const layerBlendCurrent = (() => {
+    if (!activeLayerId) return 'normal';
+    const layer = layers.find(l => l.id === activeLayerId);
+    return layer?.blendMode ?? 'normal';
+  })();
+
+  // Override per-frame del activo (null si hereda)
+  const frameOverride = (() => {
+    if (!activeLayerId) return null;
+    const frame = frames[currentFrame];
+    const layer = frame?.layers.find(l => l.id === activeLayerId);
+    return layer?.blendModeOverride ?? null;
+  })();
+
+  const layerBlendItems = buildBlendModeItems(
+    layerBlendCurrent,
+    (modeId) => setLayerBlendMode(activeLayerId, modeId)
+  );
+
+  const frameBlendItems = [
+    {
+      id: 'blend-inherit',
+      label: 'Heredar capa',
+      checked: frameOverride === null,
+      onClick: () => setFrameBlendModeOverride(activeLayerId, currentFrame, null),
+    },
+    { divider: true, label: '' },
+    ...buildBlendModeItems(
+      frameOverride ?? layerBlendCurrent,
+      (modeId) => setFrameBlendModeOverride(activeLayerId, currentFrame, modeId)
+    ),
+  ];
+
   const menuLayerActions = [
     {
       label: 'Duplicar Capa',
@@ -408,6 +473,20 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
         toggleLayerVisibility(activeLayerId);
         handleCloseMenu();
       }
+    },
+    {
+      label: `Modo de fusión (capa) — ${getBlendModeLabel(layerBlendCurrent)}`,
+      icon: <LuLayers />,
+      type: 'submenu',
+      items: layerBlendItems,
+    },
+    {
+      label: frameOverride !== null
+        ? `Modo de fusión (este frame) · ${getBlendModeLabel(frameOverride)}`
+        : 'Modo de fusión (este frame)',
+      icon: <LuFilm />,
+      type: 'submenu',
+      items: frameBlendItems,
     },
     {
       label: 'Eliminar Capa',
