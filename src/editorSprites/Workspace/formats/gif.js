@@ -1,8 +1,14 @@
+'use no memo';
 // gif.js — parser + composer de archivos .gif animados.
 // Usa gifuct-js para decodear; compone los patches por frame respetando
 // los disposal types y devuelve canvases planos del tamaño del documento.
 //
 // Paralelo a formats/aseprite.js (loadAsepriteFile + asepriteDocToPixcalli).
+//
+// Nota: 'use no memo' al tope del archivo opta-out del React Compiler
+// (compilationMode: 'all' en vite.config.js). Sin esto, el compilador inyecta
+// _c() de react-compiler-runtime en funciones del modulo, lo que dispara
+// "Invalid hook call" cuando se llama desde un onchange handler async.
 
 import { parseGIF, decompressFrames } from 'gifuct-js';
 import { nanoid } from 'nanoid';
