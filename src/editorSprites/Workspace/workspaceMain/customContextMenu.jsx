@@ -491,44 +491,52 @@ const calculateMenuPosition = useCallback(() => {
 
 // Componente de panel de submenú anidado.
 //
-// Render con position:fixed + portal-style: el padre `.context-menu-content`
-// tiene overflow-y:auto para scroll de menus largos, lo que crea un clipping
-// context que recortaba el submenu (position:absolute) al sobresalir.
-// Con position:fixed escapamos del clip; las coordenadas se calculan en
-// useLayoutEffect leyendo el rect del item padre antes del paint para evitar
-// flash inicial.
+// Render con position:fixed + coordenadas en state (no DOM mutation): React
+// reconciliaba inline style en cada re-render y revertia las mutaciones del
+// useLayoutEffect → submenu invisible o pegado a (0,0). Con state, el render
+// refleja la posicion real.
+//
+// Por que position:fixed: el padre .context-menu-content tiene overflow-y:auto
+// (scroll para menus largos) lo que crea un clipping context. position:absolute
+// se quedaba clipped al sobresalir. position:fixed escapa.
+//
+// Por que no flash inicial: `pos.measured=false` → visibility:hidden hasta que
+// useLayoutEffect mide y hace setPos sincrono antes del paint.
 function SubmenuPanel({ items, onClose, onMouseEnter, onMouseLeave }) {
   const panelRef = useRef(null);
+  const [pos, setPos] = useState({ left: 0, top: 0, measured: false });
 
   useLayoutEffect(() => {
     const panel = panelRef.current;
     if (!panel) return;
-    // El parent <div key={...}> envuelve al button + al SubmenuPanel; el
-    // button es siempre el primer hijo .context-menu-item.
+    // panel.parentElement = <div key={action.id||index}> que envuelve al
+    // button.context-menu-item + al SubmenuPanel.
     const wrapper = panel.parentElement;
     const btn = wrapper?.querySelector('.context-menu-item');
     if (!btn) return;
-    const rect = btn.getBoundingClientRect();
+    const btnRect = btn.getBoundingClientRect();
     const panelRect = panel.getBoundingClientRect();
     const margin = 6;
+    const safe = 4;
 
-    // Por defecto: a la derecha del item padre.
-    let left = rect.right + margin;
-    // Si overflow horizontal, fallback a la izquierda.
-    if (left + panelRect.width > window.innerWidth - 4) {
-      left = Math.max(4, rect.left - panelRect.width - margin);
+    // Default: a la derecha del item.
+    let left = btnRect.right + margin;
+    if (left + panelRect.width > window.innerWidth - safe) {
+      // Fallback: a la izquierda.
+      left = Math.max(safe, btnRect.left - panelRect.width - margin);
     }
 
-    // Vertical: alineado al top del item; si overflow inferior, subir.
-    let top = rect.top;
-    if (top + panelRect.height > window.innerHeight - 4) {
-      top = Math.max(4, window.innerHeight - panelRect.height - 4);
+    // Vertical alineado al top del item; si overflow inferior, subir.
+    let top = btnRect.top;
+    if (top + panelRect.height > window.innerHeight - safe) {
+      top = Math.max(safe, window.innerHeight - panelRect.height - safe);
     }
 
-    panel.style.left = `${Math.round(left)}px`;
-    panel.style.top = `${Math.round(top)}px`;
-    panel.style.visibility = 'visible';
-  }, [items]);
+    setPos({ left: Math.round(left), top: Math.round(top), measured: true });
+  // Solo medir al montar (la posicion del item padre no cambia mientras el
+  // submenu esta abierto: si el usuario hace hover-out, el submenu se desmonta).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div
@@ -538,7 +546,12 @@ function SubmenuPanel({ items, onClose, onMouseEnter, onMouseLeave }) {
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onContextMenu={(e) => e.preventDefault()}
-      style={{ position: 'fixed', visibility: 'hidden', left: 0, top: 0 }}
+      style={{
+        position: 'fixed',
+        left: pos.left,
+        top: pos.top,
+        visibility: pos.measured ? 'visible' : 'hidden',
+      }}
     >
       {items.map((item, idx) => {
         if (item.divider) {
