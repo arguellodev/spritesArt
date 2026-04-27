@@ -23,6 +23,7 @@
     "cubic-spline": "^3.0.3",
     "electron-color-picker": "^0.2.0",
     "gifenc": "^1.0.3",
+    "gifuct-js": "^2.1.2",
     "immer": "^11.1.4",
     "numeric": "^1.2.6",
     "numericjs": "^1.2.6",
