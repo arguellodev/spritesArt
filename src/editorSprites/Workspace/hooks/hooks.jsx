@@ -2945,6 +2945,13 @@ const setLayerBlendMode = useCallback((layerId, mode) => {
     });
     return updated;
   });
+  // El state `layers` (UI list) es state separado de `frames`; sin actualizarlo
+  // los componentes que leen layer.blendMode (boton del LayerRow, label del
+  // submenu) muestran valores stale. Sync inline.
+  setLayers(prevLayers => prevLayers.map(layer => {
+    if (layer.id !== layerId) return layer;
+    return { ...layer, blendMode: mode };
+  }));
   setFramesResume(prev => produce(prev, draft => {
     if (draft.layers[layerId]) {
       draft.layers[layerId].blendMode = mode;
@@ -2960,6 +2967,13 @@ const setFrameBlendModeOverride = useCallback((layerId, frameNumber, mode) => {
     return false;
   }
   const frameKey = String(frameNumber);
+  // Si el frame afectado es el actual, sincroniza el state `layers` también.
+  // (El override per-frame solo es relevante visual cuando estás en ese frame;
+  // si no lo sync-eas, los lectores de layer.blendModeOverride se quedan stale.)
+  setLayers(prevLayers => prevLayers.map(layer => {
+    if (layer.id !== layerId) return layer;
+    return { ...layer, blendModeOverride: mode };
+  }));
   setFrames(prevFrames => {
     const frame = prevFrames[frameKey];
     if (!frame) return prevFrames;

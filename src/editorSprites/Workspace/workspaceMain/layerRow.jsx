@@ -29,7 +29,7 @@
 //   - layerAnimation lo pasa → botón visible.
 //   - timeline NO lo pasa → botón ausente (matching del comportamiento original).
 
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import {
   LuEye,
   LuEyeOff,
@@ -38,8 +38,11 @@ import {
   LuGroup,
   LuMousePointer,
   LuTrash2,
+  LuLayers,
 } from 'react-icons/lu';
 import { BsDashCircleDotted } from 'react-icons/bs';
+import { BlendModePopover } from './blendModePopover';
+import { getBlendModeLabel } from '../blendModes';
 
 // Comparador custom: `true` = skip re-render, `false` = re-render.
 //
@@ -193,6 +196,25 @@ const LayerRow = React.memo(function LayerRow({
     handlers.onDeleteLayer(layer);
   };
 
+  // Blend mode popover: state local + ref al boton para anclar el popover.
+  const [blendPickerOpen, setBlendPickerOpen] = useState(false);
+  const blendBtnRef = useRef(null);
+  const currentBlendMode = layer.blendMode ?? 'normal';
+  const onBlendBtnClick = (e) => {
+    e.stopPropagation();
+    setBlendPickerOpen(prev => !prev);
+  };
+  const onBlendPick = (modeId) => {
+    if (typeof handlers.onSetLayerBlendMode === 'function') {
+      handlers.onSetLayerBlendMode(layer.id, modeId);
+    }
+  };
+  const onBlendCancel = (originalMode) => {
+    if (typeof handlers.onSetLayerBlendMode === 'function' && originalMode != null) {
+      handlers.onSetLayerBlendMode(layer.id, originalMode);
+    }
+  };
+
   const layerInfoClass =
     `layer-info ${layer.visible ? 'visible' : 'hidden'}` +
     ` ${isLayerActive ? 'selected' : ''}`;
@@ -283,6 +305,17 @@ const LayerRow = React.memo(function LayerRow({
           </button>
 
           <button
+            ref={blendBtnRef}
+            onClick={onBlendBtnClick}
+            title={`Modo de fusión: ${getBlendModeLabel(currentBlendMode)}`}
+            className={`layer-btn blend-mode-btn ${currentBlendMode !== 'normal' ? 'has-blend' : ''} ${blendPickerOpen ? 'open' : ''}`}
+            aria-haspopup="menu"
+            aria-expanded={blendPickerOpen}
+          >
+            <LuLayers />
+          </button>
+
+          <button
             onClick={onDeleteLayerClick}
             title="Eliminar"
             className="layer-btn delete-btn"
@@ -290,6 +323,16 @@ const LayerRow = React.memo(function LayerRow({
           >
             <LuTrash2 />
           </button>
+
+          {blendPickerOpen && (
+            <BlendModePopover
+              anchorEl={blendBtnRef.current}
+              currentMode={currentBlendMode}
+              onPick={onBlendPick}
+              onClose={() => setBlendPickerOpen(false)}
+              onCancel={onBlendCancel}
+            />
+          )}
 
           <button><BsDashCircleDotted /></button>
         </div>

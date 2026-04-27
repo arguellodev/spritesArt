@@ -1067,6 +1067,7 @@ useEffect(() => {
     onFrameMouseDown: (layerId, frameIndex, event) =>
       handleLayerFrameMouseDown(layerId, frameIndex, event),
     onFrameMouseEnter: (frameNumber) => handleLayerFrameMouseEnter(frameNumber),
+    onSetLayerBlendMode: (layerId, modeId) => setLayerBlendMode(layerId, modeId),
   };
 });
 const stableRowHandlers = useMemo(() => ({
@@ -1084,6 +1085,7 @@ const stableRowHandlers = useMemo(() => ({
   onFrameContextMenu: (...args) => rowHandlersRef.current?.onFrameContextMenu(...args),
   onFrameMouseDown: (...args) => rowHandlersRef.current?.onFrameMouseDown(...args),
   onFrameMouseEnter: (...args) => rowHandlersRef.current?.onFrameMouseEnter(...args),
+  onSetLayerBlendMode: (...args) => rowHandlersRef.current?.onSetLayerBlendMode(...args),
 }), []);
 
 // --- Handlers para el HEADER ROW de frame-numbers (top-level, sin layer) ---

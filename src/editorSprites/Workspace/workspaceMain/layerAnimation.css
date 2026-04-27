@@ -368,6 +368,25 @@
   border-color: var(--danger);
 }
 
+/* Blend mode button: indica visualmente cuando la capa NO está en Normal,
+   y resalta cuando el popover está abierto. */
+.layer-btn.blend-mode-btn.has-blend {
+  background: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 1px var(--accent-color) inset;
+}
+
+.layer-btn.blend-mode-btn.has-blend:hover:not(:disabled) {
+  background: var(--accent-active, var(--accent-color));
+  color: white;
+}
+
+.layer-btn.blend-mode-btn.open {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
 /* Create Group Section */
 .create-group-section {
   position: absolute;
