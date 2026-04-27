@@ -389,18 +389,24 @@ const LayerRow = React.memo(function LayerRow({
 
           // Convenio del parent: frameIndex = frameNumber - 1 en mouseDown.
           //
-          // Right-click sobre un frame YA seleccionado (en cualquier capa o
-          // multi-seleccion): NO tocar la seleccion — el menu actua sobre
-          // todos los frames seleccionados. Antes el contextmenu re-llamaba
-          // onFrameMouseDown si la capa no era la activa, lo cual reseteaba
-          // toda la seleccion al frame clickeado.
+          // Reglas de seleccion en right-click:
+          //  1. Capa distinta a la activa → switchear a la capa clickeada
+          //     (selecciona el frame clickeado, resetea multi-seleccion).
+          //     Sin esto, el menu opera sobre la capa equivocada (la activa
+          //     anterior) cuando el frame number coincide con la seleccion.
+          //  2. Misma capa, frame fuera de seleccion → seleccionar ese frame.
+          //  3. Misma capa, frame YA en seleccion (single o multi) → preservar
+          //     toda la seleccion, el menu opera sobre todos los selected.
+          // Importante: setActiveLayerId + setActiveFrame se baten con
+          // setContextMenuFrame, asi que el menu se renderea con el state
+          // nuevo. Llamamos onFrameMouseDown ANTES de onFrameContextMenu para
+          // que el orden de batching sea predecible.
           const onCellContextMenu = (e) => {
-            handlers.onFrameContextMenu(e, 'frame');
-            if (!isSelectedGlobal) {
-              // Frame fuera de la seleccion: lo seleccionamos para que el
-              // menu tenga un blanco coherente.
+            const isDifferentLayer = layer.id !== activeLayerId;
+            if (isDifferentLayer || !isSelectedGlobal) {
               handlers.onFrameMouseDown(layer.id, frameNumber - 1, e);
             }
+            handlers.onFrameContextMenu(e, 'frame');
           };
           const onCellClick = (e) => e.stopPropagation();
           const onCellMouseDown = (e) => {
