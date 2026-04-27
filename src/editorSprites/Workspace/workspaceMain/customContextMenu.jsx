@@ -3,6 +3,7 @@
 // useLayoutEffect+setState sincrono que usa SubmenuPanel; se opta-out el
 // archivo entero para evitar interferencia (mismo motivo que blendModes.js).
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import './customContextMenu.css';
 
 // Paleta de colores para tags estilo Aseprite. Se usa cuando una accion del
@@ -32,6 +33,12 @@ const CustomContextMenu = ({
   // Estado del submenú
   const [openSubmenu, setOpenSubmenu] = useState(null); // null o action.id/index del item con submenu abierto
   const submenuCloseTimeoutRef = useRef(null);
+
+  // Map de refs a buttons del menu que tienen submenu, indexed por key.
+  // Lo usa SubmenuPanel (renderizado via portal) para conocer el anchor element
+  // del item padre y calcular su posicion. Sin esto, el portal no tiene forma
+  // de saber donde esta el button (no es DOM ancestor).
+  const submenuAnchorsRef = useRef({});
 
   const openSubmenuFor = useCallback((key) => {
     if (submenuCloseTimeoutRef.current) {
@@ -355,6 +362,13 @@ const calculateMenuPosition = useCallback(() => {
               <div key={action.id || index}>
                 {/* Item del menú */}
                 <button
+                  ref={action.type === 'submenu'
+                    ? (el) => {
+                        const k = action.id || index;
+                        if (el) submenuAnchorsRef.current[k] = el;
+                        else delete submenuAnchorsRef.current[k];
+                      }
+                    : undefined}
                   className={`context-menu-item ${action.disabled ? 'disabled' : ''} ${action.danger ? 'danger' : ''} ${isActiveInput ? 'active-input' : ''}`}
                   onClick={() => handleItemClick(action, action.id || index)}
                   disabled={action.disabled}
@@ -380,9 +394,13 @@ const calculateMenuPosition = useCallback(() => {
                   )}
                 </button>
 
-                {/* Submenú anidado: al seleccionar item cerrar submenú Y menú padre */}
+                {/* Submenú anidado: renderizado via portal a document.body
+                    para escapar el containing block creado por transform de
+                    .context-menu (que atrapaba al position:fixed). Recibe el
+                    button como anchor para calcular su posicion. */}
                 {action.type === 'submenu' && action.items && openSubmenu === (action.id || index) && (
                   <SubmenuPanel
+                    anchorEl={submenuAnchorsRef.current[action.id || index]}
                     items={action.items}
                     onClose={() => { setOpenSubmenu(null); onClose(); }}
                     onMouseEnter={() => openSubmenuFor(action.id || index)}
@@ -497,30 +515,25 @@ const calculateMenuPosition = useCallback(() => {
 
 // Componente de panel de submenú anidado.
 //
-// Render con position:fixed + coordenadas en state (no DOM mutation): React
-// reconciliaba inline style en cada re-render y revertia las mutaciones del
-// useLayoutEffect → submenu invisible o pegado a (0,0). Con state, el render
-// refleja la posicion real.
+// IMPORTANTE — usa createPortal a document.body para escapar el containing
+// block de .context-menu (que tiene transform en su animacion contextMenuAppear).
+// Cualquier ancestor con `transform` se vuelve containing block para
+// position:fixed descendientes — sin el portal, el "fixed" del submenu se
+// posicionaba relativo a .context-menu en vez del viewport, quedando atrapado
+// dentro del menu padre.
 //
-// Por que position:fixed: el padre .context-menu-content tiene overflow-y:auto
-// (scroll para menus largos) lo que crea un clipping context. position:absolute
-// se quedaba clipped al sobresalir. position:fixed escapa.
-//
-// Por que no flash inicial: `pos.measured=false` → visibility:hidden hasta que
-// useLayoutEffect mide y hace setPos sincrono antes del paint.
-function SubmenuPanel({ items, onClose, onMouseEnter, onMouseLeave }) {
+// `anchorEl` es el button del item padre (capturado via ref-callback en el
+// map de actions). useLayoutEffect mide su rect + el panel rect, calcula
+// posicion (derecha por default, izquierda como fallback si overflow), y
+// hace setPos sincrono antes del paint para evitar flash.
+function SubmenuPanel({ anchorEl, items, onClose, onMouseEnter, onMouseLeave }) {
   const panelRef = useRef(null);
   const [pos, setPos] = useState({ left: 0, top: 0, measured: false });
 
   useLayoutEffect(() => {
     const panel = panelRef.current;
-    if (!panel) return;
-    // panel.parentElement = <div key={action.id||index}> que envuelve al
-    // button.context-menu-item + al SubmenuPanel.
-    const wrapper = panel.parentElement;
-    const btn = wrapper?.querySelector('.context-menu-item');
-    if (!btn) return;
-    const btnRect = btn.getBoundingClientRect();
+    if (!panel || !anchorEl) return;
+    const btnRect = anchorEl.getBoundingClientRect();
     const panelRect = panel.getBoundingClientRect();
     const margin = 6;
     const safe = 4;
@@ -539,12 +552,11 @@ function SubmenuPanel({ items, onClose, onMouseEnter, onMouseLeave }) {
     }
 
     setPos({ left: Math.round(left), top: Math.round(top), measured: true });
-  // Solo medir al montar (la posicion del item padre no cambia mientras el
-  // submenu esta abierto: si el usuario hace hover-out, el submenu se desmonta).
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [anchorEl]);
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
       ref={panelRef}
       className="context-menu-submenu"
@@ -581,7 +593,8 @@ function SubmenuPanel({ items, onClose, onMouseEnter, onMouseLeave }) {
           </button>
         );
       })}
-    </div>
+    </div>,
+    document.body
   );
 }
 
