@@ -1,3 +1,7 @@
+'use no memo';
+// React Compiler (vite compilationMode:'all') tiene problemas con el patron
+// useLayoutEffect+setState sincrono que usa SubmenuPanel; se opta-out el
+// archivo entero para evitar interferencia (mismo motivo que blendModes.js).
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import './customContextMenu.css';
 
@@ -249,11 +253,13 @@ const calculateMenuPosition = useCallback(() => {
   };
 
   // Manejar clic en item del menú
-  const handleItemClick = (action) => {
+  const handleItemClick = (action, key) => {
     if (action.disabled) return;
 
-    // Si es un submenú, no hacer nada en click directo; se controla por hover
+    // Si es un submenú, toggle por click (además del hover) — fallback robusto
+    // si el hover no se dispara (touch devices, electron, focus restaurado, etc).
     if (action.type === 'submenu') {
+      setOpenSubmenu(prev => prev === key ? null : key);
       return;
     }
 
@@ -350,7 +356,7 @@ const calculateMenuPosition = useCallback(() => {
                 {/* Item del menú */}
                 <button
                   className={`context-menu-item ${action.disabled ? 'disabled' : ''} ${action.danger ? 'danger' : ''} ${isActiveInput ? 'active-input' : ''}`}
-                  onClick={() => handleItemClick(action)}
+                  onClick={() => handleItemClick(action, action.id || index)}
                   disabled={action.disabled}
                   onMouseEnter={action.type === 'submenu' ? () => openSubmenuFor(action.id || index) : undefined}
                   onMouseLeave={action.type === 'submenu' ? scheduleSubmenuClose : undefined}
