@@ -116,6 +116,7 @@ export function renderLayerAnimation(props) {
       clearTintCache={props.clearTintCache}
       isCollapsed={props.isCollapsed}
       onToggleCollapse={props.onToggleCollapse}
+      onLoadModelForLayer={props.onLoadModelForLayer}
     />
   );
 }

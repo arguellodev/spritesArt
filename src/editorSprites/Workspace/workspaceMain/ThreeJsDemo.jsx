@@ -5,57 +5,16 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import './threejs.css';
 
-// === Iconos inline (Lucide). Se declaran a nivel de módulo para no recrear
-// componentes por render — exigido por la regla react-hooks/static-components
-// y necesario para que el React Compiler pueda memoizar correctamente. ===
-const Icon = ({ d, size = 14, className = "" }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    aria-hidden="true"
-  >
-    {d}
-  </svg>
-);
-const IconBox = (p) => <Icon {...p} d={<><path d="m21 16-9 5-9-5V8l9-5 9 5v8z" /><path d="M3.3 7 12 12l8.7-5" /><path d="M12 22V12" /></>} />;
-const IconSliders = (p) => <Icon {...p} d={<><line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" /><line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" /><line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" /><line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" /></>} />;
-const IconGrid = (p) => <Icon {...p} d={<><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></>} />;
-const IconShapes = (p) => <Icon {...p} d={<><path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1z" /><rect x="3" y="14" width="7" height="7" rx="1" /><circle cx="17.5" cy="17.5" r="3.5" /></>} />;
-const IconPalette = (p) => <Icon {...p} d={<><circle cx="13.5" cy="6.5" r=".5" /><circle cx="17.5" cy="10.5" r=".5" /><circle cx="8.5" cy="7.5" r=".5" /><circle cx="6.5" cy="12.5" r=".5" /><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" /></>} />;
-const IconFilm = (p) => <Icon {...p} d={<><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" /><line x1="7" y1="2" x2="7" y2="22" /><line x1="17" y1="2" x2="17" y2="22" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="2" y1="7" x2="7" y2="7" /><line x1="2" y1="17" x2="7" y2="17" /><line x1="17" y1="17" x2="22" y2="17" /><line x1="17" y1="7" x2="22" y2="7" /></>} />;
-const IconDownload = (p) => <Icon {...p} d={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></>} />;
-const IconUpload = (p) => <Icon {...p} d={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></>} />;
-const IconChevronDown = (p) => <Icon {...p} d={<polyline points="6 9 12 15 18 9" />} />;
-const IconPlay = (p) => <Icon {...p} d={<polygon points="5 3 19 12 5 21 5 3" />} />;
-const IconPause = (p) => <Icon {...p} d={<><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></>} />;
-const IconSend = (p) => <Icon {...p} d={<><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></>} />;
-const IconImage = (p) => <Icon {...p} d={<><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></>} />;
-const IconInfo = (p) => <Icon {...p} d={<><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></>} />;
-
-// Helper de sección colapsable. Recibe el callback de toggle y el flag desde
-// el padre — declarado a nivel de módulo para no recrear el componente.
-const Section = ({ id, icon, title, open, onToggle, children }) => (
-  <section className={`t3d-section ${open ? "t3d-section--open" : "t3d-section--collapsed"}`}>
-    <button
-      type="button"
-      className="t3d-section__head"
-      onClick={() => onToggle(id)}
-      aria-expanded={open}
-    >
-      <span className="t3d-section__icon">{icon}</span>
-      <span className="t3d-section__name">{title}</span>
-      <IconChevronDown className="t3d-section__chevron" />
-    </button>
-    <div className="t3d-section__body">{children}</div>
-  </section>
-);
+// Módulos compartidos con el renderer de capas 3D — una sola fuente de verdad.
+import {
+  IconBox, IconSliders, IconGrid, IconShapes, IconPalette, IconFilm,
+  IconDownload, IconUpload, IconPlay, IconPause, IconSend, IconImage,
+  IconInfo, Section,
+} from "../threeD/icons";
+import { VERTEX_SHADER, FRAGMENT_SHADER } from "../threeD/shaders";
+import { makeMainRT, makeNormalRT } from "../threeD/renderTargets";
+import { flattenGeometry, resetGeometry } from "../threeD/geometry";
+import { fitCamerasToObject as fitCamerasToObjectModule } from "../threeD/cameraFit";
 
 export default function Enhanced3DFlattener({paintPixelsRGBA, activeLayerId, onPixelDataReady}) {
   const containerRef = useRef(null);
@@ -346,27 +305,7 @@ const orthoControlsRef = useRef(null);
     };
     let { w: rtW, h: rtH } = computeRTSize();
 
-    // RT principal: RGBA + DepthTexture (necesaria para edge detection por
-    // diferencia de profundidad — patrón estándar de three.js post-procesado).
-    const makeMainRT = (w, h) => {
-      const rt = new THREE.WebGLRenderTarget(w, h, {
-        minFilter: THREE.NearestFilter,
-        magFilter: THREE.NearestFilter,
-        format: THREE.RGBAFormat,
-        depthBuffer: true,
-        depthTexture: new THREE.DepthTexture(w, h, THREE.UnsignedIntType),
-      });
-      rt.texture.colorSpace = THREE.SRGBColorSpace;
-      return rt;
-    };
-    // RT de normales: la escena se re-renderiza con MeshNormalMaterial como
-    // overrideMaterial para tener (nx, ny, nz) por píxel en view-space.
-    const makeNormalRT = (w, h) => new THREE.WebGLRenderTarget(w, h, {
-      minFilter: THREE.NearestFilter,
-      magFilter: THREE.NearestFilter,
-      format: THREE.RGBAFormat,
-      depthBuffer: true,
-    });
+    // makeMainRT/makeNormalRT importados de ../threeD/renderTargets.
 
     let rtTexture = makeMainRT(rtW, rtH);
     rtRef.current = rtTexture;
@@ -375,249 +314,8 @@ const orthoControlsRef = useRef(null);
     const normalMaterial = new THREE.MeshNormalMaterial();
     normalMaterialRef.current = normalMaterial;
   
-    // --- SHADERS (MISMO QUE ANTES) ---
-    const vertexShader = `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `;
-    
-    const fragmentShader = `
-    uniform sampler2D tDiffuse;
-    uniform sampler2D tDepth;
-    uniform sampler2D tNormal;
-    uniform float uBrightness;
-    uniform int uFlattenMode;
-    uniform float uFlattenAmount;
-    uniform bool uAntiAlias;
-    uniform bool uOutlineEnabled;
-    uniform float uDepthEdgeStrength;
-    uniform float uNormalEdgeStrength;
-    uniform vec3 uDepthEdgeColor;
-    uniform vec3 uNormalEdgeColor;
-    uniform float uNormalEdgeThreshold;
-    uniform bool uDetectOccluded;
-    uniform vec2 uResolution;
-    uniform vec2 uRtResolution;
-    uniform bool uPixelMode;
-    uniform float uPixelSize;
-    uniform bool uShowGrid;
-    uniform bool uShowExportArea;
-    uniform float uExportResolution;
-    uniform vec3 uBackgroundColor;
-    varying vec2 vUv;
-
-      vec3 posterize(vec3 color, float levels) {
-        return floor(color * levels) / levels;
-      }
-
-      vec3 flattenColors(vec3 color) {
-        color = smoothstep(0.0, 1.0, color);
-        return posterize(color, 8.0);
-      }
-
-      vec2 pixelate(vec2 uv, float pixelSize) {
-        if (!uPixelMode || pixelSize <= 1.0) return uv;
-        
-        vec2 screenCoords = uv * uResolution;
-        vec2 pixelCoords = floor(screenCoords / pixelSize) * pixelSize;
-        pixelCoords += pixelSize * 0.5;
-        return pixelCoords / uResolution;
-      }
-
-      float getPixelGrid(vec2 uv, float pixelSize) {
-        if (!uPixelMode || !uShowGrid || pixelSize <= 1.0) return 1.0;
-        
-        vec2 screenCoords = uv * uResolution;
-        vec2 cellPos = mod(screenCoords, pixelSize);
-        float lineWidth = 1.0;
-        
-        if (cellPos.x < lineWidth || cellPos.y < lineWidth) {
-          return 0.7;
-        }
-        
-        return 1.0;
-      }
-
-      vec3 getExportAreaOverlay(vec2 uv, vec3 color) {
-        // Antes requería uPixelMode; ahora se muestra independiente para que
-        // el usuario pueda alinear el modelo antes de exportar al editor.
-        if (!uShowExportArea) return color;
-        
-        float canvasSize = min(uResolution.x, uResolution.y);
-        vec2 center = vec2(0.5, 0.5);
-        
-        vec2 screenCoords = uv * uResolution;
-        vec2 centerScreen = center * uResolution;
-        
-        float halfSize = canvasSize * 0.5;
-        vec2 areaMin = centerScreen - halfSize;
-        vec2 areaMax = centerScreen + halfSize;
-        
-        bool insideArea = screenCoords.x >= areaMin.x && screenCoords.x <= areaMax.x &&
-                          screenCoords.y >= areaMin.y && screenCoords.y <= areaMax.y;
-        
-        float borderWidth = 4.0;
-        bool onBorder = false;
-        
-        if (insideArea) {
-          bool nearLeftEdge = screenCoords.x <= areaMin.x + borderWidth;
-          bool nearRightEdge = screenCoords.x >= areaMax.x - borderWidth;
-          bool nearTopEdge = screenCoords.y >= areaMax.y - borderWidth;
-          bool nearBottomEdge = screenCoords.y <= areaMin.y + borderWidth;
-          
-          onBorder = nearLeftEdge || nearRightEdge || nearTopEdge || nearBottomEdge;
-        }
-        
-        if (onBorder) {
-          return mix(color, vec3(0.0, 1.0, 0.2), 0.8);
-        } else if (!insideArea) {
-          return color * 0.4;
-        } else {
-          return mix(color, vec3(1.0, 1.0, 1.0), 0.03);
-        }
-      }
-
-      vec4 antiAliasFilter(sampler2D tex, vec2 uv, vec2 texelSize) {
-        vec4 color = texture2D(tex, uv);
-        vec4 sharp = color * 5.0;
-        sharp -= texture2D(tex, uv + vec2(texelSize.x, 0.0));
-        sharp -= texture2D(tex, uv - vec2(texelSize.x, 0.0));
-        sharp -= texture2D(tex, uv + vec2(0.0, texelSize.y));
-        sharp -= texture2D(tex, uv - vec2(0.0, texelSize.y));
-        return mix(color, sharp, 0.3);
-      }
-
-      // ===== Edge detection portado de hello-threejs (KodyJKing) =====
-      // Sample en el tamaño del render-target, no del canvas, para detectar
-      // bordes a 1 píxel de distancia tanto en pixel mode como en no-pixel.
-      // (Nota: GLSL ES 1.00 no permite globales no-const inicializadas desde
-      // uniforms, así que el offset se calcula dentro de cada helper.)
-
-      float getDepth(int x, int y) {
-        vec2 off = vec2(float(x), float(y)) / uRtResolution;
-        return texture2D(tDepth, vUv + off).r;
-      }
-
-      vec3 getNormal(int x, int y) {
-        vec2 off = vec2(float(x), float(y)) / uRtResolution;
-        return texture2D(tNormal, vUv + off).rgb * 2.0 - 1.0;
-      }
-
-      float depthEdgeIndicator() {
-        float depth = getDepth(0, 0);
-        float diff = 0.0;
-        diff += clamp(getDepth(1, 0) - depth, 0.0, 1.0);
-        diff += clamp(getDepth(-1, 0) - depth, 0.0, 1.0);
-        diff += clamp(getDepth(0, 1) - depth, 0.0, 1.0);
-        diff += clamp(getDepth(0, -1) - depth, 0.0, 1.0);
-        return floor(smoothstep(0.01, 0.02, diff) * 2.0) / 2.0;
-      }
-
-      // Distancia angular SIMÉTRICA entre normales — independiente de la
-      // orientación absoluta. Reemplaza el dot(diff, vec3(1,1,1)) del demo
-      // original que solo detectaba bordes en ciertas direcciones (perdía,
-      // p.ej., el contorno de un brazo a la izquierda del cuerpo).
-      // 0 = normales idénticas; 1 = perpendiculares u opuestas.
-      float neighborNormalEdgeIndicator(int x, int y, float depth, vec3 normal) {
-        vec3 nbNormal = getNormal(x, y);
-        float angleDiff = 1.0 - clamp(dot(normal, nbNormal), 0.0, 1.0);
-
-        // Threshold suave: el cambio empieza a considerarse borde a partir
-        // de uNormalEdgeThreshold/2 y es completo en uNormalEdgeThreshold.
-        float angleIndicator = smoothstep(
-          uNormalEdgeThreshold * 0.5,
-          uNormalEdgeThreshold,
-          angleDiff
-        );
-
-        if (uDetectOccluded) {
-          // Sin depth gate: marca el borde aunque ambos píxeles estén a la
-          // misma profundidad (caso brazo-sobre-cuerpo). Costo: 2px de grosor
-          // porque ambos lados del borde marcan.
-          return angleIndicator;
-        }
-
-        // Con depth gate: sólo el píxel más cercano marca → 1px crisp.
-        // El bias +0.0025 permite que profundidades casi iguales también
-        // se detecten (no solo cuando el vecino está claramente atrás).
-        float depthDiff = getDepth(x, y) - depth;
-        float depthIndicator = clamp(sign(depthDiff * 0.25 + 0.0025), 0.0, 1.0);
-        return angleIndicator * depthIndicator;
-      }
-
-      float normalEdgeIndicator() {
-        float depth = getDepth(0, 0);
-        vec3 normal = getNormal(0, 0);
-        float indicator = 0.0;
-        indicator += neighborNormalEdgeIndicator(0, -1, depth, normal);
-        indicator += neighborNormalEdgeIndicator(0,  1, depth, normal);
-        indicator += neighborNormalEdgeIndicator(-1, 0, depth, normal);
-        indicator += neighborNormalEdgeIndicator(1,  0, depth, normal);
-        // Suma de hasta 4 vecinos; clamp a [0,1] en vez del step(0.1, ind)
-        // original — así la intensidad del borde es proporcional al número
-        // de vecinos diferentes, dando mejor antialiasing visual a baja res.
-        return clamp(indicator, 0.0, 1.0);
-      }
-
-      void main() {
-        vec2 texelSize = 1.0 / uResolution;
-        vec2 pixelatedUV = pixelate(vUv, uPixelSize);
-        
-        vec4 texel;
-        
-        if (uAntiAlias) {
-          texel = antiAliasFilter(tDiffuse, pixelatedUV, texelSize);
-        } else {
-          texel = texture2D(tDiffuse, pixelatedUV);
-        }
-        
-        vec3 color = texel.rgb * uBrightness;
-        
-        if (uFlattenMode == 1) {
-          color = flattenColors(color);
-        } else if (uFlattenMode == 2) {
-          color = posterize(color, 4.0);
-          float luminance = dot(color, vec3(0.299, 0.587, 0.114));
-          color = mix(color, vec3(luminance), 0.5);
-        } else if (uFlattenMode == 3) {
-          color = step(0.5, color);
-        }
-        
-        // Outline depth+normal (hello-threejs). Ahora cada tipo de borde puede
-        // tintarse a un color arbitrario. dei prioriza sobre nei (la silueta
-        // gana cuando ambos coexisten en el mismo píxel). Fórmula:
-        //   color = mix(color, uColor, strength * indicator)
-        // → con uColor=negro: oscurece (look "outlined" clásico)
-        // → con uColor=blanco: aclara (highlight como en hello-threejs original)
-        // → cualquier otro color: tinte (ej. azul para edges estilo blueprint)
-        if (uOutlineEnabled && texel.a > 0.1) {
-          float dei = depthEdgeIndicator();
-          float nei = normalEdgeIndicator();
-          if (dei > 0.0) {
-            color = mix(color, uDepthEdgeColor, clamp(uDepthEdgeStrength * dei, 0.0, 1.0));
-          } else if (nei > 0.0) {
-            color = mix(color, uNormalEdgeColor, clamp(uNormalEdgeStrength * nei, 0.0, 1.0));
-          }
-        }
-        
-        float gridMask = getPixelGrid(vUv, uPixelSize);
-        color *= gridMask;
-        
-        color = getExportAreaOverlay(vUv, color);
-        
- if (texel.a < 0.1) {
-  vec3 bgColor = uBackgroundColor;  // USAR EL UNIFORM
-  bgColor = getExportAreaOverlay(vUv, bgColor);
-  gl_FragColor = vec4(bgColor, 1.0);
-}
- else {
-          gl_FragColor = vec4(color, texel.a);
-        }
-      }
-    `;
+    // SHADERS — importados de ../threeD/shaders. Una sola fuente de verdad
+    // compartida con el ThreeDLayerRenderer (capas 3D del editor).
 
     const materialScreen = new THREE.ShaderMaterial({
       uniforms: {
@@ -643,9 +341,13 @@ const orthoControlsRef = useRef(null);
         uShowExportArea: { value: showExportAreaRef.current },
         uExportResolution: { value: resolutionRef.current },
         uBackgroundColor: { value: new THREE.Color(0x00ff00) },
+        // El visor modal siempre rellena el fondo con color sólido. Las capas
+        // 3D del editor pasan 0.0 aquí para integrarse transparente con otras
+        // capas (esto vive en el shader compartido en ../threeD/shaders).
+        uBackgroundAlpha: { value: 1.0 },
       },
-      vertexShader,
-      fragmentShader,
+      vertexShader: VERTEX_SHADER,
+      fragmentShader: FRAGMENT_SHADER,
       depthWrite: false,
     });
     materialScreenRef.current = materialScreen;
@@ -728,53 +430,17 @@ orthoControls.enableZoom = true;
 orthoControls.target.set(0, 0, 0);
 orthoControlsRef.current = orthoControls;
 
-    // --- AUTO-FIT DE CÁMARA ---
-    // Patrón estándar de three.js examples: centra el modelo en el origen,
-    // calcula el bounding box, y posiciona ambas cámaras para que el modelo
-    // ocupe ~1.5x su altura visible. Se aplica al cargar cada modelo y al
-    // resetear (botón "Encuadrar"). Sin esto un GLB de 0.01m o de 100m queda
-    // invisible (fuera de near/far o cámara dentro de la geometría).
+    // Auto-fit de cámara via ../threeD/cameraFit. Wrapper que conecta los
+    // refs vivos a la función pura.
     const fitCamerasToObject = (object) => {
-      const box = new THREE.Box3().setFromObject(object);
-      if (!isFinite(box.min.x) || box.isEmpty()) return;
-      const center = box.getCenter(new THREE.Vector3());
-      const size = box.getSize(new THREE.Vector3());
-
-      // Centrar el modelo en el origen mundial.
-      object.position.sub(center);
-
-      const maxDim = Math.max(size.x, size.y, size.z);
-      if (maxDim <= 0) return;
-
-      // Cámara perspectiva: distancia para que maxDim quepa en el FOV con margen.
-      const fovRad = (cameraRef.current.fov * Math.PI) / 180;
-      const distance = (maxDim / 2) / Math.tan(fovRad / 2) * 1.5;
-      cameraRef.current.position.set(0, 0, distance);
-      cameraRef.current.near = Math.max(0.01, distance / 1000);
-      cameraRef.current.far = distance * 100;
-      cameraRef.current.updateProjectionMatrix();
-
-      // Cámara ortográfica: ajustar half-extents al maxDim con margen.
-      const half = maxDim * 0.75;
-      const aspect = (CANVAS_WIDTH || 1) / (CANVAS_HEIGHT || 1);
-      orthoCameraRef.current.left = -half * aspect;
-      orthoCameraRef.current.right = half * aspect;
-      orthoCameraRef.current.top = half;
-      orthoCameraRef.current.bottom = -half;
-      orthoCameraRef.current.position.set(0, 0, distance);
-      orthoCameraRef.current.near = Math.max(0.01, distance / 1000);
-      orthoCameraRef.current.far = distance * 100;
-      orthoCameraRef.current.updateProjectionMatrix();
-
-      // Resetear targets de OrbitControls al origen (donde quedó centrado).
-      if (controlsRef.current) {
-        controlsRef.current.target.set(0, 0, 0);
-        controlsRef.current.update();
-      }
-      if (orthoControlsRef.current) {
-        orthoControlsRef.current.target.set(0, 0, 0);
-        orthoControlsRef.current.update();
-      }
+      fitCamerasToObjectModule(object, {
+        perspective: cameraRef.current,
+        ortho: orthoCameraRef.current,
+        viewportSize: { width: CANVAS_WIDTH, height: CANVAS_HEIGHT },
+        controls: controlsRef.current,
+        orthoControls: orthoControlsRef.current,
+        margin: 1.5,
+      });
     };
     fitCamerasToObjectRef.current = fitCamerasToObject;
 
@@ -802,57 +468,7 @@ orthoControlsRef.current = orthoControls;
     };
     updateRTRef.current = updateRenderTarget;
   
-    // Función para aplanar geometría (MISMA QUE ANTES)
-    const flattenGeometry = (object, mode, amount) => {
-      object.traverse((child) => {
-        if (child.isMesh && child.geometry) {
-          const positions = child.geometry.attributes.position;
-          if (positions && !child.geometry.userData.originalPositions) {
-            child.geometry.userData.originalPositions = positions.array.slice();
-          }
-          
-          if (child.geometry.userData.originalPositions) {
-            const original = child.geometry.userData.originalPositions;
-            const current = positions.array;
-            
-            for (let i = 0; i < original.length; i += 3) {
-              current[i] = original[i];
-              current[i + 1] = original[i + 1];
-              current[i + 2] = original[i + 2];
-              
-              if (mode === 'flatten-z') {
-                current[i + 2] *= (1 - amount);
-              } else if (mode === 'flatten-y') {
-                current[i + 1] *= (1 - amount);
-              } else if (mode === 'flatten-x') {
-                current[i] *= (1 - amount);
-              }
-            }
-            
-            positions.needsUpdate = true;
-            child.geometry.computeVertexNormals();
-          }
-        }
-      });
-    };
-  
-    // Función para resetear geometría (MISMA QUE ANTES)
-    const resetGeometry = (object) => {
-      object.traverse((child) => {
-        if (child.isMesh && child.geometry && child.geometry.userData.originalPositions) {
-          const positions = child.geometry.attributes.position;
-          const original = child.geometry.userData.originalPositions;
-          const current = positions.array;
-          
-          for (let i = 0; i < original.length; i++) {
-            current[i] = original[i];
-          }
-          
-          positions.needsUpdate = true;
-          child.geometry.computeVertexNormals();
-        }
-      });
-    };
+    // flattenGeometry/resetGeometry importados de ../threeD/geometry.
   
     // Función onWindowResize RESPONSIVE COMPLETA
     const onWindowResize = () => {

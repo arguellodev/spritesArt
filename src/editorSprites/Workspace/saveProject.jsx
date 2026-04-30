@@ -2,12 +2,19 @@ import React, { useState, useCallback, useRef } from 'react';
 import './saveProject.css';
 
 // ============================================================
-// Formato v2.0.0 — guarda TODO el estado del proyecto:
+// Formato v2.1.0 — guarda TODO el estado del proyecto:
 //   canvases, framesResume, layers, onionSkin, viewport, paleta
-// Compatible con v1.0.0 mediante migradores.
+// Compatible con v1.0.0 y v2.0.0 mediante migradores.
+//
+// Cambios v2.0.0 → v2.1.0:
+//   - framesResume.extensions.threeDLayers añadido (capas 3D).
+//   - layer.type opcional ('paint' | '3d', default 'paint').
+//   - El parser viejo ignora extensions.threeDLayers (forward-compat). Las
+//     capas 3D abiertas en versiones <2.1.0 se ven como capas vacías o con
+//     su último canvas pre-renderizado.
 // ============================================================
 
-const PROJECT_FORMAT_VERSION = '2.0.0';
+const PROJECT_FORMAT_VERSION = '2.1.0';
 const PROJECT_EXTENSION = 'pixcalli';
 const LEGACY_EXTENSION = 'pixelart';
 

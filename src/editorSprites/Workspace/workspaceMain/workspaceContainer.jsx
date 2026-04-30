@@ -63,12 +63,22 @@ import SaveProject from "../saveProject";
 import BoundsWorker from "./boundsWorker.js?worker";
 import PlayAnimation from "../hooks/playAnimation";
 import TopToolbar from "./topToolbar";
+import { buildTopMenus } from "./topMenuConfig";
+import { AboutModal, KeybindingsModal } from "./topMenuModals";
+import PanelFloatingClose from "./panelFloatingClose";
+import { useI18n } from "../../i18n/useI18n";
 import AIgenerator from "../AIgenerator.jsx/AIgenerator";
 import NavbarLateral from "../../navbarLateral/Navbar";
 import { PiIntersectDuotone } from "react-icons/pi";
 import { BsEyedropper, BsPentagon } from "react-icons/bs";
 
 import Enhanced3DFlattener from "./ThreeJsDemo";
+import Layer3DDriversHost from "../threeD/Layer3DDriversHost";
+import Layer3DPanel from "../threeD/Layer3DPanel";
+import { acquireRenderer } from "../threeD/ThreeDLayerRenderer";
+import {
+  storeBuffer, hasBuffer, bufferToDataUrl, dataUrlToBuffer,
+} from "../threeD/threeDAssetStore";
 
 import { rasterEllipse, rasterPolygon, rasterLine } from "../rasterizers/primitives";
 import { pixelPerfect, pixelPerfectPath } from "../rasterizers/pixelPerfect";
@@ -166,6 +176,47 @@ function CanvasTracker({
   // ./container/constants/navItems.jsx. Se memoiza para estabilizar
   // identidad mientras `setTool` no cambie.
   const navItemsLateral = useMemo(() => buildNavItemsLateral(setTool), [setTool]);
+
+  // Estado del modo colapsable de la barra lateral. Se controla aquí (en
+  // lugar de dentro del Navbar) porque cuando está colapsado queremos
+  // dibujar el indicador "herramienta actual" dentro de la TopToolbar
+  // superior (leadingSlot), no flotando sobre el canvas.
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  const activeNavItem = useMemo(() => {
+    for (const it of navItemsLateral) {
+      if (it.dropdown) {
+        const sub = it.dropdown.find((s) => s.toolValue === tool);
+        if (sub) return sub;
+      } else if (it.toolValue === tool) {
+        return it;
+      }
+    }
+    return null;
+  }, [navItemsLateral, tool]);
+  const collapsedToolLabel = activeNavItem?.label || "Ninguna";
+  const collapsedIndicator = navCollapsed ? (
+    <button
+      type="button"
+      className="toolbar-collapsed-tool"
+      onClick={() => setNavCollapsed(false)}
+      title={`${collapsedToolLabel} — clic para expandir la barra`}
+      aria-label={`Expandir barra de herramientas. Herramienta actual: ${collapsedToolLabel}`}
+      aria-expanded="false"
+    >
+      {activeNavItem?.icon ? (
+        <span className="toolbar-collapsed-tool-icon" aria-hidden="true">
+          {activeNavItem.icon}
+        </span>
+      ) : (
+        <span className="toolbar-collapsed-tool-icon" aria-hidden="true">
+          ≡
+        </span>
+      )}
+      <span className="toolbar-collapsed-tool-hint" aria-hidden="true">
+        ›
+      </span>
+    </button>
+  ) : null;
 
   const [navConfigLateral, setNavLateralConfig] = useState({
     variant: "vertical",
@@ -304,6 +355,18 @@ const [showSaveProject, setShowSaveProject] = useState(false);
 const [showFiltersModal, setShowFiltersModal] = useState(false);
 const [showTextTool, setShowTextTool] = useState(false);
 const [showScriptRunner, setShowScriptRunner] = useState(false);
+
+// Modales del menú superior (Configuración → Atajos, Ayuda → Acerca de).
+const [showAboutModal, setShowAboutModal] = useState(false);
+const [showKeybindingsModal, setShowKeybindingsModal] = useState(false);
+// Espejo del estado nativo de fullscreen — reactivo para mostrar el check.
+const [isFullscreen, setIsFullscreen] = useState(false);
+// Espejo de `isGenerating` del AIgenerator — alimenta el indicador de
+// estado del botón "IA" en el toolbar.
+const [aiGenerating, setAiGenerating] = useState(false);
+
+// i18n del menú superior. El provider está en App.jsx.
+const { t, lang, setLang } = useI18n();
 
 // Estado para paneles del dock: animation tags (lista persistible a .pixcalli).
 const [animationTags, setAnimationTags] = useState([]);
@@ -592,6 +655,11 @@ useKeybindingsListener(keybindingsRegistry);
   // Restauración desde formato .pixcalli v2
   restoreFromProjectData,
 
+  // Capas 3D (Fase 2 del plan): metadata vive en framesResume.extensions.
+  setLayerThreeD,
+  setLayer3DFrameOverride,
+  getLayerThreeD,
+
     //gestión del aislamiento de pixeles:
 
   } = useLayerManager({
@@ -722,6 +790,28 @@ useKeybindingsListener(keybindingsRegistry);
     // compat con .pixcalli antiguos sin la clave (el typeof guard la skip-ea).
     const loopFromProject = projectData?.animation?.loop;
     if (typeof loopFromProject === 'boolean') setLoopEnabled(loopFromProject);
+
+    // Restaurar capas 3D: re-cargar los GLBs embebidos como dataUrl en el
+    // assetStore + cache del renderer. Sin esto, las capas 3D del proyecto
+    // muestran su último canvas pre-renderizado pero no responden a cambios
+    // de configuración. Async — corre en paralelo con el resto de la carga.
+    const threeDLayers = projectData?.framesResume?.extensions?.threeDLayers;
+    if (threeDLayers && typeof threeDLayers === 'object') {
+      const renderer = acquireRenderer();
+      const entries = Object.entries(threeDLayers);
+      for (const [layerId, meta] of entries) {
+        if (!meta?.asset?.dataUrl) continue;
+        if (hasBuffer(meta.asset.sha1)) continue; // Ya cargado en esta sesión.
+        try {
+          const buffer = dataUrlToBuffer(meta.asset.dataUrl);
+          await renderer.loadModelFromBuffer(buffer, meta.asset.filename, meta.asset.sha1);
+          storeBuffer(meta.asset.sha1, buffer, meta.asset.filename);
+          console.log(`[Capa 3D] modelo restaurado: ${meta.asset.filename} (capa ${layerId})`);
+        } catch (err) {
+          console.error(`[Capa 3D] fallo al restaurar modelo de ${layerId}:`, err);
+        }
+      }
+    }
   }, [restoreFromProjectData, setZoom, setPanOffset,
       setForegroundColor, setBackgroundColor, setFillColor, setBorderColor, setToolParameters,
       setLoopEnabled]);
@@ -1839,30 +1929,27 @@ const applyEyeDropperColor = useCallback((color, buttonPressed) => {
     }
   
     try {
-      // ✅ DETERMINAR RESOLUCIÓN BASADA EN LOS DATOS RECIBIDOS
-      // Buscar la coordenada Y máxima para inferir el tamaño
-      const maxY = Math.max(...pixelData.map(p => p.y));
-      const maxX = Math.max(...pixelData.map(p => p.x));
-      const canvasSize = Math.max(maxX, maxY) + 1; // +1 porque las coordenadas empiezan en 0
-      
-      // Aplicar píxeles usando drawOnLayer con FLIP Y
+      // El visor 3D envía las coordenadas en convención de pantalla
+      // (y=0 = arriba), igual que cualquier <canvas>. Antes había aquí un
+      // `flippedY = canvasSize - pixel.y - 1` para compensar un bug del
+      // pipeline anterior, que entregaba la data invertida (bottom-up de GL
+      // sin convertir). Ahora exportPixelData ya invierte correctamente al
+      // leer del render target, así que aplicamos pixel.y tal cual — si no,
+      // se obtiene una doble inversión y la imagen sale boca abajo.
       drawOnLayer(activeLayerId, (ctx) => {
         ctx.globalCompositeOperation = "source-over";
-        
+
         pixelData.forEach(pixel => {
           if (pixel && pixel.color) {
-            // ✅ FLIP Y: Invertir la coordenada Y basado en el tamaño del canvas
-            const flippedY = canvasSize - pixel.y - 1;
-            
             ctx.fillStyle = `rgba(${pixel.color.r}, ${pixel.color.g}, ${pixel.color.b}, ${pixel.color.a / 255})`;
-            ctx.fillRect(pixel.x, flippedY, 1, 1); // ✅ Usar flippedY
+            ctx.fillRect(pixel.x, pixel.y, 1, 1);
           }
         });
       });
-      
-      console.log(`🎉 ${pixelData.length} píxeles aplicados exitosamente con efectos (orientación corregida)`);
+
+      console.log(`🎉 ${pixelData.length} píxeles aplicados con orientación correcta`);
       alert(`✅ Modelo 3D convertido: ${pixelData.length} píxeles aplicados`);
-      
+
     } catch (error) {
       console.error('❌ Error al aplicar píxeles:', error);
       alert('❌ Error al aplicar los píxeles al editor');
@@ -10469,6 +10556,25 @@ const cutSelection = useCallback(() => {
   // reproductor (setFrame, setFrameRangeSafe) trabaja con indices.
   // Activa loopEnabled y publica loopInfo para que ambos chips muestren
   // contexto (nombre de tag + rango) y exista un punto de "salir del bucle".
+  // Capa 3D — wireup de carga de GLB. Llamado desde el dropdown "+ Capa 3D"
+  // del timeline. Pasa por el renderer singleton (parse + cache por sha1),
+  // guarda el buffer en el assetStore para uso intra-sesión, y embebe el GLB
+  // como data URL base64 en la metadata para que viaje con el .pixcalli al
+  // guardar (proyecto self-contained — sin referencias externas a GLBs).
+  const onLoadModelForLayer = useCallback(async (layerId, file) => {
+    const renderer = acquireRenderer();
+    const buffer = await file.arrayBuffer();
+    const { sha1, filename } = await renderer.loadModelFromBuffer(buffer, file.name);
+    storeBuffer(sha1, buffer, filename);
+    // El dataUrl puede ser pesado (10MB GLB → ~13MB base64). Lo generamos
+    // una sola vez al cargar; el render intra-sesión usa el buffer crudo.
+    const dataUrl = bufferToDataUrl(buffer);
+    setLayerThreeD(layerId, (prev) => ({
+      ...prev,
+      asset: { sha1, filename, relativePath: null, dataUrl },
+    }));
+  }, [setLayerThreeD]);
+
   const handlePlayTag = useCallback((tag, target = 'mini') => {
     const ref = target === 'main' ? mainPlayerApiRef : playAnimationRef;
     const api = ref.current;
@@ -10637,6 +10743,10 @@ const cutSelection = useCallback(() => {
         mainPlayerApiRef,
         loopInfo,
         onClearLoop: handleClearLoop,
+        // Capa 3D — al elegir "+ Capa 3D" en el dropdown del LayerManager,
+        // este callback parsea el GLB con el renderer singleton y guarda el
+        // buffer + asset en framesResume.extensions.threeDLayers[layerId].
+        onLoadModelForLayer,
       }),
     [
       // `frozenProps` ya cubre currentFrame/activeLayerId/frameCount/layers/frames
@@ -10773,6 +10883,10 @@ const cutSelection = useCallback(() => {
         handlePlayRange,
         playerApiRef: playAnimationRef,
         setLoopEnabled,
+        // Capa 3D — al elegir "+ Capa 3D" en el dropdown del timeline, este
+        // callback parsea el GLB con el renderer singleton y guarda el buffer
+        // + asset en framesResume.extensions.threeDLayers[layerId].
+        onLoadModelForLayer,
       }),
     [
       // Mismas deps que MemoizedLayerAnimation: ambos builders consumen el
@@ -11325,7 +11439,7 @@ const getRotationHandlerPosition = useCallback(
 // Se renderiza como `<RotationCircle .../>` en el JSX principal, pasando props equivalentes.
 
 useEffect(()=>{
-  
+
 handleRotSprite(rotationAngleSelection);
 if(!isRotationHandlerContainerPressed){
 
@@ -11334,9 +11448,114 @@ handleRotSprite(rotationAngleSelection, true);
 }
   },[rotationAngleSelection, isRotationHandlerContainerPressed]);
 
+// ── TopMenu: tracking del estado fullscreen para que el item refleje on/off.
+useEffect(() => {
+  const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+  document.addEventListener('fullscreenchange', onChange);
+  return () => document.removeEventListener('fullscreenchange', onChange);
+}, []);
+
+// ── TopMenu: handler de fullscreen toggle (web). En Electron F11 ya lo gestiona
+// el shell, pero el menú también lo expone para coherencia.
+const toggleFullscreenAction = useCallback(() => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen?.().catch(() => {});
+  } else {
+    document.exitFullscreen?.().catch(() => {});
+  }
+}, []);
+
+// ── Toggles mutuamente exclusivos para los módulos creativos pesados.
+// Sólo uno (IA o 3D) puede estar abierto a la vez: ambos consumen GPU
+// agresivamente y, montados a la vez, compiten por el render-loop.
+// Abrir el otro cierra el actual; clic sobre el ya-abierto lo cierra.
+const toggleAI = useCallback(() => {
+  if (activeAI) {
+    setActiveAI(false);
+  } else {
+    setActiveAI(true);
+    setThreeJsVisualizer(false);
+  }
+}, [activeAI]);
+
+const toggle3D = useCallback(() => {
+  if (threeJsVisualizer) {
+    setThreeJsVisualizer(false);
+  } else {
+    setThreeJsVisualizer(true);
+    setActiveAI(false);
+  }
+}, [threeJsVisualizer]);
+
+// ── TopMenu: estructura de menús. Recalcular sólo cuando cambian las
+// banderas que decoran items (selección, isolation, vista, idioma).
+const topMenus = useMemo(() => {
+  const menuHandlers = {
+    // Archivo
+    onSave:             () => setShowSaveProject(true),
+    onImportAseprite:   handleImportAseprite,
+    onImportGif:        handleImportGif,
+    onImportReference:  handleImportReferenceImage,
+    onExport:           () => setShowExporter((v) => !v),
+    // Editar
+    onUndo:             handleUndo,
+    onRedo:             handleRedo,
+    onCut:              cutSelection,
+    onCopy:             copySelection,
+    onDuplicate:        duplicateSelection,
+    onDelete:           deleteSelection,
+    onFill:             fillSelection,
+    onRotate:           handleRotation,
+    // Selección
+    onDeselect:         clearCurrentSelection,
+    onIsolate:          isolateSelection,
+    onExitIsolate:      () => setIsolatedPixels(null),
+    onGroup:            groupSelection,
+    onUngroup:          ungroupSelection,
+    onAutoCrop:         handleAutoCrop,
+    // Vista
+    onToggleRulers:     () => setShowRulers((v) => !v),
+    onToggleOnionSkin:  toggleOnionSkin,
+    onToggleFullscreen: toggleFullscreenAction,
+    onOpenFilters:      () => setShowFiltersModal(true),
+    onOpenText:         () => setShowTextTool(true),
+    onToggleScripts:    () => setShowScriptRunner((v) => !v),
+    // Creativas — toggles mutuamente exclusivos (sólo uno abierto a la vez).
+    onToggleAI:         toggleAI,
+    onToggle3D:         toggle3D,
+    // Configuración / Ayuda
+    onOpenKeybindings:  () => setShowKeybindingsModal(true),
+    onSetLanguage:      setLang,
+    onOpenAbout:        () => setShowAboutModal(true),
+    // onNewProject / onOpenProject / onExit / onOpenDocs no expuestos aún →
+    // los items quedarán disabled con el hint de i18n.
+  };
+  const flags = {
+    hasSelection:     Array.isArray(selectedPixels) && selectedPixels.length > 0,
+    isolated:         !!(isolatedPixels && isolatedPixels.length > 0),
+    showRulers,
+    onionSkinEnabled,
+    isFullscreen,
+    lang,
+    activeAI,
+    threeD: threeJsVisualizer,
+  };
+  // `react-hooks/refs` da un falso positivo: cree que `menuHandlers` es un ref
+  // porque algunas de las funciones que contiene leen refs internamente. Ese
+  // patrón está documentado como intencional en CLAUDE.md (ver "useRef +
+  // imperative mutation" en workspaceContainer.jsx).
+  // eslint-disable-next-line react-hooks/refs
+  return buildTopMenus(menuHandlers, t, flags);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [
+  t, lang, selectedPixels, isolatedPixels, showRulers, onionSkinEnabled,
+  isFullscreen, toggleFullscreenAction, activeAI, threeJsVisualizer,
+  toggleAI, toggle3D,
+]);
+
   return (
     <div className="complete-canvas-tracker">
-       <TopToolbar companyName="Argánion">
+       <TopToolbar companyName="Argánion" menus={topMenus}>
      
        
         <div className="workspace-actual-layername">
@@ -11347,192 +11566,53 @@ handleRotSprite(rotationAngleSelection, true);
 
 
         </div>
-        <div className="tools">
-          {/* Grupo: Historial */}
-          <div className="tools-group">
-            <button
-              type="button"
-              className="grid-control active"
-              title="Deshacer (Ctrl+Z)"
-              aria-label="Deshacer"
-              onClick={handleUndo}
-            >
-              <LuUndo aria-hidden="true" />
-              <p>Undo</p>
-            </button>
-            <button
-              type="button"
-              className="grid-control active"
-              title="Rehacer (Ctrl+Y)"
-              aria-label="Rehacer"
-              onClick={handleRedo}
-            >
-              <LuRedo aria-hidden="true" />
-              <p>Redo</p>
-            </button>
-          </div>
-
-          <div className="tools-divider" />
-
-          {/* Grupo: Herramientas avanzadas */}
-          <div className="tools-group">
-            <button
-              type="button"
-              className="grid-control active"
-              title="Generador con IA"
-              aria-label="Generador con IA"
-              aria-pressed={activeAI}
-              onClick={() => { setActiveAI(!activeAI); }}
-            >
-              <LuBrainCircuit aria-hidden="true" />
-              <p>Gen. IA</p>
-            </button>
-            <button
-              type="button"
-              className="grid-control active"
-              title="Visualizador 3D"
-              aria-label="Visualizador 3D"
-              aria-pressed={threeJsVisualizer}
-              onClick={() => { setThreeJsVisualizer(!threeJsVisualizer); }}
-            >
-              <LuBox aria-hidden="true" />
-              <p>3D</p>
-            </button>
-          </div>
-
-          <div className="tools-divider" />
-
-          {/* Grupo: Filtros y utilidades del plan ambicioso */}
-          <div className="tools-group">
-            <button
-              type="button"
-              className="grid-control active"
-              title="Filtros (Replace Color / Outline / Hue-Sat)"
-              aria-label="Filtros"
-              onClick={() => setShowFiltersModal(true)}
-            >
-              <MdGradient aria-hidden="true" />
-              <p>Filtros</p>
-            </button>
-            <button
-              type="button"
-              className="grid-control active"
-              title="Insertar texto bitmap"
-              aria-label="Insertar texto"
-              onClick={() => setShowTextTool(true)}
-            >
-              <span aria-hidden="true" style={{ fontWeight: 700, fontFamily: 'monospace' }}>T</span>
-              <p>Texto</p>
-            </button>
-            <button
-              type="button"
-              className="grid-control active"
-              title="Script runner (JS + sandbox)"
-              aria-label="Scripts"
-              onClick={() => setShowScriptRunner((v) => !v)}
-            >
-              <span aria-hidden="true" style={{ fontWeight: 700, fontFamily: 'monospace' }}>{'{}'}</span>
-              <p>Script</p>
-            </button>
-          </div>
-
-          <div className="tools-divider" />
-
-          {/* Grupo: Import / Utilidades del plan ambicioso */}
-          <div className="tools-group">
-            <button
-              type="button"
-              className="grid-control active"
-              title="Importar .ase / .aseprite"
-              aria-label="Importar Aseprite"
-              onClick={handleImportAseprite}
-            >
-              <span aria-hidden="true" style={{ fontWeight: 700, fontFamily: 'monospace' }}>.ase</span>
-              <p>.ase</p>
-            </button>
-            <button
-              type="button"
-              className="grid-control active"
-              title="Importar .gif animado"
-              aria-label="Importar GIF"
-              onClick={handleImportGif}
-            >
-              <span aria-hidden="true" style={{ fontWeight: 700, fontFamily: 'monospace' }}>.gif</span>
-              <p>.gif</p>
-            </button>
-            <button
-              type="button"
-              className="grid-control active"
-              title="Importar imagen como capa de referencia"
-              aria-label="Importar referencia"
-              onClick={handleImportReferenceImage}
-            >
-              <span aria-hidden="true" style={{ fontWeight: 700, fontFamily: 'monospace' }}>IMG</span>
-              <p>Ref</p>
-            </button>
-            <button
-              type="button"
-              className="grid-control active"
-              title="Auto-crop al bounding box opaco"
-              aria-label="Auto-crop"
-              onClick={handleAutoCrop}
-            >
-              <GrTopCorner aria-hidden="true" />
-              <p>Crop</p>
-            </button>
-            <button
-              type="button"
-              className={`grid-control${showRulers ? ' active' : ''}`}
-              title="Mostrar reglas y guías"
-              aria-label="Toggle rulers"
-              aria-pressed={showRulers}
-              onClick={() => setShowRulers((v) => !v)}
-            >
-              <span aria-hidden="true" style={{ fontWeight: 700, fontFamily: 'monospace' }}>┼</span>
-              <p>Reglas</p>
-            </button>
-          </div>
-
-          <div className="tools-divider" />
-
-          {/* Grupo: Acciones de archivo */}
-          <div className="tools-group">
-            <button
-              type="button"
-              className="grid-control active"
-              title="Exportar animacion"
-              aria-label="Exportar animacion"
-              onClick={() => { setShowExporter(!showExporter); }}
-            >
-              <LuUpload aria-hidden="true" />
-              <p>Exportar</p>
-            </button>
-            <button
-              type="button"
-              className="grid-control active grid-control--save"
-              title="Guardar proyecto (Ctrl+S)"
-              aria-label="Guardar proyecto"
-              onClick={() => setShowSaveProject(true)}
-            >
-              <LuSave aria-hidden="true" />
-              <p>Guardar</p>
-            </button>
-          </div>
-
-          {/* Salir de aislamiento (condicional) */}
-          {isolatedPixels && (
-            <button
-              type="button"
-              className="grid-control active grid-control--danger"
-              title="Salir del modo aislamiento"
-              aria-label="Salir del modo aislamiento"
-              onClick={() => { setIsolatedPixels(null); }}
-            >
-              <FaFileExport aria-hidden="true" />
-              <p>Salir</p>
-            </button>
-          )}
+        {/* Botones rápidos para los dos módulos creativos pesados (IA, 3D).
+         * Los demás botones inline (Undo, Filtros, Importar, etc.) viven en
+         * los menús desplegables — sólo IA y 3D quedan a un click porque su
+         * apertura es deliberada y la IA además muestra su estado (generando,
+         * idle) sobre el propio botón. */}
+        <div className="quick-actions" role="group" aria-label="Atajos de módulos creativos">
+          <button
+            type="button"
+            className={
+              'quick-action quick-action--ai' +
+              (activeAI ? ' quick-action--active' : '') +
+              (aiGenerating ? ' quick-action--busy' : '')
+            }
+            onClick={toggleAI}
+            aria-pressed={activeAI}
+            title={
+              aiGenerating
+                ? 'Generando imagen con IA…'
+                : activeAI
+                  ? 'Cerrar generador con IA'
+                  : 'Abrir generador con IA'
+            }
+          >
+            {aiGenerating && <span className="quick-action__pulse" aria-hidden="true" />}
+            <LuBrainCircuit className="quick-action__icon" aria-hidden="true" />
+            <span className="quick-action__label">
+              {aiGenerating ? 'Generando…' : 'IA'}
+            </span>
+          </button>
+          <button
+            type="button"
+            className={
+              'quick-action quick-action--3d' +
+              (threeJsVisualizer ? ' quick-action--active' : '')
+            }
+            onClick={toggle3D}
+            aria-pressed={threeJsVisualizer}
+            title={threeJsVisualizer ? 'Cerrar visualizador 3D' : 'Abrir visualizador 3D'}
+          >
+            <LuBox className="quick-action__icon" aria-hidden="true" />
+            <span className="quick-action__label">3D</span>
+          </button>
         </div>
+        {/* Bloque <div className="tools"> original eliminado: el resto de
+         * acciones viven en los menús desplegables del TopToolbar
+         * (Archivo / Editar / Selección / Vista). Mantener el
+         * espacio limpio. */}
         <ReflexMode
           mirrorState={mirrorState}
           setMirrorState={setMirrorState}
@@ -11564,6 +11644,8 @@ handleRotSprite(rotationAngleSelection, true);
       theme={navConfigLateral.theme}
       showOnlyIcons={navConfigLateral.showOnlyIcons}
       twoColumns={navConfigLateral.twoColumns}
+      collapsed={navCollapsed}
+      onCollapseChange={setNavCollapsed}
     />
     
         
@@ -11572,10 +11654,16 @@ handleRotSprite(rotationAngleSelection, true);
               createLayerAndPaintDataUrlCentered={
                 createLayerAndPaintDataUrlCentered
               }
+              onGeneratingChange={setAiGenerating}
             />
-            
-
           </div>
+          {/* Botón de cierre flotante para el AIgenerator legacy
+            * (que no expone onClose). Se monta sólo cuando activeAI=true,
+            * engancha Esc al window y queda por encima del overlay. */}
+          <PanelFloatingClose
+            active={activeAI}
+            onClose={() => setActiveAI(false)}
+          />
           {/* <Activity> preserva estado y DOM del visor 3D (igual que el
               display:none anterior), pero además destruye los efectos mientras
               está oculto: el render-loop de Three.js se pausa en vez de quemar
@@ -11585,6 +11673,52 @@ handleRotSprite(rotationAngleSelection, true);
               <Enhanced3DFlattener onPixelDataReady={handlePixelDataFromThreeJS} paintPixelsRGBA={paintPixelsRGBA} activeLayerId={activeLayerId}/>
             </div>
           </Activity>
+
+          {/* Drivers invisibles para capas 3D. Una instancia por cada capa
+              type:'3d' visible — cada driver se suscribe a cambios de
+              metadata + frame y re-renderiza el modelo al canvas2D de la
+              capa. NO renderiza UI propia; solo dispara side effects en
+              respuesta a state changes. */}
+          <Layer3DDriversHost
+            layers={layers}
+            getLayerThreeD={getLayerThreeD}
+            currentFrame={currentFrame}
+            totalFrames={frameCount}
+            width={totalWidth}
+            height={totalHeight}
+            getCanvasForLayer={(layerId) => frames?.[currentFrame]?.canvases?.[layerId] || null}
+            onAfterRender={() => compositeRenderRef.current && compositeRenderRef.current()}
+          />
+
+          {/* Panel lateral derecho — solo visible cuando la capa activa es
+              type:'3d'. Muestra controles equivalentes al visor 3D modal
+              pero conectados a la metadata de la capa, no a un visor aislado. */}
+          {(() => {
+            const activeLayer = layers?.find((l) => l.id === activeLayerId);
+            if (activeLayer?.type !== '3d') return null;
+            return (
+              <Layer3DPanel
+                layerId={activeLayerId}
+                metadata={getLayerThreeD(activeLayerId)}
+                currentFrame={currentFrame}
+                totalFrames={frameCount}
+                setLayerThreeD={setLayerThreeD}
+                setLayer3DFrameOverride={setLayer3DFrameOverride}
+                onClose={() => {
+                  // Al cerrar el panel, el usuario quiere "salir" del modo
+                  // capa 3D — seleccionamos la primera capa de pintura, o
+                  // dejamos la activa si no hay otras (el panel quedará oculto
+                  // hasta que cambie la capa activa).
+                  const firstPaint = layers?.find((l) => l.type !== '3d');
+                  if (firstPaint) setActiveLayerId(firstPaint.id);
+                }}
+              />
+            );
+          })()}
+          <PanelFloatingClose
+            active={threeJsVisualizer}
+            onClose={() => setThreeJsVisualizer(false)}
+          />
           
 
       
@@ -11616,23 +11750,25 @@ handleRotSprite(rotationAngleSelection, true);
               justifyContent: "space-between",
             }}
           >
-            
-            <CustomTool
-  setToolParameters={setToolParameters}
-  tool={tool}
-  toolParameters={toolParameters}
-  myBrushes={myBrushes}
-  copySelection={copySelection}
-  cutSelection={cutSelection}
-  pastePixels={pastePixels}
-  duplicateSelection={duplicateSelection}
-  handleRotation={handleRotation}
-  fillSelection={fillSelection}
-  isolateSelection={isolateSelection}
-  groupSelection={groupSelection}
-  ungroupSelection={ungroupSelection}
-  deleteSelection={deleteSelection}
-/>
+            <div className="toolbar-left-group" style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+              {collapsedIndicator}
+              <CustomTool
+                setToolParameters={setToolParameters}
+                tool={tool}
+                toolParameters={toolParameters}
+                myBrushes={myBrushes}
+                copySelection={copySelection}
+                cutSelection={cutSelection}
+                pastePixels={pastePixels}
+                duplicateSelection={duplicateSelection}
+                handleRotation={handleRotation}
+                fillSelection={fillSelection}
+                isolateSelection={isolateSelection}
+                groupSelection={groupSelection}
+                ungroupSelection={ungroupSelection}
+                deleteSelection={deleteSelection}
+              />
+            </div>
 
             {/* Coordinates info */}
           </div>
@@ -11998,6 +12134,17 @@ handleRotSprite(rotationAngleSelection, true);
            ),
          }}
        />
+        {/* Modales del menú superior — montados sólo cuando open=true. */}
+        <AboutModal
+          open={showAboutModal}
+          onClose={() => setShowAboutModal(false)}
+          version="0.1.0"
+        />
+        <KeybindingsModal
+          open={showKeybindingsModal}
+          onClose={() => setShowKeybindingsModal(false)}
+          registry={keybindingsRegistry}
+        />
         {showSaveProject && (
           <SaveProject
             frames={frames}

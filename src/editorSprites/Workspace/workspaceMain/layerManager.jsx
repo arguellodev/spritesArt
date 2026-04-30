@@ -1,21 +1,153 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 //import './layerManager.css';
-import { 
-  LuEye, 
-  LuEyeOff, 
-  LuTrash2, 
-  LuArrowUp, 
-  LuArrowDown, 
-  LuX, 
-  LuChevronDown, 
+import {
+  LuEye,
+  LuEyeOff,
+  LuTrash2,
+  LuArrowUp,
+  LuArrowDown,
+  LuX,
+  LuChevronDown,
   LuChevronRight,
   LuGroup,
   LuSquare,
   LuMousePointer,
-  LuGripVertical
+  LuGripVertical,
+  LuBox,        // capa 3D
+  LuPlus,       // dropdown trigger
+  LuUpload,     // cargar GLB
 } from "react-icons/lu";
 
-const LayerManager = ({ 
+// Dropdown del botón "+" del header del LayerManager. Dos opciones:
+//  - "Capa" (pintura, default — equivalente al antiguo botón).
+//  - "Capa 3D" (carga modelos GLB y los renderiza como pixel-art).
+// Se cierra al click-fuera o Escape. Posicionado fixed para escapar del
+// `overflow:hidden` del header (mismo truco que el onion-skin popover).
+const AddLayerDropdown = ({ addLayer, onLoadModelForLayer }) => {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocDown = (e) => {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target) &&
+        triggerRef.current && !triggerRef.current.contains(e.target)
+      ) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDocDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const toggle = () => {
+    if (!open && triggerRef.current) {
+      const r = triggerRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, left: r.right - 180 }); // alinear a la derecha
+    }
+    setOpen((o) => !o);
+  };
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        className="add-layer-btn"
+        onClick={toggle}
+        title="Añadir capa nueva"
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <LuPlus style={{ marginRight: 4 }} /> Capa
+        <LuChevronDown style={{ marginLeft: 4, opacity: 0.7 }} />
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          role="menu"
+          style={{
+            position: 'fixed',
+            top: pos.top,
+            left: pos.left,
+            minWidth: 180,
+            background: 'rgba(28, 28, 32, 0.96)',
+            backdropFilter: 'blur(14px)',
+            border: '1px solid rgba(140, 82, 255, 0.22)',
+            borderRadius: 8,
+            boxShadow: '0 12px 36px rgba(0,0,0,0.55)',
+            padding: 4,
+            zIndex: 100001,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => { addLayer({ type: 'paint' }); setOpen(false); }}
+            style={dropdownItemStyle}
+          >
+            <LuSquare style={{ width: 14, height: 14, color: '#9d6dff' }} />
+            <span>Capa de pintura</span>
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              setOpen(false);
+              const newId = addLayer({ type: '3d' });
+              if (!newId || !onLoadModelForLayer) return;
+              // Tras crear la capa, abrimos automáticamente un file picker
+              // para que el usuario seleccione el GLB. Es el flujo más corto
+              // (1 click + 1 dialog vs. 1 click + buscar botón en el panel).
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.accept = '.glb,.gltf';
+              input.onchange = async (e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  try { await onLoadModelForLayer(newId, file); }
+                  catch (err) { console.error('[Capa 3D] error cargando modelo:', err); }
+                }
+              };
+              input.click();
+            }}
+            style={dropdownItemStyle}
+          >
+            <LuBox style={{ width: 14, height: 14, color: '#9d6dff' }} />
+            <span>Capa 3D</span>
+          </button>
+        </div>
+      )}
+    </>
+  );
+};
+
+const dropdownItemStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  width: '100%',
+  padding: '7px 10px',
+  background: 'transparent',
+  border: 'none',
+  borderRadius: 5,
+  color: '#f0f0f0',
+  fontSize: 12.5,
+  fontFamily: 'Inter, system-ui, sans-serif',
+  cursor: 'pointer',
+  textAlign: 'left',
+  letterSpacing: '0.01em',
+};
+
+const LayerManager = ({
   layers,
   addLayer,
   deleteLayer,
@@ -54,7 +186,12 @@ const LayerManager = ({
   // Nuevas funciones para drag and drop (necesitarás implementarlas en el componente padre)
   moveLayerToPosition,
   moveGroupToLayer,
-  moveGroupToPosition
+  moveGroupToPosition,
+  // Carga de modelo 3D al crear "+ Capa 3D" — recibe (layerId, File).
+  // Su responsabilidad: parsear GLB con el renderer singleton, guardar el
+  // buffer en el assetStore y poblar extensions.threeDLayers[layerId].asset.
+  // Si no se pasa, la creación de capa 3D no abre file picker.
+  onLoadModelForLayer,
 }) => {
   const [editingLayerId, setEditingLayerId] = useState(null);
   const [editingName, setEditingName] = useState('');
@@ -409,11 +546,20 @@ const LayerManager = ({
                   onClick={(e) => e.stopPropagation()}
                 />
               ) : (
-                <div 
+                <div
                   className="layer-name"
                   onDoubleClick={(e) => startEditing(layer, e)}
                   title="Doble clic para editar"
                 >
+                  {layer.type === '3d' && (
+                    <LuBox
+                      style={{
+                        width: 12, height: 12, marginRight: 5,
+                        color: '#9d6dff', verticalAlign: 'middle', flexShrink: 0,
+                      }}
+                      title="Capa 3D"
+                    />
+                  )}
                   {layer.name}
                   {!isGroup && layerGroups.length > 0 && (
                     <span className="group-count">({layerGroups.length})</span>
@@ -581,13 +727,7 @@ const LayerManager = ({
             <LuArrowDown />
           </button>
           
-          <button 
-            className="add-layer-btn" 
-            onClick={addLayer}
-            title="Añadir nueva capa"
-          >
-            + Capa
-          </button>
+          <AddLayerDropdown addLayer={addLayer} onLoadModelForLayer={onLoadModelForLayer} />
         </div>
       </div>
 

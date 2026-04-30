@@ -14,6 +14,7 @@ setAutoFreeze(false);
 import { useOptimizedFloodFill } from './optimizedFloodFill';
 import { isValidBlendMode, DEFAULT_BLEND_MODE } from '../blendModes';
 import { drawLayerBlended } from '../pixelBlender';
+import { makeDefault3DLayerMetadata } from '../threeD/schema';
 /**
  * Custom hook for tracking pointer/mouse interactions
  */
@@ -425,7 +426,16 @@ const [framesResume, setFramesResume] = useState({
     frameSequence: [1],
     totalFrames: 1,
     keyframes: {}
-  }
+  },
+  // Bolsa extensible para metadata específica de tipos de capa o features
+  // futuras. El parser viejo (v2.0.0) ignora claves que no conoce → forward
+  // compatible. Los proyectos sin esta clave la reciben vacía al cargar.
+  extensions: {
+    // Capas 3D: para cada layer.id con type:'3d' guarda asset, base settings
+    // (cámara, brillo, outlines, animación...) y frameOverrides{frameNumber}.
+    // Ver docs/threeD-layer-schema.md (a crear en Fase 5).
+    threeDLayers: {},
+  },
 });
 const [currentFrame, setCurrentFrame] = useState(1);
 const [frameCount, setFrameCount] = useState(1);
@@ -2157,15 +2167,28 @@ const addGroupLayer = useCallback((parentLayerId) => {
 
 // ✅ VERSIÓN CORREGIDA de addLayer - Sin duplicación de variables
 
-const addLayer = useCallback(() => {
+const addLayer = useCallback((opts = {}) => {
+  // opts.type: 'paint' (default) o '3d'. Las capas 3D se distinguen por su
+  // type — el canvas 2D existe igual y el resto del sistema (composite,
+  // save, blend, undo) las trata de forma idéntica. Lo único distinto es
+  // QUIÉN escribe ese canvas: en pintura es el usuario via tools; en 3D
+  // es el ThreeDLayerRenderer singleton (Fase 3).
+  const layerType = opts.type === '3d' ? '3d' : 'paint';
   const newLayerId = nanoid();
   const highestZIndex = layers.length > 0
     ? Math.max(...layers.map(layer => layer.zIndex))
     : -1;
 
+  // Las capas 3D heredan un nombre por defecto que el panel sobrescribirá
+  // con el nombre del archivo GLB cuando el usuario lo cargue.
+  const defaultName = layerType === '3d'
+    ? `3D ${layers.filter(l => l.type === '3d').length + 1}`
+    : `Layer ${layers.length + 1}`;
+
   const baseLayer = {
     id: newLayerId,
-    name: `Layer ${layers.length + 1}`,
+    name: defaultName,
+    type: layerType,
     visible: {},
     zIndex: highestZIndex + 1,
     blendMode: 'normal',
@@ -2214,8 +2237,12 @@ const addLayer = useCallback(() => {
   setFramesResume(prev => produce(prev, draft => {
     draft.layers[newLayerId] = {
       id: newLayerId,
-      name: `Layer ${Object.keys(prev.layers).length + 1}`,
-      type: 'normal',
+      name: defaultName,
+      // El campo `type` aquí distingue 'normal' (capa raíz), 'group' (sub-capa
+      // dentro de un grupo) y ahora '3d'. Los consumers viejos que esperaban
+      // 'normal' siguen funcionando — el switch trata '3d' como 'normal' en
+      // todo lo que no es renderizado de píxeles (visibilidad, blend, etc.).
+      type: layerType === '3d' ? '3d' : 'normal',
       parentLayerId: null,
       zIndex: highestZIndex + 1,
       blendMode: 'normal',
@@ -2236,6 +2263,15 @@ const addLayer = useCallback(() => {
       draft.computed.resolvedFrames[frameKey].layerOpacity[newLayerId] = 1.0;
       draft.computed.resolvedFrames[frameKey].layerHasContent[newLayerId] = false;
     });
+
+    // Inicializar entry de capa 3D con defaults razonables. El asset es null
+    // hasta que el usuario cargue un GLB. La metadata vive en extensions
+    // para que proyectos en versiones viejas la ignoren sin crashear.
+    if (layerType === '3d') {
+      if (!draft.extensions) draft.extensions = { threeDLayers: {} };
+      if (!draft.extensions.threeDLayers) draft.extensions.threeDLayers = {};
+      draft.extensions.threeDLayers[newLayerId] = makeDefault3DLayerMetadata();
+    }
   }));
 
   setFrames(updatedFrames);
@@ -2254,6 +2290,68 @@ const addLayer = useCallback(() => {
 
   return newLayerId;
 }, [layers, width, height, frames, currentFrame, getOrCreateCanvas]);
+
+// ===== Helpers para capas 3D =====
+//
+// Mutar la metadata de una capa 3D pasa SIEMPRE por estos helpers, no
+// directamente por setFramesResume. Razones:
+//   1. Garantizan que extensions.threeDLayers existe antes de tocarla.
+//   2. Centralizan la suscripción de re-render: el hook use3DLayer (Fase 3)
+//      detecta cambios via deep-equal de la metadata.
+//   3. Permiten validación futura (rangos de sliders, etc.) sin tocar
+//      callsites.
+//
+// Patrón de uso:
+//   setLayerThreeD(layerId, prev => ({ ...prev, base: { ...prev.base, brightness: 1.4 } }))
+//   setLayerThreeD(layerId, { asset: { sha1, filename, relativePath } })
+//
+// El 2do argumento puede ser un objeto patch (merge superficial sobre la
+// raíz) o una función (patch profundo, recibe el prev y devuelve el next).
+
+const setLayerThreeD = useCallback((layerId, patchOrFn) => {
+  setFramesResume(prev => produce(prev, draft => {
+    if (!draft.extensions) draft.extensions = { threeDLayers: {} };
+    if (!draft.extensions.threeDLayers) draft.extensions.threeDLayers = {};
+
+    const current = draft.extensions.threeDLayers[layerId] || makeDefault3DLayerMetadata();
+    const next = typeof patchOrFn === 'function'
+      ? patchOrFn(current)
+      : { ...current, ...patchOrFn };
+    draft.extensions.threeDLayers[layerId] = next;
+  }));
+}, []);
+
+// Override por frame para una capa 3D. Sparse — solo se guardan las claves
+// que difieran del base. Pasar `null` como patch elimina el override entero
+// para ese frame (vuelve a usar el base + autoTimeline).
+const setLayer3DFrameOverride = useCallback((layerId, frameNumber, patchOrNull) => {
+  setFramesResume(prev => produce(prev, draft => {
+    if (!draft.extensions) draft.extensions = { threeDLayers: {} };
+    if (!draft.extensions.threeDLayers) draft.extensions.threeDLayers = {};
+    if (!draft.extensions.threeDLayers[layerId]) {
+      draft.extensions.threeDLayers[layerId] = makeDefault3DLayerMetadata();
+    }
+    const layer3D = draft.extensions.threeDLayers[layerId];
+    if (!layer3D.frameOverrides) layer3D.frameOverrides = {};
+
+    if (patchOrNull == null) {
+      delete layer3D.frameOverrides[frameNumber];
+    } else {
+      layer3D.frameOverrides[frameNumber] = {
+        ...(layer3D.frameOverrides[frameNumber] || {}),
+        ...patchOrNull,
+      };
+    }
+  }));
+}, []);
+
+// Lectura conveniente: devuelve la metadata de una capa 3D, o null si la
+// capa no es 3D o no existe. Útil para components que necesitan render
+// condicional (ej. el panel derecho).
+const getLayerThreeD = useCallback((layerId) => {
+  return framesResume?.extensions?.threeDLayers?.[layerId] || null;
+}, [framesResume]);
+
   /**
    * Delete a layer by ID
    */
@@ -2322,6 +2420,11 @@ const addLayer = useCallback(() => {
         delete resolved.layerOpacity[layerId];
         delete resolved.layerHasContent[layerId];
       });
+      // Limpiar metadata 3D si la capa tenía type:'3d'. Si no era 3D el delete
+      // es no-op; cuesta menos que checkear el tipo.
+      if (draft.extensions?.threeDLayers) {
+        delete draft.extensions.threeDLayers[layerId];
+      }
     }));
   
     setFrames(updatedFrames);
@@ -7342,6 +7445,12 @@ return {
   renameLayer,
   clearLayer,
   duplicateLayer,
+
+  // Capas 3D — metadata vive en framesResume.extensions.threeDLayers.
+  // Ver Workspace/threeD/schema.js y la fase de plan correspondiente.
+  setLayerThreeD,
+  setLayer3DFrameOverride,
+  getLayerThreeD,
   
   // Drawing and rendering
   drawOnLayer,

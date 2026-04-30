@@ -100,6 +100,7 @@ export function renderFramesTimeline(props) {
       handlePlayRange={props.handlePlayRange}
       playerApiRef={props.playerApiRef}
       setLoopEnabled={props.setLoopEnabled}
+      onLoadModelForLayer={props.onLoadModelForLayer}
     />
   );
 }

@@ -39,11 +39,149 @@ import {
   LuPalette,
   LuPencil,
   LuTag,
+  LuBox, // Capa 3D
 } from "react-icons/lu";
 import { BiSolidLayerPlus } from "react-icons/bi";
 import { BLEND_MODES, BLEND_GROUP_LABELS, getBlendModeLabel } from '../blendModes';
 import { createTag, addTag, removeTag, updateTag, findOverlappingTag } from '../animation/animationTags';
 import TagBand from '../animation/TagBand';
+
+// Dropdown del botón "Nueva" (esquina superior izquierda del timeline).
+// Click → abre menú con dos opciones: "Capa de pintura" / "Capa 3D".
+// Al elegir "3D" se crea la capa Y se abre file picker automáticamente para
+// el GLB — el flujo más corto para que el usuario empiece a ver pixeles.
+// Click-fuera o Escape cierran el menú. Posición fixed para escapar de
+// `overflow:hidden` del contenedor del timeline.
+const AddLayerCornerDropdown = ({
+  addLayer, setActiveLayerId, clearCurrentSelection, onLoadModelForLayer,
+}) => {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocDown = (e) => {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target) &&
+        triggerRef.current && !triggerRef.current.contains(e.target)
+      ) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDocDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const toggle = () => {
+    if (!open && triggerRef.current) {
+      const r = triggerRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, left: r.left });
+    }
+    setOpen((o) => !o);
+  };
+
+  const createPaint = () => {
+    setOpen(false);
+    clearCurrentSelection();
+    const newId = addLayer();
+    if (newId) setActiveLayerId(newId);
+  };
+
+  const create3D = () => {
+    setOpen(false);
+    clearCurrentSelection();
+    const newId = addLayer({ type: '3d' });
+    if (newId) setActiveLayerId(newId);
+    if (newId && onLoadModelForLayer) {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.glb,.gltf';
+      input.onchange = async (e) => {
+        const file = e.target.files?.[0];
+        if (file) {
+          try { await onLoadModelForLayer(newId, file); }
+          catch (err) { console.error('[Capa 3D] error cargando modelo:', err); }
+        }
+      };
+      input.click();
+    }
+  };
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="corner-add-layer-btn"
+        onClick={toggle}
+        title="Añadir nueva capa"
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <BiSolidLayerPlus />
+        <span>Nueva</span>
+        <LuChevronDown style={{ marginLeft: 2, opacity: 0.6, fontSize: 11 }} />
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          role="menu"
+          style={{
+            position: 'fixed',
+            top: pos.top,
+            left: pos.left,
+            minWidth: 190,
+            background: 'rgba(28, 28, 32, 0.96)',
+            backdropFilter: 'blur(14px)',
+            border: '1px solid rgba(140, 82, 255, 0.22)',
+            borderRadius: 8,
+            boxShadow: '0 12px 36px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.35)',
+            padding: 4,
+            zIndex: 100001,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+            fontFamily: "'Inter', system-ui, sans-serif",
+          }}
+        >
+          <button type="button" onClick={createPaint} style={timelineDropdownItem}>
+            <LuLayers style={{ width: 14, height: 14, color: '#9d6dff' }} />
+            <span>Capa de pintura</span>
+          </button>
+          <button type="button" onClick={create3D} style={timelineDropdownItem}>
+            <LuBox style={{ width: 14, height: 14, color: '#9d6dff' }} />
+            <span>Capa 3D</span>
+            <span style={{ marginLeft: 'auto', fontSize: 9.5, opacity: 0.5 }}>GLB</span>
+          </button>
+        </div>
+      )}
+    </>
+  );
+};
+
+const timelineDropdownItem = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  width: '100%',
+  padding: '7px 10px',
+  background: 'transparent',
+  border: 'none',
+  borderRadius: 5,
+  color: '#f0f0f0',
+  fontSize: 12.5,
+  fontFamily: "'Inter', system-ui, sans-serif",
+  cursor: 'pointer',
+  textAlign: 'left',
+  letterSpacing: '0.01em',
+};
 
 // Destructura minimal: solo las props realmente consumidas. El wrapper
 // memoizado sigue pasando más props; React ignora las extras.
@@ -60,6 +198,10 @@ const FramesTimeline = ({
   clearLayer,
   activeLayerId,
   setActiveLayerId,
+
+  // Capa 3D — al elegir "+ Capa 3D" en el dropdown se invoca este callback
+  // con (newLayerId, File). Si no se pasa, la opción 3D queda oculta.
+  onLoadModelForLayer,
 
   // Grupos / selección (consumidos por LayerRow + handlers)
   pixelGroups,
@@ -1400,24 +1542,12 @@ const renderLayerWithTimeline = (layer) => {
               (Nueva / ↑ / ↓). Sticky-left + sticky-top → siempre visibles. */}
           <div className="timeline-header-left-placeholder">
             <div className="layers-corner-actions">
-              <button
-                type="button"
-                className="corner-add-layer-btn"
-                onClick={() => {
-                  clearCurrentSelection();
-                  // `addLayer` internamente hace `setActiveLayerId(newLayerId)`,
-                  // pero lo seteamos explícito aquí también para blindar el
-                  // caso donde el batcher de React coalesce múltiples setStates
-                  // y el orden de commit pudiera dejar al anterior activeLayerId
-                  // ganando. El setState extra es idempotente si es el mismo ID.
-                  const newLayerId = addLayer();
-                  if (newLayerId) setActiveLayerId(newLayerId);
-                }}
-                title="Añadir nueva capa"
-              >
-                <BiSolidLayerPlus />
-                <span>Nueva</span>
-              </button>
+              <AddLayerCornerDropdown
+                addLayer={addLayer}
+                setActiveLayerId={setActiveLayerId}
+                clearCurrentSelection={clearCurrentSelection}
+                onLoadModelForLayer={onLoadModelForLayer}
+              />
               <button
                 type="button"
                 className="corner-move-btn"
