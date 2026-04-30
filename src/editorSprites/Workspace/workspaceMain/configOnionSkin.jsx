@@ -34,6 +34,11 @@ const ConfigOnionSkin = ({
   }, [isOpen, clearTintCache]);
 
   const overlayRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -43,12 +48,12 @@ const ConfigOnionSkin = ({
       if (!overlay) return;
       const anchor = overlay.closest('.onion-config-anchor');
       if (anchor && !anchor.contains(e.target)) {
-        onClose();
+        onCloseRef.current();
       }
     };
 
     const handleKey = (e) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
 
     document.addEventListener('pointerdown', handlePointer);
@@ -57,7 +62,7 @@ const ConfigOnionSkin = ({
       document.removeEventListener('pointerdown', handlePointer);
       document.removeEventListener('keydown', handleKey);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   const handleFrameConfigChange = (type, index, key, value) => {
     if (updateFrameConfig) {
