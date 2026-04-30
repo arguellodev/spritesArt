@@ -33,6 +33,32 @@ const ConfigOnionSkin = ({
     }
   }, [isOpen, clearTintCache]);
 
+  const overlayRef = useRef(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handlePointer = (e) => {
+      const overlay = overlayRef.current;
+      if (!overlay) return;
+      const anchor = overlay.closest('.onion-config-anchor');
+      if (anchor && !anchor.contains(e.target)) {
+        onClose();
+      }
+    };
+
+    const handleKey = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+
+    document.addEventListener('pointerdown', handlePointer);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointer);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [isOpen, onClose]);
+
   const handleFrameConfigChange = (type, index, key, value) => {
     if (updateFrameConfig) {
       updateFrameConfig(type, index, { [key]: value });
@@ -117,7 +143,7 @@ const ConfigOnionSkin = ({
   const selectedFrame = currentFrameArray[selectedFrameIndex] || null;
 
   return (
-    <div className="onion-config__overlay">
+    <div className="onion-config__overlay" ref={overlayRef} role="dialog" aria-modal="false">
       <div className="onion-config__modal">
         
         {/* Header */}

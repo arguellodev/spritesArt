@@ -1355,21 +1355,6 @@ const renderLayerWithTimeline = (layer) => {
         }}
         
       />
-      <ConfigOnionSkin
-       
-    
-  isOpen={openOnion}
-  onClose={() => setOpenOnion(false)}
-  onionFramesConfig={onionFramesConfig}
-  setOnionFramesConfig={setOnionFramesConfig}
-  updateFrameConfig={updateFrameConfig}
-  addPreviousFrame={addPreviousFrame}
-  addNextFrame={addNextFrame}
-  removeFrame={removeFrame}
-  toggleOnionFrames={toggleOnionFrames}
-  applyOnionFramesPreset={applyOnionFramesPreset}
-  clearTintCache={clearTintCache}
-/>
       {/* Barra de animación unificada — UNA SOLA FILA a la misma altura.
           - Sticky-left: TODOS los controles (playback + layer + frame tools).
           - Centro: frame-numbers strip (scroll horizontal).
@@ -1657,13 +1642,30 @@ const renderLayerWithTimeline = (layer) => {
               <div className="toggle-slider"></div>
             </div>
           </div>
-          <button
-            className="config-button"
-            onClick={() => { setOpenOnion(true); }}
-            title="Configurar Onion Skin"
-          >
-            <LuSettings />
-          </button>
+          <div className="onion-config-anchor">
+            <button
+              className="config-button"
+              onClick={() => setOpenOnion(v => !v)}
+              aria-expanded={openOnion}
+              aria-haspopup="dialog"
+              title="Configurar Onion Skin"
+            >
+              <LuSettings />
+            </button>
+            <ConfigOnionSkin
+              isOpen={openOnion}
+              onClose={() => setOpenOnion(false)}
+              onionFramesConfig={onionFramesConfig}
+              setOnionFramesConfig={setOnionFramesConfig}
+              updateFrameConfig={updateFrameConfig}
+              addPreviousFrame={addPreviousFrame}
+              addNextFrame={addNextFrame}
+              removeFrame={removeFrame}
+              toggleOnionFrames={toggleOnionFrames}
+              applyOnionFramesPreset={applyOnionFramesPreset}
+              clearTintCache={clearTintCache}
+            />
+          </div>
           {/* Toggle collapse: oculta el timeline grid de capas/frames y deja
               solo esta barra. La navegación de capas (layer-nav-group) +
               playback + frame-tools siguen funcionando — es el modo "HUD"

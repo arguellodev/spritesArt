@@ -34,13 +34,9 @@
 /* ============ OVERLAY Y MODAL ============ */
 .onion-config__overlay {
   position: absolute;
-  transform: translateY(calc(-100% - 10px));
+  bottom: calc(100% + 8px);
   right: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   z-index: 1000;
-  backdrop-filter: blur(4px);
 }
 
 .onion-config__modal {
@@ -855,31 +851,30 @@
 }
 
 @media (max-width: 480px) {
+  .onion-config__overlay {
+    right: -10px;
+  }
+
   .onion-config__modal {
-    width: 100vw;
-    height: 100vh;
-    border-radius: 0;
-    max-height: none;
+    width: calc(100vw - 20px);
+    max-width: calc(100vw - 20px);
+    max-height: 80vh;
   }
-  
-  .onion-config__header {
-    border-radius: 0;
-  }
-  
+
   .onion-config__frame-header {
     padding: 12px;
   }
-  
+
   .onion-config__frame-controls {
     padding: 0 12px 12px;
   }
-  
+
   .onion-config__quick-controls {
     flex-direction: column;
     gap: 12px;
     align-items: stretch;
   }
-  
+
   .onion-config__frame-stats {
     justify-content: space-around;
   }
