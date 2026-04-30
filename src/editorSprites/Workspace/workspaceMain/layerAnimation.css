@@ -2105,24 +2105,28 @@ margin-right: 20px;
    Combinado con `.timeline-frame.active` del lado de frames, el usuario ve
    de un vistazo qué capa está activa SIN importar en qué frame esté. */
 .animation-layer-row .layer-info.selected {
-  background: linear-gradient(
-    90deg,
-    rgba(140, 82, 255, 0.28) 0%,
-    rgba(140, 82, 255, 0.12) 60%,
-    rgba(140, 82, 255, 0.06) 100%
-  );
+  background:
+    linear-gradient(
+      90deg,
+      rgba(140, 82, 255, 0.28) 0%,
+      rgba(140, 82, 255, 0.12) 60%,
+      rgba(140, 82, 255, 0.06) 100%
+    ),
+    var(--bg-secondary);
   box-shadow:
     inset 4px 0 0 0 var(--accent-color),             /* barra lateral */
     2px 0 8px -2px rgba(140, 82, 255, 0.45);         /* halo derecho */
 }
 
 .animation-layer-row .layer-info.selected:hover {
-  background: linear-gradient(
-    90deg,
-    rgba(140, 82, 255, 0.36) 0%,
-    rgba(140, 82, 255, 0.16) 60%,
-    rgba(140, 82, 255, 0.08) 100%
-  );
+  background:
+    linear-gradient(
+      90deg,
+      rgba(140, 82, 255, 0.36) 0%,
+      rgba(140, 82, 255, 0.16) 60%,
+      rgba(140, 82, 255, 0.08) 100%
+    ),
+    var(--bg-secondary);
 }
 
 /* Nombre de la capa en estado seleccionado: más blanco + peso, para leerse
