@@ -2983,13 +2983,3 @@ margin-right: 20px;
   }
 }
 
-/* ============================================================================
-   ANCHOR para el popover de Onion Skin: provee position: relative al botón
-   ⚙ + <ConfigOnionSkin> juntos, para que el overlay del popover se ancle
-   correctamente con bottom/right en lugar de irse al body.
-   ============================================================================ */
-.unified-timeline-right .onion-config-anchor {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-}

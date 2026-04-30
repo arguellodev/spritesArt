@@ -32,10 +32,11 @@
 }
 
 /* ============ OVERLAY Y MODAL ============ */
+/* Posicionado vía createPortal a document.body — coords (right/bottom) y
+   visibility se setean via inline style desde JS para alinear con el botón ⚙
+   y abrir hacia arriba (la barra de animación está en la parte inferior). */
 .onion-config__overlay {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  right: 0;
+  position: fixed;
   z-index: 1000;
 }
 
@@ -587,10 +588,7 @@
 }
 
 @media (max-width: 480px) {
-  .onion-config__overlay {
-    right: -10px;
-  }
-
+  /* coords del overlay vienen de JS — solo limitamos el modal interno */
   .onion-config__modal {
     width: calc(100vw - 20px);
     max-width: calc(100vw - 20px);

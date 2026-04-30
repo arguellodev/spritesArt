@@ -1,11 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { LuPlus, LuMinus, LuEye, LuEyeOff, LuLayers, LuPalette, LuFlame, LuZap, LuSettings } from 'react-icons/lu';
 
 import './configOnionSkin.css';
 
+// IMPORTANTE — usa createPortal a document.body para escapar el `overflow: hidden`
+// del panel `.layer-animation` (padre del bar). Sin portal, el popover queda
+// clipeado al desbordar hacia arriba. Mismo patrón que customContextMenu.
 const ConfigOnionSkin = ({
   isOpen,
   onClose,
+  anchorRef,
   onionFramesConfig,
   updateFrameConfig,
   addPreviousFrame,
@@ -17,12 +22,7 @@ const ConfigOnionSkin = ({
 }) => {
   // expandedFrame: { type: 'previousFrames' | 'nextFrames', index: number } | null
   const [expandedFrame, setExpandedFrame] = useState(null);
-
-  const didMountRef = useRef(false);
-
-  useEffect(() => {
-    didMountRef.current = true;
-  }, []);
+  const [pos, setPos] = useState({ right: 0, bottom: 0, measured: false });
 
   useEffect(() => {
     if (!isOpen && clearTintCache) {
@@ -37,16 +37,39 @@ const ConfigOnionSkin = ({
     onCloseRef.current = onClose;
   }, [onClose]);
 
+  // Mide la posición del trigger antes del paint para evitar flash. Reposiciona
+  // en resize/scroll para mantener alineación si el layout cambia.
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    const compute = () => {
+      const trigger = anchorRef?.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      setPos({
+        right: Math.round(window.innerWidth - rect.right),
+        bottom: Math.round(window.innerHeight - rect.top + 8),
+        measured: true,
+      });
+    };
+    compute();
+    window.addEventListener('resize', compute);
+    window.addEventListener('scroll', compute, true);
+    return () => {
+      window.removeEventListener('resize', compute);
+      window.removeEventListener('scroll', compute, true);
+    };
+  }, [isOpen, anchorRef]);
+
   useEffect(() => {
     if (!isOpen) return;
 
     const handlePointer = (e) => {
       const overlay = overlayRef.current;
+      const trigger = anchorRef?.current;
       if (!overlay) return;
-      const anchor = overlay.closest('.onion-config-anchor');
-      if (anchor && !anchor.contains(e.target)) {
-        onCloseRef.current();
-      }
+      if (overlay.contains(e.target)) return;
+      if (trigger && trigger.contains(e.target)) return;
+      onCloseRef.current();
     };
 
     const handleKey = (e) => {
@@ -59,7 +82,7 @@ const ConfigOnionSkin = ({
       document.removeEventListener('pointerdown', handlePointer);
       document.removeEventListener('keydown', handleKey);
     };
-  }, [isOpen]);
+  }, [isOpen, anchorRef]);
 
   const handleFrameConfigChange = (type, index, key, value) => {
     if (updateFrameConfig) {
@@ -256,13 +279,20 @@ const ConfigOnionSkin = ({
     );
   };
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  const overlay = (
     <div
       className="onion-config__overlay"
       ref={overlayRef}
       role="dialog"
       aria-modal="false"
       aria-label="Configuración de Onion Skin"
+      style={{
+        right: pos.right,
+        bottom: pos.bottom,
+        visibility: pos.measured ? 'visible' : 'hidden',
+      }}
     >
       <div className="onion-config__modal">
 
@@ -349,6 +379,8 @@ const ConfigOnionSkin = ({
       </div>
     </div>
   );
+
+  return createPortal(overlay, document.body);
 };
 
 export default ConfigOnionSkin;

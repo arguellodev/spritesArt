@@ -276,6 +276,7 @@ const handlePause = useCallback(() => {
 //
 
 const [openOnion, setOpenOnion] = useState(false);
+const onionTriggerRef = useRef(null);
 
 
 //-------GESTION DEL MENU CONTEXTUAL AL DAR CLICK DERECHO -----------------------//
@@ -1641,29 +1642,29 @@ const renderLayerWithTimeline = (layer) => {
               <div className="toggle-slider"></div>
             </div>
           </div>
-          <div className="onion-config-anchor">
-            <button
-              className="config-button"
-              onClick={() => setOpenOnion(v => !v)}
-              aria-expanded={openOnion}
-              aria-haspopup="dialog"
-              title="Configurar Onion Skin"
-            >
-              <LuSettings />
-            </button>
-            <ConfigOnionSkin
-              isOpen={openOnion}
-              onClose={() => setOpenOnion(false)}
-              onionFramesConfig={onionFramesConfig}
-              updateFrameConfig={updateFrameConfig}
-              addPreviousFrame={addPreviousFrame}
-              addNextFrame={addNextFrame}
-              removeFrame={removeFrame}
-              toggleOnionFrames={toggleOnionFrames}
-              applyOnionFramesPreset={applyOnionFramesPreset}
-              clearTintCache={clearTintCache}
-            />
-          </div>
+          <button
+            ref={onionTriggerRef}
+            className="config-button"
+            onClick={() => setOpenOnion(v => !v)}
+            aria-expanded={openOnion}
+            aria-haspopup="dialog"
+            title="Configurar Onion Skin"
+          >
+            <LuSettings />
+          </button>
+          <ConfigOnionSkin
+            isOpen={openOnion}
+            onClose={() => setOpenOnion(false)}
+            anchorRef={onionTriggerRef}
+            onionFramesConfig={onionFramesConfig}
+            updateFrameConfig={updateFrameConfig}
+            addPreviousFrame={addPreviousFrame}
+            addNextFrame={addNextFrame}
+            removeFrame={removeFrame}
+            toggleOnionFrames={toggleOnionFrames}
+            applyOnionFramesPreset={applyOnionFramesPreset}
+            clearTintCache={clearTintCache}
+          />
           {/* Toggle collapse: oculta el timeline grid de capas/frames y deja
               solo esta barra. La navegación de capas (layer-nav-group) +
               playback + frame-tools siguen funcionando — es el modo "HUD"
