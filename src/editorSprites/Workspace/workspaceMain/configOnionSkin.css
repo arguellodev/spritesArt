@@ -225,30 +225,6 @@
   font-size: 0.9rem;
 }
 
-.onion-config__frame-stats {
-  display: flex;
-  gap: 20px;
-}
-
-.onion-config__stat {
-  text-align: center;
-}
-
-.onion-config__stat-number {
-  display: block;
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: var(--onion-config-accent-color);
-  line-height: 1;
-}
-
-.onion-config__stat-label {
-  font-size: 0.75rem;
-  color: var(--onion-config-text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
 /* ============ SECTION HEADERS ============ */
 .onion-config__section-header {
   display: flex;
@@ -608,18 +584,6 @@
     grid-template-columns: 1fr;
     gap: 12px;
   }
-
-  .onion-config__frame-stats {
-    gap: 12px;
-  }
-
-  .onion-config__stat-number {
-    font-size: 1rem;
-  }
-
-  .onion-config__stat-label {
-    font-size: 0.7rem;
-  }
 }
 
 @media (max-width: 480px) {
@@ -637,10 +601,6 @@
     flex-direction: column;
     gap: 12px;
     align-items: stretch;
-  }
-
-  .onion-config__frame-stats {
-    justify-content: space-around;
   }
 }
 
