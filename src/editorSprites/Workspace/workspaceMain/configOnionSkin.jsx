@@ -3,11 +3,10 @@ import { LuPlus, LuMinus, LuEye, LuEyeOff, LuLayers, LuPalette, LuFlame, LuZap, 
 
 import './configOnionSkin.css';
 
-const ConfigOnionSkin = ({ 
-  isOpen, 
+const ConfigOnionSkin = ({
+  isOpen,
   onClose,
   onionFramesConfig,
-  setOnionFramesConfig,
   updateFrameConfig,
   addPreviousFrame,
   addNextFrame,
@@ -180,65 +179,74 @@ const ConfigOnionSkin = ({
                     </div>
                   </div>
 
-                  {expanded && (
-                    <div className="onion-config__advanced">
-                      <div className="onion-config__control-group">
-                        <label className="onion-config__control-label">
-                          Opacidad: {Math.round(frame.opacity * 100)}%
-                        </label>
-                        <input
-                          type="range"
-                          min="0"
-                          max="1"
-                          step="0.05"
-                          value={frame.opacity}
-                          onChange={(e) => handleFrameConfigChange(frameArrayName, index, 'opacity', parseFloat(e.target.value))}
-                          className="onion-config__slider onion-config__slider--opacity"
-                        />
-                      </div>
-
-                      <div className="onion-config__control-group">
-                        <label className="onion-config__control-label">Matiz: {frame.hue}°</label>
-                        <input
-                          type="range"
-                          min="0"
-                          max="360"
-                          value={frame.hue}
-                          onChange={(e) => handleFrameConfigChange(frameArrayName, index, 'hue', parseInt(e.target.value))}
-                          className="onion-config__slider onion-config__slider--hue"
-                        />
-                      </div>
-
-                      <div className="onion-config__control-row">
+                  {expanded && (() => {
+                    const advancedId = `onion-${frameArrayName}-${index}`;
+                    return (
+                      <div className="onion-config__advanced">
                         <div className="onion-config__control-group">
-                          <label className="onion-config__control-label">
-                            Saturación: {frame.saturation}%
+                          <label className="onion-config__control-label" htmlFor={`${advancedId}-opacity`}>
+                            Opacidad: {Math.round(frame.opacity * 100)}%
                           </label>
                           <input
+                            id={`${advancedId}-opacity`}
                             type="range"
                             min="0"
-                            max="100"
-                            value={frame.saturation}
-                            onChange={(e) => handleFrameConfigChange(frameArrayName, index, 'saturation', parseInt(e.target.value))}
-                            className="onion-config__slider"
+                            max="1"
+                            step="0.05"
+                            value={frame.opacity}
+                            onChange={(e) => handleFrameConfigChange(frameArrayName, index, 'opacity', parseFloat(e.target.value))}
+                            className="onion-config__slider onion-config__slider--opacity"
                           />
                         </div>
+
                         <div className="onion-config__control-group">
-                          <label className="onion-config__control-label">
-                            Brillo: {frame.brightness}%
+                          <label className="onion-config__control-label" htmlFor={`${advancedId}-hue`}>
+                            Matiz: {frame.hue}°
                           </label>
                           <input
+                            id={`${advancedId}-hue`}
                             type="range"
                             min="0"
-                            max="200"
-                            value={frame.brightness}
-                            onChange={(e) => handleFrameConfigChange(frameArrayName, index, 'brightness', parseInt(e.target.value))}
-                            className="onion-config__slider"
+                            max="360"
+                            value={frame.hue}
+                            onChange={(e) => handleFrameConfigChange(frameArrayName, index, 'hue', parseInt(e.target.value))}
+                            className="onion-config__slider onion-config__slider--hue"
                           />
                         </div>
+
+                        <div className="onion-config__control-row">
+                          <div className="onion-config__control-group">
+                            <label className="onion-config__control-label" htmlFor={`${advancedId}-saturation`}>
+                              Saturación: {frame.saturation}%
+                            </label>
+                            <input
+                              id={`${advancedId}-saturation`}
+                              type="range"
+                              min="0"
+                              max="100"
+                              value={frame.saturation}
+                              onChange={(e) => handleFrameConfigChange(frameArrayName, index, 'saturation', parseInt(e.target.value))}
+                              className="onion-config__slider"
+                            />
+                          </div>
+                          <div className="onion-config__control-group">
+                            <label className="onion-config__control-label" htmlFor={`${advancedId}-brightness`}>
+                              Brillo: {frame.brightness}%
+                            </label>
+                            <input
+                              id={`${advancedId}-brightness`}
+                              type="range"
+                              min="0"
+                              max="200"
+                              value={frame.brightness}
+                              onChange={(e) => handleFrameConfigChange(frameArrayName, index, 'brightness', parseInt(e.target.value))}
+                              className="onion-config__slider"
+                            />
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -313,18 +321,21 @@ const ConfigOnionSkin = ({
           <section className="onion-config__section">
             <h3 className="onion-config__section-title">Estilo</h3>
             <div className="onion-config__preset-chips">
-              {presets.map(({ name, label, Icon }) => (
-                <button
-                  key={name}
-                  type="button"
-                  className="onion-config__preset-chip"
-                  onClick={() => handlePresetApply(name)}
-                  title={`Aplicar preset ${label}`}
-                >
-                  <Icon size={16} />
-                  <span>{label}</span>
-                </button>
-              ))}
+              {presets.map(preset => {
+                const PresetIcon = preset.Icon;
+                return (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    className="onion-config__preset-chip"
+                    onClick={() => handlePresetApply(preset.name)}
+                    title={`Aplicar preset ${preset.label}`}
+                  >
+                    <PresetIcon size={16} />
+                    <span>{preset.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </section>
 

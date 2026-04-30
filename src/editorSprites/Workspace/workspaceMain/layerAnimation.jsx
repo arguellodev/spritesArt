@@ -149,7 +149,6 @@ const LayerAnimation = ({
 
   // Onion frames config (pasada a ConfigOnionSkin modal)
   onionFramesConfig,
-  setOnionFramesConfig,
   updateFrameConfig,
   addPreviousFrame,
   addNextFrame,
@@ -1656,7 +1655,6 @@ const renderLayerWithTimeline = (layer) => {
               isOpen={openOnion}
               onClose={() => setOpenOnion(false)}
               onionFramesConfig={onionFramesConfig}
-              setOnionFramesConfig={setOnionFramesConfig}
               updateFrameConfig={updateFrameConfig}
               addPreviousFrame={addPreviousFrame}
               addNextFrame={addNextFrame}
