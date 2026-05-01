@@ -1,0 +1,433 @@
+/* DevConsolePanel — columna lateral fija, a la izquierda del RightPanel.
+ * Visual: glass UI consistente con topToolbar. Touch-friendly (botones >=36px).
+ *
+ * El offset desde el borde derecho es configurable via la CSS var
+ * --devconsole-right-offset (default 300px, que es el ancho del pc-right-panel
+ * estandar). Si en mobile el right panel se vuelve drawer, el var puede
+ * sobreescribirse a 0px desde el contenedor. */
+
+:root {
+  --devconsole-right-offset: 300px;
+  --devconsole-width: 380px;
+  --devconsole-collapsed-width: 40px;
+}
+
+/* ============== Contenedor base ============== */
+.devc {
+  position: fixed;
+  top: 0;
+  right: var(--devconsole-right-offset);
+  height: 100vh;
+  z-index: 49000; /* debajo del Layer3DPanel (50000), encima del canvas */
+  background: rgba(20, 20, 24, 0.86);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  color: #eaeaea;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 12px;
+  box-sizing: border-box;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.35);
+  transition: width 180ms ease;
+}
+
+.devc-expanded {
+  width: var(--devconsole-width);
+}
+
+/* ============== Modo colapsado ============== */
+.devc-collapsed {
+  width: var(--devconsole-collapsed-width);
+  align-items: stretch;
+  padding: 0;
+}
+
+.devc-collapsed-btn {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 4px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  height: 100%;
+  transition: background 120ms ease;
+}
+
+.devc-collapsed-btn:hover,
+.devc-collapsed-btn:focus-visible {
+  background: rgba(255, 255, 255, 0.04);
+  outline: none;
+}
+
+.devc-collapsed-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.devc-collapsed-badge {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+}
+
+.devc-badge {
+  min-width: 22px;
+  padding: 2px 4px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+
+.devc-badge-error {
+  background: rgba(239, 68, 68, 0.22);
+  color: #fda4a4;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+}
+
+.devc-badge-warn {
+  background: rgba(234, 179, 8, 0.18);
+  color: #fbe28a;
+  border: 1px solid rgba(234, 179, 8, 0.4);
+}
+
+.devc-collapsed-arrow {
+  margin-top: auto;
+  opacity: 0.5;
+}
+
+/* ============== Header ============== */
+.devc-header {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.devc-header-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.devc-header-title-row {
+  justify-content: space-between;
+}
+
+.devc-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.75;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.devc-count {
+  margin-left: auto;
+  margin-right: 6px;
+  font-size: 10.5px;
+  opacity: 0.55;
+  font-variant-numeric: tabular-nums;
+}
+
+.devc-icon-btn {
+  height: 30px;
+  min-width: 30px;
+  padding: 0 7px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #eaeaea;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.devc-icon-btn:hover,
+.devc-icon-btn:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.18);
+  outline: none;
+}
+
+.devc-icon-btn.is-active {
+  background: rgba(80, 160, 255, 0.18);
+  border-color: rgba(80, 160, 255, 0.4);
+  color: #cce6ff;
+}
+
+.devc-icon-btn-danger:hover {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fda4a4;
+}
+
+/* Filtro */
+.devc-filter-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.devc-filter-btn {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #eaeaea;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.devc-filter-btn:hover,
+.devc-filter-btn:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  outline: none;
+}
+
+.devc-filter-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 160px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: rgba(28, 28, 34, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.55);
+  z-index: 5;
+}
+
+.devc-filter-opt {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.devc-filter-opt:hover,
+.devc-filter-opt:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.devc-filter-opt.is-active {
+  background: rgba(80, 160, 255, 0.18);
+  color: #cce6ff;
+}
+
+/* Búsqueda */
+.devc-search-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+}
+
+.devc-search-icon {
+  position: absolute;
+  left: 8px;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.devc-search-input {
+  width: 100%;
+  height: 30px;
+  padding: 0 10px 0 26px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #eaeaea;
+  font: inherit;
+  font-size: 11.5px;
+  box-sizing: border-box;
+}
+
+.devc-search-input:focus {
+  outline: none;
+  border-color: rgba(80, 160, 255, 0.4);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.devc-search-input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.devc-actions-row {
+  gap: 6px;
+}
+
+/* ============== Lista de entries ============== */
+.devc-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 0;
+  font-family: 'JetBrains Mono', 'Consolas', 'Menlo', monospace;
+  font-size: 11.5px;
+  line-height: 1.45;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.devc-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.devc-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+}
+
+.devc-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.devc-empty {
+  padding: 20px 14px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.35);
+  font-style: italic;
+  font-size: 11px;
+}
+
+.devc-entry {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr;
+  gap: 6px;
+  align-items: baseline;
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  word-break: break-word;
+}
+
+.devc-entry:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.devc-entry-time {
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.4);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.devc-entry-tag {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.devc-tag-log    { background: rgba(255, 255, 255, 0.08); color: #c8c8c8; }
+.devc-tag-info   { background: rgba(80, 160, 255, 0.18); color: #cce6ff; }
+.devc-tag-warn   { background: rgba(234, 179, 8, 0.2);  color: #fbe28a; }
+.devc-tag-error  { background: rgba(239, 68, 68, 0.22); color: #fda4a4; }
+.devc-tag-debug  { background: rgba(168, 85, 247, 0.18); color: #d8b4fe; }
+
+.devc-entry-source {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  background: rgba(34, 197, 94, 0.16);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.devc-source-tag-window {
+  background: rgba(239, 68, 68, 0.16);
+  color: #fda4a4;
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.devc-entry-text {
+  white-space: pre-wrap;
+  color: #e0e0e0;
+}
+
+.devc-level-warn .devc-entry-text { color: #fbe28a; }
+.devc-level-error .devc-entry-text { color: #fca5a5; }
+.devc-level-debug .devc-entry-text { color: #c8b3e6; }
+
+.devc-entry-more {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 3px;
+  color: #80c0ff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  height: 18px;
+  line-height: 16px;
+  vertical-align: middle;
+}
+
+.devc-entry-more:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #b0d8ff;
+}
+
+/* ============== Mobile / tablet portrait ============== */
+@media (max-width: 900px) {
+  :root {
+    /* En tablet/portrait el right panel suele estar oculto o como drawer.
+       Si tu UI ya no lo muestra en flow, override este var via JS al
+       contenedor para llevarlo a 0. */
+    --devconsole-width: 320px;
+  }
+}
+
+@media (max-width: 600px) {
+  :root {
+    --devconsole-width: 100vw;
+    --devconsole-right-offset: 0px;
+  }
+  .devc-expanded {
+    border-left: none;
+  }
+}
