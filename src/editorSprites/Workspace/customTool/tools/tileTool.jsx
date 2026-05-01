@@ -2,7 +2,6 @@
 // La lógica de pintado vive en tilemap/tilemapLayer.js::paintTile; este panel expone
 // los controles (tile activo, flip, rotación) al usuario y propaga cambios via onChange.
 
-import React from 'react';
 import { LuFlipHorizontal, LuFlipVertical, LuRotateCw } from 'react-icons/lu';
 import './tileTool.css';
 
@@ -44,6 +43,8 @@ const TileTool = ({ parameters, onChange }) => {
             onClick={() => set({ flipH: !p.flipH })}
             className={`tile-tool__toggle${p.flipH ? ' is-active' : ''}`}
             title="Espejo horizontal"
+            aria-label="Espejo horizontal"
+            aria-pressed={p.flipH}
           >
             <LuFlipHorizontal size={14} />
           </button>
@@ -52,6 +53,8 @@ const TileTool = ({ parameters, onChange }) => {
             onClick={() => set({ flipV: !p.flipV })}
             className={`tile-tool__toggle${p.flipV ? ' is-active' : ''}`}
             title="Espejo vertical"
+            aria-label="Espejo vertical"
+            aria-pressed={p.flipV}
           >
             <LuFlipVertical size={14} />
           </button>
@@ -60,6 +63,7 @@ const TileTool = ({ parameters, onChange }) => {
             onClick={cycleRotation}
             className="tile-tool__toggle"
             title={`Rotación actual: ${p.rotation}° (click rota 90°)`}
+            aria-label={`Rotación: ${p.rotation} grados. Click para rotar 90 grados.`}
           >
             <LuRotateCw size={14} /> {p.rotation}°
           </button>

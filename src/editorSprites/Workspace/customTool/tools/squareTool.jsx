@@ -1,266 +1,158 @@
 import { useEffect, useState } from "react";
 import { LuChevronUp, LuChevronDown } from "react-icons/lu";
-import ToolColorPicker from "./toolColorPicker";
 
-const SquareTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setToolConfigs }) => {
-  // Estados para las diferentes configuraciones
-  const [borderWidth, setBorderWidth] = useState(1);
-  const [opacity, setOpacity] = useState(100);
-  const [borderColor, setBorderColor] = useState({ r: 0, g: 0, b: 0, a: 1 });
-  const [fillColor, setFillColor] = useState({ r: 255, g: 0, b: 0, a: 1 });
-  const [borderRadius, setborderRadius] = useState(0);
-  const [rotation, setRotation] = useState(0);
-  const [pattern, setPattern] = useState("solid");
-  const [pressure, setPressure] = useState(50);
-  const [hexFillColor, setFillHexColor] = useState('#FF0000');
-  const [hexBorderColor, setHexBorderColor] = useState('#FF0000');
+const W_MIN = 1;
+const W_MAX = 20;
+const W_DEFAULT = 1;
+const R_MIN = 0;
+const R_MAX = 12;
+const R_DEFAULT = 0;
 
-  // useEffect para cargar configuración guardada al montar el componente
+const clampW = (n) => Math.max(W_MIN, Math.min(W_MAX, n));
+const clampR = (n) => Math.max(R_MIN, Math.min(R_MAX, n));
+
+const SquareTool = ({ setToolParameters, toolConfigs, setToolConfigs }) => {
+  const [borderWidth, setBorderWidth] = useState(
+    () => toolConfigs?.square?.borderWidth ?? W_DEFAULT,
+  );
+  const [borderRadius, setBorderRadius] = useState(
+    () => toolConfigs?.square?.borderRadius ?? R_DEFAULT,
+  );
+
   useEffect(() => {
-    const squareConfig = toolConfigs.square;
-    
-    if (squareConfig !== null) {
-      // Cargar configuración guardada
-      setBorderWidth(squareConfig.borderWidth || 1);
-      setborderRadius(squareConfig.borderRadius || 0);
-     
-    }
-  }, []); // Solo se ejecuta al montar
-
-  // useEffect para guardar cambios en la configuración de la herramienta
-  useEffect(() => {
-    const currentConfig = {
-      borderWidth,
-      borderRadius,
-      opacity,
-      borderColor,
-      fillColor,
-      rotation,
-      pattern,
-      pressure,
-      hexFillColor,
-      hexBorderColor
-    };
-
-    setToolConfigs(prev => ({
+    setToolConfigs((prev) => ({
       ...prev,
-      square: currentConfig
+      square: { borderWidth, borderRadius },
     }));
-  }, [borderWidth, borderRadius, opacity, borderColor, fillColor, rotation, pattern, pressure, hexFillColor, hexBorderColor, setToolConfigs]);
+  }, [borderWidth, borderRadius, setToolConfigs]);
 
-  const rgbToHex = ({ r, g, b }) => {
-    return (
-      "#" +
-      [r, g, b]
-        .map((x) => {
-          const hex = x.toString(16);
-          return hex.length === 1 ? "0" + hex : hex;
-        })
-        .join("")
-    );
-  };
-  
-  // Estados para color pickers
-  const [showBorderColorPicker, setShowBorderColorPicker] = useState(false);
-  const [showFillColorPicker, setShowFillColorPicker] = useState(false);
-
-  // Estados para opciones avanzadas
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
-  const patterns = ["solid", "dotted", "dashed", "pixel dust"];
-
-  // Función para convertir hex a rgb
-  const hexToRgb = (hex) => {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-      r: parseInt(result[1], 16),
-      g: parseInt(result[2], 16),
-      b: parseInt(result[3], 16)
-    } : { r: 0, g: 0, b: 0 };
-  };
-
-  // Función para manejar cambios en el grosor con botones
-  const handleBorderWidthChange = (increment) => {
-    const currentWidth = typeof borderWidth === 'number' ? borderWidth : 3;
-    const newWidth = Math.max(1, Math.min(20, currentWidth + increment));
-    setBorderWidth(newWidth);
-  };
-
-  // Función para manejar input directo del grosor
-  const handleBorderWidthInput = (e) => {
-    const value = e.target.value;
-    
-    // Permitir string vacío temporalmente
-    if (value === '') {
-      setBorderWidth('');
+  useEffect(() => {
+    if (
+      typeof borderWidth !== "number" ||
+      typeof borderRadius !== "number"
+    ) {
       return;
     }
-    
-    const numValue = parseInt(value);
-    if (!isNaN(numValue)) {
-      setBorderWidth(Math.max(1, Math.min(20, numValue)));
+    setToolParameters((prev) => ({ ...prev, borderWidth, borderRadius }));
+  }, [borderWidth, borderRadius, setToolParameters]);
+
+  const onWidthInput = (e) => {
+    const v = e.target.value;
+    if (v === "") return setBorderWidth("");
+    const n = parseInt(v, 10);
+    if (!Number.isNaN(n)) setBorderWidth(clampW(n));
+  };
+  const onWidthBlur = (e) => {
+    if (e.target.value === "" || Number.isNaN(parseInt(e.target.value, 10))) {
+      setBorderWidth(W_DEFAULT);
     }
   };
-
-  // Función para manejar cuando se pierde el foco en border width
-  const handleBorderWidthBlur = (e) => {
-    const value = e.target.value;
-    if (value === '' || isNaN(parseInt(value))) {
-      setBorderWidth(3); // Valor por defecto
-    }
+  const stepWidth = (delta) => {
+    const cur = typeof borderWidth === "number" ? borderWidth : W_DEFAULT;
+    setBorderWidth(clampW(cur + delta));
   };
 
-  useEffect(() => {
-    // Solo actualizar si todos los valores son números válidos
-    if (typeof borderWidth === 'number' && 
-        typeof borderRadius === 'number' && 
-        typeof rotation === 'number') {
-    
-      setToolParameters(prev => ({
-        ...prev,
-        borderWidth: borderWidth,
-        borderRadius: borderRadius,
-        rotation: rotation,
-        pattern: pattern,
-        pressure: pressure
-      }));
-
+  const onRadiusInput = (e) => {
+    const v = e.target.value;
+    if (v === "") return setBorderRadius("");
+    const n = Number(v);
+    if (!Number.isNaN(n)) setBorderRadius(clampR(n));
+  };
+  const onRadiusBlur = (e) => {
+    if (e.target.value === "" || Number.isNaN(Number(e.target.value))) {
+      setBorderRadius(R_DEFAULT);
     }
-  }, [borderWidth, opacity, borderColor, fillColor, borderRadius, rotation, pattern, pressure, setToolParameters]);
+  };
+  const stepRadius = (delta) => {
+    const cur = typeof borderRadius === "number" ? borderRadius : R_DEFAULT;
+    setBorderRadius(clampR(cur + delta));
+  };
+
+  const wValue = typeof borderWidth === "number" ? borderWidth : W_DEFAULT;
+  const rValue = typeof borderRadius === "number" ? borderRadius : R_DEFAULT;
 
   return (
-    <>
-      <div className="polygon-tool-container">
-        <div className="tool-configs">
-          {/* Configuración de colores */}
-          <div className="color-section">
-          </div>
-
-          {/* Configuración de grosor */}
-          <div className="config-item">
-            <label className="tool-label">Border Width</label>
-            <div className="input-container">
-             
-              <input 
-                type="number"
-                min="1"
-                max="20"
-                value={borderWidth}
-                onChange={handleBorderWidthInput}
-                onBlur={handleBorderWidthBlur}
-                className="number-input" 
-              />
-              <span className="tool-value">px</span>
-               <div className="increment-buttons-container">
-               <button 
-                 className="increment-btn"
-                onClick={() => handleBorderWidthChange(1)}
-                disabled={(typeof borderWidth === 'number' ? borderWidth : 3) >= 20}
+    <div className="polygon-tool-container">
+      <div className="tool-configs">
+        <div className="config-item">
+          <label className="tool-label" htmlFor="squareTool-borderWidth">
+            Border Width
+          </label>
+          <div className="input-container">
+            <input
+              id="squareTool-borderWidth"
+              type="number"
+              min={W_MIN}
+              max={W_MAX}
+              value={borderWidth}
+              onChange={onWidthInput}
+              onBlur={onWidthBlur}
+              className="number-input"
+            />
+            <span className="tool-value">px</span>
+            <div className="increment-buttons-container">
+              <button
+                type="button"
+                className="increment-btn"
+                onClick={() => stepWidth(1)}
+                disabled={wValue >= W_MAX}
+                aria-label="Aumentar border width"
               >
                 <LuChevronUp />
               </button>
-              <button 
-                className="increment-btn"
-                onClick={() => handleBorderWidthChange(-1)}
-                disabled={(typeof borderWidth === 'number' ? borderWidth : 3) <= 1}
-              >
-               <LuChevronDown />
-              </button>
-               </div>
-            </div>
-          </div>
-
-         {/* Configuración de vértices */}
-         <div className="config-item">
-            <label className="tool-label">Border Radius</label>
-            <div className="input-container">
-             
-              <input 
-                type="number" 
-                min="0" 
-                max="12" 
-                value={borderRadius} 
-                onChange={(e) => {
-                  const value = e.target.value;
-                  
-                  // Permitir string vacío temporalmente
-                  if (value === '') {
-                    setborderRadius('');
-                    return;
-                  }
-                  
-                  const numValue = Number(value);
-                  if (!isNaN(numValue)) {
-                    setborderRadius(numValue);
-                  }
-                }}
-                onBlur={(e) => {
-                  const value = e.target.value;
-                  if (value === '' || isNaN(Number(value))) {
-                    setborderRadius(5); // Valor por defecto
-                    return;
-                  }
-                  
-                  const numValue = Number(value);
-                  if (numValue < 0) setborderRadius(1);
-                  if (numValue > 12) setborderRadius(12);
-                }}
-                className="number-input" 
-              />
-              <span className="tool-value">px</span>
-              <div className="increment-buttons-container">
-              <button 
+              <button
                 type="button"
-                onClick={() => {
-                  const currentborderRadius = typeof borderRadius === 'number' ? borderRadius : 5;
-                  setborderRadius(Math.min(12, currentborderRadius + 1));
-                }}
                 className="increment-btn"
-                disabled={(typeof borderRadius === 'number' ? borderRadius : 5) >= 12}
-              >
-               <LuChevronUp />
-              </button>
-              <button 
-                type="button"
-                onClick={() => {
-                  const currentborderRadius = typeof borderRadius === 'number' ? borderRadius : 5;
-                  setborderRadius(Math.max(0, currentborderRadius - 1));
-                }}
-                className="increment-btn"
-                disabled={(typeof borderRadius === 'number' ? borderRadius : 5) <= 0}
+                onClick={() => stepWidth(-1)}
+                disabled={wValue <= W_MIN}
+                aria-label="Reducir border width"
               >
                 <LuChevronDown />
               </button>
-              </div>
-             
             </div>
           </div>
         </div>
 
-        {/* Color Pickers */}
-        {showBorderColorPicker && (
-         <>
-           <ToolColorPicker
-            color={borderColor}
-            onChange={setBorderColor}
-            hexColor={hexBorderColor}
-            setHexColor={setHexBorderColor}
+        <div className="config-item">
+          <label className="tool-label" htmlFor="squareTool-borderRadius">
+            Border Radius
+          </label>
+          <div className="input-container">
+            <input
+              id="squareTool-borderRadius"
+              type="number"
+              min={R_MIN}
+              max={R_MAX}
+              value={borderRadius}
+              onChange={onRadiusInput}
+              onBlur={onRadiusBlur}
+              className="number-input"
             />
-         </>
-        )}
-
-        {showFillColorPicker && (
-        <>
-        <ToolColorPicker
-            color={fillColor}
-            onChange={setFillColor}
-            hexColor={hexFillColor}
-            setHexColor={setFillHexColor}
-            />
-        </>
-        )}
+            <span className="tool-value">px</span>
+            <div className="increment-buttons-container">
+              <button
+                type="button"
+                className="increment-btn"
+                onClick={() => stepRadius(1)}
+                disabled={rValue >= R_MAX}
+                aria-label="Aumentar border radius"
+              >
+                <LuChevronUp />
+              </button>
+              <button
+                type="button"
+                className="increment-btn"
+                onClick={() => stepRadius(-1)}
+                disabled={rValue <= R_MIN}
+                aria-label="Reducir border radius"
+              >
+                <LuChevronDown />
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-    </>
+    </div>
   );
 };
 

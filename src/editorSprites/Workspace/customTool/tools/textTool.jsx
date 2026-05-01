@@ -15,7 +15,7 @@
 // La posición (x, y) la elige el usuario en el modal (numérica) o por
 // "centrar horizontal/vertical". Se mantiene una sola fuente (5×7) con escala.
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { renderTextToCanvas, rasterizeText } from '../../fonts/textRasterizer';
 import { rgbaToHex, hexToRgba } from '../../palette/presets';
 import './textTool.css';
@@ -103,7 +103,14 @@ const TextTool = ({
       <div className="text-tool-modal">
         <div className="text-tool-modal__header">
           <h3>Insertar texto</h3>
-          <button onClick={onClose} className="text-tool-modal__close">×</button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-tool-modal__close"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
         </div>
 
         <div className="text-tool-modal__body">
@@ -183,15 +190,15 @@ const TextTool = ({
                     onChange={(e) => setPosY(Number(e.target.value))}
                   />
                 </label>
-                <button onClick={handleCenterX} className="text-tool-modal__btn">Centrar X</button>
-                <button onClick={handleCenterY} className="text-tool-modal__btn">Centrar Y</button>
+                <button type="button" onClick={handleCenterX} className="text-tool-modal__btn">Centrar X</button>
+                <button type="button" onClick={handleCenterY} className="text-tool-modal__btn">Centrar Y</button>
               </div>
             </div>
 
             <div className="text-tool-modal__info">
               Tamaño texto: {metrics.width}×{metrics.height} px · Canvas: {canvasWidth}×{canvasHeight} px
               {metrics.width > canvasWidth || metrics.height > canvasHeight ? (
-                <span className="text-tool-modal__warn"> · ⚠ Se saldrá del canvas</span>
+                <span className="text-tool-modal__warn" role="alert"> · Atención: se saldrá del canvas</span>
               ) : null}
             </div>
           </div>
@@ -203,8 +210,9 @@ const TextTool = ({
         </div>
 
         <div className="text-tool-modal__footer">
-          <button onClick={onClose} className="text-tool-modal__btn">Cancelar</button>
+          <button type="button" onClick={onClose} className="text-tool-modal__btn">Cancelar</button>
           <button
+            type="button"
             onClick={handleInsert}
             className="text-tool-modal__btn text-tool-modal__btn--primary"
             disabled={!text || metrics.pixels.length === 0}

@@ -1,0 +1,112 @@
+/* Botón "X Cerrar" flotante para módulos legacy.
+ * Pensado para sentarse encima de overlays de pantalla completa
+ * (z-index 10000 del AIgenerator, etc.). */
+
+.panel-floating-close {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 10100;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 8px 10px;
+  background: linear-gradient(180deg, rgba(28, 28, 32, 0.96), rgba(20, 20, 24, 0.96));
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid rgba(255, 80, 80, 0.32);
+  border-radius: 8px;
+  color: var(--text-primary, #f0f0f0);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow:
+    0 8px 28px rgba(0, 0, 0, 0.55),
+    0 2px 8px rgba(0, 0, 0, 0.35),
+    0 0 0 0 rgba(255, 80, 80, 0.0),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.18s ease,
+    transform 0.12s ease;
+  /* Animación de entrada — slide-in desde la derecha. */
+  animation: panelFloatingCloseIn 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes panelFloatingCloseIn {
+  from { opacity: 0; transform: translateX(8px) scale(0.96); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.panel-floating-close:hover {
+  background: linear-gradient(180deg, rgba(46, 24, 28, 0.96), rgba(34, 18, 22, 0.96));
+  border-color: rgba(255, 80, 80, 0.55);
+  box-shadow:
+    0 10px 32px rgba(0, 0, 0, 0.6),
+    0 2px 10px rgba(255, 80, 80, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.panel-floating-close:active {
+  transform: translateY(1px);
+}
+
+.panel-floating-close:focus-visible {
+  outline: 2px solid rgba(255, 120, 120, 0.7);
+  outline-offset: 2px;
+}
+
+.panel-floating-close__icon {
+  font-size: 14px;
+  color: #ff8080;
+  display: inline-flex;
+  align-items: center;
+}
+
+.panel-floating-close:hover .panel-floating-close__icon {
+  color: #ffaaaa;
+}
+
+.panel-floating-close__label {
+  letter-spacing: 0.02em;
+}
+
+.panel-floating-close__kbd {
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 2px 5px;
+  color: var(--text-secondary, #b8b8b8);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom-color: rgba(0, 0, 0, 0.4);
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+  margin-left: 2px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+}
+
+/* En mobile escondemos el label/kbd, solo el icono — ahorra espacio. */
+@media (max-width: 640px) {
+  .panel-floating-close {
+    padding: 10px;
+    border-radius: 50%;
+  }
+  .panel-floating-close__label,
+  .panel-floating-close__kbd {
+    display: none;
+  }
+  .panel-floating-close__icon {
+    font-size: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-floating-close {
+    animation: none;
+  }
+}

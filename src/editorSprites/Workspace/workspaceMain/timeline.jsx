@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import './layerAnimation.css'
 
 import LayerRow, { FrameNumberCell } from './layerRow';
@@ -129,7 +130,11 @@ const AddLayerCornerDropdown = ({
         <span>Nueva</span>
         <LuChevronDown style={{ marginLeft: 2, opacity: 0.6, fontSize: 11 }} />
       </button>
-      {open && (
+      {open && createPortal(
+        // Portal a document.body para escapar de cualquier ancestro con
+        // backdrop-filter / transform / contain que pueda romper el
+        // anclaje de position:fixed al viewport (mismo patrón que el
+        // onion-skin popover, commit b39b0d8).
         <div
           ref={menuRef}
           role="menu"
@@ -137,14 +142,15 @@ const AddLayerCornerDropdown = ({
             position: 'fixed',
             top: pos.top,
             left: pos.left,
-            minWidth: 190,
+            minWidth: 200,
             background: 'rgba(28, 28, 32, 0.96)',
             backdropFilter: 'blur(14px)',
+            WebkitBackdropFilter: 'blur(14px)',
             border: '1px solid rgba(140, 82, 255, 0.22)',
             borderRadius: 8,
             boxShadow: '0 12px 36px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.35)',
             padding: 4,
-            zIndex: 100001,
+            zIndex: 2147483646,
             display: 'flex',
             flexDirection: 'column',
             gap: 2,
@@ -160,7 +166,8 @@ const AddLayerCornerDropdown = ({
             <span>Capa 3D</span>
             <span style={{ marginLeft: 'auto', fontSize: 9.5, opacity: 0.5 }}>GLB</span>
           </button>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

@@ -4,7 +4,7 @@ import { LuChevronUp, LuChevronDown } from "react-icons/lu";
 
 import BrushSelect from "./brushSelect";
 
-const PencilTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setToolConfigs, myBrushes }) => {
+const PencilTool = ({ setToolParameters, toolParameters, toolConfigs, setToolConfigs, myBrushes }) => {
   // Estados para las diferentes configuraciones
   const [borderWidth, setBorderWidth] = useState(1);
   const [opacity, setOpacity] = useState(100);
@@ -380,7 +380,7 @@ const PencilTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
   useEffect(() => {
     const pencilConfig = toolConfigs.pencil;
     
-    if (pencilConfig !== null) {
+    if (pencilConfig) {
       // Cargar configuración guardada
       setBorderWidth(pencilConfig.borderWidth || 1);
       setOpacity(pencilConfig.opacity || 100);
@@ -543,30 +543,35 @@ const PencilTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
           {/* Configuración de grosor (solo para brocha estándar) */}
           {!currentBrush.customBrush && (
             <div className="config-item">
-              <label className="tool-label">Border Width</label>
+              <label className="tool-label" htmlFor="pencilTool-borderWidth">Border Width</label>
               <div className="input-container">
-                <input 
+                <input
+                  id="pencilTool-borderWidth"
                   type="number"
                   min="1"
                   max="20"
                   value={borderWidth}
                   onChange={handleBorderWidthInput}
                   onBlur={handleBorderWidthBlur}
-                  className="number-input" 
+                  className="number-input"
                 />
                 <span className="tool-value">px</span>
                 <div className="increment-buttons-container">
-                  <button 
+                  <button
+                    type="button"
                     className="increment-btn"
                     onClick={() => handleBorderWidthChange(1)}
                     disabled={(typeof borderWidth === 'number' ? borderWidth : 3) >= 20}
+                    aria-label="Aumentar border width"
                   >
                     <LuChevronUp />
                   </button>
-                  <button 
+                  <button
+                    type="button"
                     className="increment-btn"
                     onClick={() => handleBorderWidthChange(-1)}
                     disabled={(typeof borderWidth === 'number' ? borderWidth : 3) <= 1}
+                    aria-label="Reducir border width"
                   >
                     <LuChevronDown />
                   </button>
@@ -575,74 +580,13 @@ const PencilTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
             </div>
           )}
 
-          {/* Configuración de Sharpen (solo para brocha estándar) */}
-          {false && (
-            <div className="config-item">
-              <label className="tool-label">Sharpen</label>
-              <div className="input-container">
-                <input 
-                  type="number" 
-                  min="0" 
-                  max="1" 
-                  step="0.1"
-                  value={sharpen} 
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === '') {
-                      setSharpen('');
-                      return;
-                    }
-                    const numValue = Number(value);
-                    if (!isNaN(numValue)) {
-                      setSharpen(numValue);
-                    }
-                  }}
-                  onBlur={(e) => {
-                    const value = e.target.value;
-                    if (value === '' || isNaN(Number(value))) {
-                      setSharpen(1);
-                      return;
-                    }
-
-                    const numValue = Number(value);
-                    if (numValue < 0) setSharpen(0);
-                    else if (numValue > 1) setSharpen(1);
-                  }}
-                  className="number-input" 
-                />
-                <div className="increment-buttons-container">
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      const currentSharpen = typeof sharpen === 'number' ? sharpen : 1;
-                      setSharpen(Math.min(1, parseFloat((currentSharpen + 0.1).toFixed(2))));
-                    }}
-                    className="increment-btn"
-                    disabled={sharpen >= 1}
-                  >
-                    <LuChevronUp />
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      const currentSharpen = typeof sharpen === 'number' ? sharpen : 1;
-                      setSharpen(Math.max(0, parseFloat((currentSharpen - 0.1).toFixed(2))));
-                    }}
-                    className="increment-btn"
-                    disabled={sharpen <= 0}
-                  >
-                    <LuChevronDown />
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Configuración de Paint Mode */}
           <div className="config-item">
-            <label className="tool-label">Alpha Mode</label>
+            <label className="tool-label" htmlFor="pencilTool-paintMode">Alpha Mode</label>
             <div className="input-container">
               <select
+                id="pencilTool-paintMode"
                 value={paintMode}
                 onChange={(e) => setPaintMode(e.target.value)}
                 className="select-input"
@@ -655,9 +599,10 @@ const PencilTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
 
           {/* Configuración de Pattern Alignment */}
           <div className="config-item">
-            <label className="tool-label">Pattern Alignment</label>
+            <label className="tool-label" htmlFor="pencilTool-patternAlignment">Pattern Alignment</label>
             <div className="input-container">
               <select
+                id="pencilTool-patternAlignment"
                 value={patternAlignment}
                 onChange={(e) => setPatternAlignment(e.target.value)}
                 className="select-input"
@@ -669,20 +614,24 @@ const PencilTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
             </div>
           </div>
 
-            {/* Toggle para dithering */}
-            <div className="config-item">
-                <label className="tool-label">Pixel Perfect</label>
-                <div className="toggle-switch">
-                  <input 
-                    type="checkbox" 
-                    id="perfectCurvesEnabled" 
-                    className="toggle-input"
-                    checked={perfectCurves} // Cambiar esta línea
-                    onChange={(e) => setPerfectCurves(e.target.checked)} // Cambiar esta línea
-                  />
-                  <label htmlFor="perfectCurvesEnabled" className="toggle-label"></label>
-                </div>
-              </div>
+          {/* Toggle Pixel Perfect */}
+          <div className="config-item">
+            <label className="tool-label" htmlFor="perfectCurvesEnabled">Pixel Perfect</label>
+            <div className="toggle-switch">
+              <input
+                type="checkbox"
+                id="perfectCurvesEnabled"
+                className="toggle-input"
+                checked={perfectCurves}
+                onChange={(e) => setPerfectCurves(e.target.checked)}
+              />
+              <label
+                htmlFor="perfectCurvesEnabled"
+                className="toggle-label"
+                aria-label="Activar pixel perfect"
+              />
+            </div>
+          </div>
 
 
         </div>

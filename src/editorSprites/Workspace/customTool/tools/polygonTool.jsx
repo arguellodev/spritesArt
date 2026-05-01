@@ -1,367 +1,256 @@
 import { useEffect, useState } from "react";
 import { LuChevronUp, LuChevronDown } from "react-icons/lu";
-import ToolColorPicker from "./toolColorPicker";
 
-const PolygonTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setToolConfigs }) => {
-  // Estados para las diferentes configuraciones
-  const [borderWidth, setBorderWidth] = useState(1);
-  const [opacity, setOpacity] = useState(100);
-  const [borderColor, setBorderColor] = useState({ r: 0, g: 0, b: 0, a: 1 });
-  const [fillColor, setFillColor] = useState({ r: 255, g: 0, b: 0, a: 1 });
-  const [vertices, setVertices] = useState(5);
-  const [rotation, setRotation] = useState(0);
-  const [pattern, setPattern] = useState("solid");
-  const [pressure, setPressure] = useState(50);
-  const [hexFillColor, setFillHexColor] = useState('#FF0000');
-  const [hexBorderColor, setHexBorderColor] = useState('#FF0000');
+const W_MIN = 1;
+const W_MAX = 20;
+const W_DEFAULT = 1;
+const V_MIN = 3;
+const V_MAX = 100;
+const V_DEFAULT = 5;
+const R_MIN = 0;
+const R_MAX = 360;
+const R_DEFAULT = 0;
+const R_STEP = 5;
 
-  // useEffect para cargar configuración guardada al montar el componente
+const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+
+const PolygonTool = ({ setToolParameters, toolConfigs, setToolConfigs }) => {
+  const [borderWidth, setBorderWidth] = useState(
+    () => toolConfigs?.polygon?.borderWidth ?? W_DEFAULT,
+  );
+  const [vertices, setVertices] = useState(
+    () => toolConfigs?.polygon?.vertices ?? V_DEFAULT,
+  );
+  const [rotation, setRotation] = useState(
+    () => toolConfigs?.polygon?.rotation ?? R_DEFAULT,
+  );
+
   useEffect(() => {
-    const polygonConfig = toolConfigs.polygon;
-    
-    if (polygonConfig !== null) {
-      // Cargar configuración guardada
-      setBorderWidth(polygonConfig.borderWidth || 1);
-      setVertices(polygonConfig.vertices || 5);
-      setRotation(polygonConfig.rotation || 0);
-     
-      
+    setToolConfigs((prev) => ({
+      ...prev,
+      polygon: { borderWidth, vertices, rotation },
+    }));
+  }, [borderWidth, vertices, rotation, setToolConfigs]);
+
+  useEffect(() => {
+    if (
+      typeof borderWidth !== "number" ||
+      typeof vertices !== "number" ||
+      typeof rotation !== "number"
+    ) {
+      return;
     }
-  }, []); // Solo se ejecuta al montar
-
-  // useEffect para guardar cambios en la configuración de la herramienta
-  useEffect(() => {
-    const currentConfig = {
+    setToolParameters((prev) => ({
+      ...prev,
       borderWidth,
       vertices,
       rotation,
-      opacity,
-      borderColor,
-      fillColor,
-      pattern,
-      pressure,
-      hexFillColor,
-      hexBorderColor
-    };
-
-    setToolConfigs(prev => ({
-      ...prev,
-      polygon: currentConfig
     }));
-  }, [borderWidth, vertices, rotation, opacity, borderColor, fillColor, pattern, pressure, hexFillColor, hexBorderColor, setToolConfigs]);
+  }, [borderWidth, vertices, rotation, setToolParameters]);
 
-  const rgbToHex = ({ r, g, b }) => {
-    return (
-      "#" +
-      [r, g, b]
-        .map((x) => {
-          const hex = x.toString(16);
-          return hex.length === 1 ? "0" + hex : hex;
-        })
-        .join("")
-    );
+  // --- Border width ---
+  const onWidthInput = (e) => {
+    const v = e.target.value;
+    if (v === "") return setBorderWidth("");
+    const n = parseInt(v, 10);
+    if (!Number.isNaN(n)) setBorderWidth(clamp(n, W_MIN, W_MAX));
   };
-  
-  useEffect(() => {
-    setHexBorderColor(rgbToHex(borderColor));
-    setFillHexColor(rgbToHex(fillColor));
-  }, [borderColor, fillColor]);
-  
-  // Estados para color pickers
-  const [showBorderColorPicker, setShowBorderColorPicker] = useState(false);
-  const [showFillColorPicker, setShowFillColorPicker] = useState(false);
-
-  // Estados para opciones avanzadas
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
-  const patterns = ["solid", "dotted", "dashed", "pixel dust"];
-
-  // Función para convertir hex a rgb
-  const hexToRgb = (hex) => {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-      r: parseInt(result[1], 16),
-      g: parseInt(result[2], 16),
-      b: parseInt(result[3], 16)
-    } : { r: 0, g: 0, b: 0 };
-  };
-
-  // Función para manejar cambios en el grosor con botones
-  const handleBorderWidthChange = (increment) => {
-    const currentWidth = typeof borderWidth === 'number' ? borderWidth : 3;
-    const newWidth = Math.max(1, Math.min(20, currentWidth + increment));
-    setBorderWidth(newWidth);
-  };
-
-  // Función para manejar input directo del grosor
-  const handleBorderWidthInput = (e) => {
-    const value = e.target.value;
-    
-    // Permitir string vacío temporalmente
-    if (value === '') {
-      setBorderWidth('');
-      return;
-    }
-    
-    const numValue = parseInt(value);
-    if (!isNaN(numValue)) {
-      setBorderWidth(Math.max(1, Math.min(20, numValue)));
+  const onWidthBlur = (e) => {
+    if (e.target.value === "" || Number.isNaN(parseInt(e.target.value, 10))) {
+      setBorderWidth(W_DEFAULT);
     }
   };
-
-  // Función para manejar cuando se pierde el foco en border width
-  const handleBorderWidthBlur = (e) => {
-    const value = e.target.value;
-    if (value === '' || isNaN(parseInt(value))) {
-      setBorderWidth(3); // Valor por defecto
-    }
+  const stepWidth = (delta) => {
+    const cur = typeof borderWidth === "number" ? borderWidth : W_DEFAULT;
+    setBorderWidth(clamp(cur + delta, W_MIN, W_MAX));
   };
 
-  useEffect(() => {
-    // Solo actualizar si todos los valores son números válidos
-    if (typeof borderWidth === 'number' && 
-        typeof vertices === 'number' && 
-        typeof rotation === 'number') {
-     
-      setToolParameters(prev => ({
-        ...prev,
-        borderWidth: borderWidth,
-        vertices: vertices,
-        rotation: rotation,
-        pattern: pattern,
-        pressure: pressure
-      }));
-    }
-  }, [borderWidth, opacity, borderColor, fillColor, vertices, rotation, pattern, pressure, setToolParameters]);
+  // --- Vertices ---
+  const onVerticesInput = (e) => {
+    const v = e.target.value;
+    if (v === "") return setVertices("");
+    const n = Number(v);
+    if (!Number.isNaN(n)) setVertices(n);
+  };
+  const onVerticesBlur = (e) => {
+    const v = e.target.value;
+    if (v === "" || Number.isNaN(Number(v))) return setVertices(V_DEFAULT);
+    setVertices(clamp(Number(v), V_MIN, V_MAX));
+  };
+  const stepVertices = (delta) => {
+    const cur = typeof vertices === "number" ? vertices : V_DEFAULT;
+    setVertices(clamp(cur + delta, V_MIN, V_MAX));
+  };
+
+  // --- Rotation ---
+  const onRotationInput = (e) => {
+    const v = e.target.value;
+    if (v === "") return setRotation("");
+    const n = Number(v);
+    if (!Number.isNaN(n)) setRotation(n);
+  };
+  const onRotationBlur = (e) => {
+    const v = e.target.value;
+    if (v === "" || Number.isNaN(Number(v))) return setRotation(R_DEFAULT);
+    setRotation(clamp(Number(v), R_MIN, R_MAX));
+  };
+  const stepRotation = (delta) => {
+    const cur = typeof rotation === "number" ? rotation : R_DEFAULT;
+    setRotation(clamp(cur + delta, R_MIN, R_MAX));
+  };
+
+  const wValue = typeof borderWidth === "number" ? borderWidth : W_DEFAULT;
+  const vValue = typeof vertices === "number" ? vertices : V_DEFAULT;
+  const rValue = typeof rotation === "number" ? rotation : R_DEFAULT;
+
+  // Preview SVG: usa el color actual del UI no como reflejo real del trazado
+  // (el pipeline usa el foregroundColor del workspace), sino como ayuda
+  // visual de la forma resultante.
+  const previewPoints = Array.from({ length: vValue }, (_, i) => {
+    const angle = (i * 2 * Math.PI) / vValue + (rValue * Math.PI) / 180;
+    const x = 40 + 25 * Math.cos(angle);
+    const y = 40 + 25 * Math.sin(angle);
+    return `${x},${y}`;
+  }).join(" ");
 
   return (
-    <>
-      <div className="polygon-tool-container">
-        <div className="tool-configs">
-          {/* Configuración de colores */}
-
-          {/* Configuración de grosor */}
-          <div className="config-item">
-            <label className="tool-label">Border Width</label>
-            <div className="input-container">
-             
-              <input 
-                type="number"
-                min="1"
-                max="20"
-                value={borderWidth}
-                onChange={handleBorderWidthInput}
-                onBlur={handleBorderWidthBlur}
-                className="number-input" 
-              />
-              <span className="tool-value">px</span>
-               <div className="increment-buttons-container">
-               <button 
-                 className="increment-btn"
-                onClick={() => handleBorderWidthChange(1)}
-                disabled={(typeof borderWidth === 'number' ? borderWidth : 3) >= 20}
+    <div className="polygon-tool-container">
+      <div className="tool-configs">
+        <div className="config-item">
+          <label className="tool-label" htmlFor="polygonTool-borderWidth">
+            Border Width
+          </label>
+          <div className="input-container">
+            <input
+              id="polygonTool-borderWidth"
+              type="number"
+              min={W_MIN}
+              max={W_MAX}
+              value={borderWidth}
+              onChange={onWidthInput}
+              onBlur={onWidthBlur}
+              className="number-input"
+            />
+            <span className="tool-value">px</span>
+            <div className="increment-buttons-container">
+              <button
+                type="button"
+                className="increment-btn"
+                onClick={() => stepWidth(1)}
+                disabled={wValue >= W_MAX}
+                aria-label="Aumentar border width"
               >
                 <LuChevronUp />
               </button>
-              <button 
-                className="increment-btn"
-                onClick={() => handleBorderWidthChange(-1)}
-                disabled={(typeof borderWidth === 'number' ? borderWidth : 3) <= 1}
-              >
-               <LuChevronDown />
-              </button>
-               </div>
-            </div>
-          </div>
-
-         {/* Configuración de vértices */}
-         <div className="config-item">
-            <label className="tool-label">Vertices</label>
-            <div className="input-container">
-             
-              <input 
-                type="number" 
-                min="3" 
-                max="100" 
-                value={vertices} 
-                onChange={(e) => {
-                  const value = e.target.value;
-                  
-                  // Permitir string vacío temporalmente
-                  if (value === '') {
-                    setVertices('');
-                    return;
-                  }
-                  
-                  const numValue = Number(value);
-                  if (!isNaN(numValue)) {
-                    setVertices(numValue);
-                  }
-                }}
-                onBlur={(e) => {
-                  const value = e.target.value;
-                  if (value === '' || isNaN(Number(value))) {
-                    setVertices(5); // Valor por defecto
-                    return;
-                  }
-                  
-                  const numValue = Number(value);
-                  if (numValue < 3) setVertices(3);
-                  if (numValue > 100) setVertices(100);
-                }}
-                className="number-input" 
-              />
-              <div className="increment-buttons-container">
-              <button 
+              <button
                 type="button"
-                onClick={() => {
-                  const currentVertices = typeof vertices === 'number' ? vertices : 5;
-                  setVertices(Math.min(100, currentVertices + 1));
-                }}
                 className="increment-btn"
-                disabled={(typeof vertices === 'number' ? vertices : 5) >= 100}
-              >
-               <LuChevronUp />
-              </button>
-              <button 
-                type="button"
-                onClick={() => {
-                  const currentVertices = typeof vertices === 'number' ? vertices : 5;
-                  setVertices(Math.max(3, currentVertices - 1));
-                }}
-                className="increment-btn"
-                disabled={(typeof vertices === 'number' ? vertices : 5) <= 3}
+                onClick={() => stepWidth(-1)}
+                disabled={wValue <= W_MIN}
+                aria-label="Reducir border width"
               >
                 <LuChevronDown />
               </button>
-              </div>
-             
-            </div>
-          </div>
-
-          {/* Configuración de rotación */}
-          <div className="config-item">
-            <label className="tool-label">Rotation</label>
-            <div className="input-container">
-              
-              <input 
-                type="number" 
-                min="0" 
-                max="360" 
-                value={rotation} 
-                onChange={(e) => {
-                  const value = e.target.value;
-                  
-                  // Permitir string vacío temporalmente
-                  if (value === '') {
-                    setRotation('');
-                    return;
-                  }
-                  
-                  const numValue = Number(value);
-                  if (!isNaN(numValue)) {
-                    setRotation(numValue);
-                  }
-                }}
-                onBlur={(e) => {
-                  const value = e.target.value;
-                  if (value === '' || isNaN(Number(value))) {
-                    setRotation(0); // Valor por defecto
-                    return;
-                  }
-                  
-                  const numValue = Number(value);
-                  if (numValue < 0) setRotation(0);
-                  if (numValue > 360) setRotation(360);
-                }}
-                className="number-input" 
-              />
-              <span className="tool-value">°</span>
-              <div className="increment-buttons-container">
-              <button 
-                type="button"
-                onClick={() => {
-                  const currentRotation = typeof rotation === 'number' ? rotation : 0;
-                  setRotation(Math.min(360, currentRotation + 5));
-                }}
-                className="increment-btn"
-                disabled={(typeof rotation === 'number' ? rotation : 0) >= 360}
-              >
-                <LuChevronUp />
-              </button>
-              <button 
-                type="button"
-                onClick={() => {
-                  const currentRotation = typeof rotation === 'number' ? rotation : 0;
-                  setRotation(Math.max(0, currentRotation - 5));
-                }}
-                className="increment-btn"
-                disabled={(typeof rotation === 'number' ? rotation : 0) <= 0}
-              >
-                <LuChevronDown />
-              </button>
-              </div>
             </div>
           </div>
         </div>
 
-        {/* Vista previa de la herramienta */}
-        <div className="tool-preview">
-         
-          <div className="preview-container">
-            <svg width="80" height="80" viewBox="0 0 80 80" className="preview-svg">
-              <polygon
-                points={Array.from({ length: typeof vertices === 'number' ? vertices : 5 }, (_, i) => {
-                  const currentVertices = typeof vertices === 'number' ? vertices : 5;
-                  const currentRotation = typeof rotation === 'number' ? rotation : 0;
-                  const angle = (i * 2 * Math.PI / currentVertices) + (currentRotation * Math.PI / 180);
-                  const x = 40 + 25 * Math.cos(angle);
-                  const y = 40 + 25 * Math.sin(angle);
-                  return `${x},${y}`;
-                }).join(' ')}
-                fill={`rgba(
-                    ${fillColor.r},
-                    ${fillColor.g},
-                    ${fillColor.b},
-                    ${fillColor.a}
-                    )`}
-                stroke={`rgba(
-                    ${borderColor.r},
-                    ${borderColor.g},
-                    ${borderColor.b},
-                    ${borderColor.a}
-                    )`}
-                strokeWidth={typeof borderWidth === 'number' ? borderWidth : 3}
-                opacity={opacity / 100}
-              />
-            </svg>
+        <div className="config-item">
+          <label className="tool-label" htmlFor="polygonTool-vertices">
+            Vertices
+          </label>
+          <div className="input-container">
+            <input
+              id="polygonTool-vertices"
+              type="number"
+              min={V_MIN}
+              max={V_MAX}
+              value={vertices}
+              onChange={onVerticesInput}
+              onBlur={onVerticesBlur}
+              className="number-input"
+            />
+            <div className="increment-buttons-container">
+              <button
+                type="button"
+                className="increment-btn"
+                onClick={() => stepVertices(1)}
+                disabled={vValue >= V_MAX}
+                aria-label="Aumentar vértices"
+              >
+                <LuChevronUp />
+              </button>
+              <button
+                type="button"
+                className="increment-btn"
+                onClick={() => stepVertices(-1)}
+                disabled={vValue <= V_MIN}
+                aria-label="Reducir vértices"
+              >
+                <LuChevronDown />
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Color Pickers */}
-        {showBorderColorPicker && (
-         <>
-           <ToolColorPicker
-            color={borderColor}
-            onChange={setBorderColor}
-            hexColor={hexBorderColor}
-            setHexColor={setHexBorderColor}
+        <div className="config-item">
+          <label className="tool-label" htmlFor="polygonTool-rotation">
+            Rotation
+          </label>
+          <div className="input-container">
+            <input
+              id="polygonTool-rotation"
+              type="number"
+              min={R_MIN}
+              max={R_MAX}
+              value={rotation}
+              onChange={onRotationInput}
+              onBlur={onRotationBlur}
+              className="number-input"
             />
-         </>
-        )}
-
-        {showFillColorPicker && (
-        <>
-        <ToolColorPicker
-            color={fillColor}
-            onChange={setFillColor}
-            hexColor={hexFillColor}
-            setHexColor={setFillHexColor}
-            />
-        </>
-        )}
+            <span className="tool-value">°</span>
+            <div className="increment-buttons-container">
+              <button
+                type="button"
+                className="increment-btn"
+                onClick={() => stepRotation(R_STEP)}
+                disabled={rValue >= R_MAX}
+                aria-label="Aumentar rotación"
+              >
+                <LuChevronUp />
+              </button>
+              <button
+                type="button"
+                className="increment-btn"
+                onClick={() => stepRotation(-R_STEP)}
+                disabled={rValue <= R_MIN}
+                aria-label="Reducir rotación"
+              >
+                <LuChevronDown />
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-    </>
+
+      <div className="tool-preview" aria-hidden="true">
+        <div className="preview-container">
+          <svg
+            width="80"
+            height="80"
+            viewBox="0 0 80 80"
+            className="preview-svg"
+          >
+            <polygon
+              points={previewPoints}
+              fill="rgba(124, 77, 255, 0.25)"
+              stroke="rgba(124, 77, 255, 0.9)"
+              strokeWidth={wValue}
+            />
+          </svg>
+        </div>
+      </div>
+    </div>
   );
 };
 

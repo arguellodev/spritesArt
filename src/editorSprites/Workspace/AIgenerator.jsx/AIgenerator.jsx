@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import "./AIgenerator.css";
-const AIgenerator = ({createLayerAndPaintDataUrlCentered}) => {
+const AIgenerator = ({createLayerAndPaintDataUrlCentered, onGeneratingChange}) => {
   // Estados principales
   const [provider, setProvider] = useState("pixflux");
   const [description, setDescription] = useState("");
@@ -42,6 +42,13 @@ const AIgenerator = ({createLayerAndPaintDataUrlCentered}) => {
     height: 128,
     output_format: "png",
   });
+
+  // Espeja `isGenerating` al padre (workspaceContainer) para que el toolbar
+  // pueda mostrar un indicador de estado en el botón "IA". Sin onChange
+  // explícito, la única señal de "estoy generando" vivía dentro del modal.
+  useEffect(() => {
+    onGeneratingChange?.(isGenerating);
+  }, [isGenerating, onGeneratingChange]);
 
   // Tamaños predefinidos
   const standardSizes = [

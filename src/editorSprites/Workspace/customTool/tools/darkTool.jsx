@@ -3,7 +3,7 @@ import { LuChevronUp, LuChevronDown } from "react-icons/lu";
 
 import BrushSelect from "./brushSelect";
 
-const DarkTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setToolConfigs }) => {
+const DarkTool = ({ setToolParameters, toolParameters, toolConfigs, setToolConfigs }) => {
   // Estados para las diferentes configuraciones
   const [borderWidth, setBorderWidth] = useState(1);
   const [opacity, setOpacity] = useState(100);
@@ -353,11 +353,13 @@ const DarkTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setToo
     }
   };
 
-  // useEffect para cargar configuración guardada al montar el componente
+  // useEffect para cargar configuración guardada al montar el componente.
+  // El valor inicial de toolConfigs[X] es null, así que verificamos truthy
+  // (no `!== null`) para no caer en el caso "first mount" sin querer.
   useEffect(() => {
     const darkConfig = toolConfigs.dark;
-    
-    if (darkConfig !== null) {
+
+    if (darkConfig) {
       // Cargar configuración guardada
       setBorderWidth(darkConfig.borderWidth || 1);
       setOpacity(darkConfig.opacity || 100);
@@ -507,30 +509,35 @@ const DarkTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setToo
           {/* Configuración de grosor (solo para brocha estándar) */}
           {!currentBrush.customBrush && (
             <div className="config-item">
-              <label className="tool-label">Border Width</label>
+              <label className="tool-label" htmlFor="darkTool-borderWidth">Border Width</label>
               <div className="input-container">
-                <input 
+                <input
+                  id="darkTool-borderWidth"
                   type="number"
                   min="1"
                   max="20"
                   value={borderWidth}
                   onChange={handleBorderWidthInput}
                   onBlur={handleBorderWidthBlur}
-                  className="number-input" 
+                  className="number-input"
                 />
                 <span className="tool-value">px</span>
                 <div className="increment-buttons-container">
-                  <button 
+                  <button
+                    type="button"
                     className="increment-btn"
                     onClick={() => handleBorderWidthChange(1)}
                     disabled={(typeof borderWidth === 'number' ? borderWidth : 3) >= 20}
+                    aria-label="Aumentar border width"
                   >
                     <LuChevronUp />
                   </button>
-                  <button 
+                  <button
+                    type="button"
                     className="increment-btn"
                     onClick={() => handleBorderWidthChange(-1)}
                     disabled={(typeof borderWidth === 'number' ? borderWidth : 3) <= 1}
+                    aria-label="Reducir border width"
                   >
                     <LuChevronDown />
                   </button>
@@ -541,10 +548,11 @@ const DarkTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setToo
 
           {/* Configuración de Intensidad - Control del oscurecimiento */}
           <div className="config-item">
-            <label className="tool-label">Intensidad</label>
+            <label className="tool-label" htmlFor="darkTool-intensity">Intensidad</label>
             <div className="intensity-slider-container">
               <div className="slider-track-horizontal">
                 <input
+                  id="darkTool-intensity"
                   type="range"
                   min="0"
                   max="1"
@@ -552,6 +560,7 @@ const DarkTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setToo
                   value={intensity}
                   onChange={handleIntensityChange}
                   className="intensity-slider"
+                  aria-label="Intensidad del oscurecimiento"
                 />
               </div>
               <div className="current-value-horizontal">

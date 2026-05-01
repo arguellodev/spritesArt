@@ -14,11 +14,9 @@ import {
   LuMove
 } from "react-icons/lu";
 
-const SelectTool = ({ 
-  setToolParameters, 
-  tool, 
-  toolParameters, 
-  toolConfigs, 
+const SelectTool = ({
+  setToolParameters,
+  toolConfigs,
   setToolConfigs,
   // Props específicas para las acciones de selección
   copySelection,
@@ -30,7 +28,7 @@ const SelectTool = ({
   isolateSelection,
   groupSelection,
   ungroupSelection,
-  deleteSelection
+  deleteSelection,
 }) => {
   // Estados para las configuraciones de la herramienta de selección
   const [selectionMode, setSelectionMode] = useState('rectangle');
@@ -38,15 +36,16 @@ const SelectTool = ({
   const [featherRadius, setFeatherRadius] = useState(0);
   const [antialiasing, setAntialiasing] = useState(true);
 
-  // useEffect para cargar configuración guardada
+  // useEffect para cargar configuración guardada. Verificamos truthy en
+  // lugar de `!== null` porque el valor inicial de toolConfigs[X] es null,
+  // y para `antialiasing` usamos coalescencia (??) para no perder `false`.
   useEffect(() => {
     const selectConfig = toolConfigs.select;
-    
-    if (selectConfig !== null) {
+    if (selectConfig) {
       setSelectionMode(selectConfig.selectionMode || 'rectangle');
-      setPreserveAspectRatio(selectConfig.preserveAspectRatio || false);
-      setFeatherRadius(selectConfig.featherRadius || 0);
-      setAntialiasing(selectConfig.antialiasing || true);
+      setPreserveAspectRatio(selectConfig.preserveAspectRatio ?? false);
+      setFeatherRadius(selectConfig.featherRadius ?? 0);
+      setAntialiasing(selectConfig.antialiasing ?? true);
     }
   }, []);
 
@@ -85,26 +84,6 @@ const SelectTool = ({
     }
   };
 
-  // Función para manejar el cambio de featherRadius
-  const handleFeatherRadiusChange = (e) => {
-    const value = e.target.value;
-    if (value === '') {
-      setFeatherRadius('');
-      return;
-    }
-    const numValue = parseInt(value);
-    if (!isNaN(numValue)) {
-      setFeatherRadius(Math.max(0, Math.min(50, numValue)));
-    }
-  };
-
-  const handleFeatherRadiusBlur = (e) => {
-    const value = e.target.value;
-    if (value === '' || isNaN(parseInt(value))) {
-      setFeatherRadius(0);
-    }
-  };
-
   return (
     <div className="polygon-tool-container">
       <div className="tool-configs">
@@ -122,9 +101,11 @@ const SelectTool = ({
         {/* Acciones de selección - Grupo 1: Portapapeles */}
         <div className="config-item">
           <button
+            type="button"
             className="action-button"
             onClick={() => handleAction('copy', copySelection)}
             title="Copiar selección (Ctrl+C)"
+            aria-label="Copiar selección"
           >
             <LuCopy />
           </button>
@@ -132,9 +113,11 @@ const SelectTool = ({
 
         <div className="config-item">
           <button
+            type="button"
             className="action-button"
             onClick={() => handleAction('cut', cutSelection)}
             title="Cortar selección (Ctrl+X)"
+            aria-label="Cortar selección"
           >
             <LuScissors />
           </button>
@@ -142,9 +125,11 @@ const SelectTool = ({
 
         <div className="config-item">
           <button
+            type="button"
             className="action-button"
             onClick={() => handleAction('paste', pastePixels)}
             title="Pegar (Ctrl+V)"
+            aria-label="Pegar"
           >
             <LuClipboard />
           </button>
@@ -161,9 +146,11 @@ const SelectTool = ({
         {/* Grupo 2: Transformaciones */}
         <div className="config-item">
           <button
+            type="button"
             className="action-button"
             onClick={() => handleAction('duplicate', duplicateSelection)}
             title="Duplicar selección"
+            aria-label="Duplicar selección"
           >
             <LuCopyPlus />
           </button>
@@ -171,9 +158,11 @@ const SelectTool = ({
 
         <div className="config-item">
           <button
+            type="button"
             className="action-button"
             onClick={() => handleAction('rotateLeft', () => handleRotation?.('left'))}
             title="Rotar 90° izquierda"
+            aria-label="Rotar 90 grados a la izquierda"
           >
             <LuRotateCcw />
           </button>
@@ -181,9 +170,11 @@ const SelectTool = ({
 
         <div className="config-item">
           <button
+            type="button"
             className="action-button"
             onClick={() => handleAction('rotateRight', () => handleRotation?.('right'))}
             title="Rotar 90° derecha"
+            aria-label="Rotar 90 grados a la derecha"
           >
             <LuRotateCw />
           </button>
@@ -200,9 +191,11 @@ const SelectTool = ({
         {/* Grupo 3: Modificación */}
         <div className="config-item">
           <button
+            type="button"
             className="action-button"
             onClick={() => handleAction('fill', fillSelection)}
             title="Rellenar con color actual"
+            aria-label="Rellenar selección con color actual"
           >
             <LuPaintBucket />
           </button>
@@ -210,11 +203,13 @@ const SelectTool = ({
 
         <div className="config-item">
           <button
+            type="button"
             className="action-button"
             onClick={() => handleAction('isolate', isolateSelection)}
             title="Aislar selección"
+            aria-label="Aislar selección"
           >
-            
+            <LuMove />
           </button>
         </div>
 
@@ -229,9 +224,11 @@ const SelectTool = ({
         {/* Grupo 4: Grupos */}
         <div className="config-item">
           <button
+            type="button"
             className="action-button"
             onClick={() => handleAction('group', groupSelection)}
             title="Agrupar selección"
+            aria-label="Agrupar selección"
           >
             <LuGroup />
           </button>
@@ -239,9 +236,11 @@ const SelectTool = ({
 
         <div className="config-item">
           <button
+            type="button"
             className="action-button"
             onClick={() => handleAction('ungroup', ungroupSelection)}
             title="Desagrupar selección"
+            aria-label="Desagrupar selección"
           >
             <LuUngroup />
           </button>
@@ -258,9 +257,11 @@ const SelectTool = ({
         {/* Grupo 5: Eliminar */}
         <div className="config-item">
           <button
+            type="button"
             className="action-button delete-button"
             onClick={() => handleAction('delete', deleteSelection)}
             title="Eliminar selección (Delete)"
+            aria-label="Eliminar selección"
           >
             <LuTrash2 />
           </button>

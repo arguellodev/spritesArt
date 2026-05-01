@@ -15,7 +15,6 @@
 //        - Shift+Alt:      'intersect'
 //      (`booleanOp` del panel establece el default cuando no hay modifier activo.)
 
-import React from 'react';
 import { LuWandSparkles } from 'react-icons/lu';
 import './magicWandTool.css';
 

@@ -3,7 +3,7 @@ import { LuChevronUp, LuChevronDown } from "react-icons/lu";
 import ToolColorPicker from "./toolColorPicker";
 import BrushSelect from "./brushSelect";
 
-const EraserTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setToolConfigs }) => {
+const EraserTool = ({ setToolParameters, toolParameters, toolConfigs, setToolConfigs }) => {
   // Estados para las diferentes configuraciones
   const [borderWidth, setBorderWidth] = useState(1);
   const [opacity, setOpacity] = useState(100);
@@ -343,7 +343,7 @@ const EraserTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
   useEffect(() => {
     const eraserConfig = toolConfigs.eraser;
     
-    if (eraserConfig !== null) {
+    if (eraserConfig) {
       // Cargar configuración guardada
       setBorderWidth(eraserConfig.borderWidth || 1);
       setOpacity(eraserConfig.opacity || 100);
@@ -488,30 +488,35 @@ const EraserTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
           {/* Configuración de grosor (solo para brocha estándar) */}
           {!currentBrush.customBrush && (
             <div className="config-item">
-              <label className="tool-label">Border Width</label>
+              <label className="tool-label" htmlFor="eraserTool-borderWidth">Border Width</label>
               <div className="input-container">
-                <input 
+                <input
+                  id="eraserTool-borderWidth"
                   type="number"
                   min="1"
                   max="20"
                   value={borderWidth}
                   onChange={handleBorderWidthInput}
                   onBlur={handleBorderWidthBlur}
-                  className="number-input" 
+                  className="number-input"
                 />
                 <span className="tool-value">px</span>
                 <div className="increment-buttons-container">
-                  <button 
+                  <button
+                    type="button"
                     className="increment-btn"
                     onClick={() => handleBorderWidthChange(1)}
                     disabled={(typeof borderWidth === 'number' ? borderWidth : 3) >= 20}
+                    aria-label="Aumentar border width"
                   >
                     <LuChevronUp />
                   </button>
-                  <button 
+                  <button
+                    type="button"
                     className="increment-btn"
                     onClick={() => handleBorderWidthChange(-1)}
                     disabled={(typeof borderWidth === 'number' ? borderWidth : 3) <= 1}
+                    aria-label="Reducir border width"
                   >
                     <LuChevronDown />
                   </button>
@@ -523,14 +528,15 @@ const EraserTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
           {/* Configuración de Sharpen (solo para brocha estándar) */}
           {!currentBrush.customBrush && (
             <div className="config-item">
-              <label className="tool-label">Sharpen</label>
+              <label className="tool-label" htmlFor="eraserTool-sharpen">Sharpen</label>
               <div className="input-container">
-                <input 
-                  type="number" 
-                  min="0" 
-                  max="1" 
+                <input
+                  id="eraserTool-sharpen"
+                  type="number"
+                  min="0"
+                  max="1"
                   step="0.1"
-                  value={sharpen} 
+                  value={sharpen}
                   onChange={(e) => {
                     const value = e.target.value;
                     if (value === '') {
@@ -556,7 +562,7 @@ const EraserTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
                   className="number-input" 
                 />
                 <div className="increment-buttons-container">
-                  <button 
+                  <button
                     type="button"
                     onClick={() => {
                       const currentSharpen = typeof sharpen === 'number' ? sharpen : 1;
@@ -564,10 +570,11 @@ const EraserTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
                     }}
                     className="increment-btn"
                     disabled={sharpen >= 1}
+                    aria-label="Aumentar sharpen"
                   >
                     <LuChevronUp />
                   </button>
-                  <button 
+                  <button
                     type="button"
                     onClick={() => {
                       const currentSharpen = typeof sharpen === 'number' ? sharpen : 1;
@@ -575,6 +582,7 @@ const EraserTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
                     }}
                     className="increment-btn"
                     disabled={sharpen <= 0}
+                    aria-label="Reducir sharpen"
                   >
                     <LuChevronDown />
                   </button>
@@ -585,9 +593,10 @@ const EraserTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setT
 
           {/* Configuración de Paint Mode */}
           <div className="config-item">
-            <label className="tool-label">Paint Mode</label>
+            <label className="tool-label" htmlFor="eraserTool-paintMode">Paint Mode</label>
             <div className="input-container">
               <select
+                id="eraserTool-paintMode"
                 value={paintMode}
                 onChange={(e) => setPaintMode(e.target.value)}
                 className="select-input"

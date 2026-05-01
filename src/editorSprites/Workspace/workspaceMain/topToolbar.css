@@ -1,4 +1,14 @@
-/* TopToolbar Styles — PixCalli Studio */
+/* TopToolbar Styles — PixCalli Studio
+ * ────────────────────────────────────────────────────────────
+ * Sistema de menús superior con estética "glass studio dark":
+ *  - Panel del dropdown con backdrop-filter (frosted glass).
+ *  - Acento púrpura PixCalli (#8c52ff) en focus / hover.
+ *  - Marca pixel-art sutil: indicador de 3 micro-cuadros en el item
+ *    enfocado y un patrón de scanlines casi invisible en el panel.
+ *  - kbd chips tipográficos (no botones gigantes) — leen como un
+ *    cheat-sheet de IDE.
+ *  - Submenu lateral con flip horizontal automático si no cabe.
+ * ──────────────────────────────────────────────────────────── */
 
 .topToolbar-container {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', system-ui, sans-serif;
@@ -16,32 +26,54 @@
   gap: 6px;
 }
 
-/* ── Seccion izquierda — Menus desplegables ── */
+/* ── Sección izquierda — menubar ───────────────────────────── */
 .topToolbar-left {
   display: flex;
   align-items: center;
   gap: 1px;
   flex-shrink: 0;
+  /* Estirar a toda la altura del toolbar — necesario para que el
+   * `align-self: stretch` de los `.dropdown-wrapper` hijos resuelva
+   * a 36px y el dropdown caiga justo debajo de la barra. */
+  align-self: stretch;
 }
 
 .dropdown-wrapper {
   position: relative;
+  /* Estirar a toda la altura del toolbar (36px) para que `top: 100%` del
+   * dropdown caiga JUSTO debajo del toolbar, no dentro de él. Sin esto,
+   * el wrapper sólo tiene la altura del trigger (~20px) por culpa del
+   * `align-items: center` del padre, y el menú aparece encimado en la barra. */
+  align-self: stretch;
+  display: flex;
+  align-items: center;
 }
 
 .dropdown-trigger {
   background: none;
   border: none;
   color: var(--text-secondary);
-  padding: 4px 9px;
-  border-radius: 4px;
+  padding: 4px 10px;
+  border-radius: 5px;
   cursor: pointer;
   font-size: 12px;
   font-weight: 500;
   font-family: inherit;
   letter-spacing: 0.01em;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition: background-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
   white-space: nowrap;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.dropdown-trigger-icon {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  color: var(--accent-hover);
+  opacity: 0.85;
 }
 
 .dropdown-trigger:hover {
@@ -55,84 +87,285 @@
 }
 
 .dropdown-trigger.active {
+  /* Micro-pisada de marca: acento púrpura + glow sutil = "estoy abierto" */
   background-color: rgba(140, 82, 255, 0.18);
   color: var(--accent-hover);
+  box-shadow: inset 0 -2px 0 0 var(--accent-color);
 }
 
+/* ── Panel del dropdown — glassmorphism ────────────────────── */
 .dropdown-menu {
   position: absolute;
-  top: calc(100% + 3px);
+  top: calc(100% + 5px);
   left: 0;
-  min-width: 208px;
-  background-color: #232323;
-  border: 1px solid #3d3d3d;
-  border-radius: 6px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
-  padding: 4px 0;
+  min-width: 244px;
+  /* Glass: panel semi-transparente sobre el editor. Si el navegador
+   * no soporta backdrop-filter, el background-color sólido ya es
+   * legible — degradación natural. */
+  background-color: rgba(28, 28, 32, 0.92);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid rgba(140, 82, 255, 0.14);
+  border-radius: 8px;
+  box-shadow:
+    0 12px 36px rgba(0, 0, 0, 0.55),
+    0 2px 8px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  padding: 6px 4px;
   z-index: 1001;
-  animation: dropdownFadeIn 0.11s ease-out;
+  /* Easing pixel-step: arranque y final más nítidos que cubic estándar.
+   * Da una sensación "deliberada" sin caer en el snap robótico. */
+  animation: dropdownFadeIn 0.14s cubic-bezier(0.18, 0.89, 0.32, 1.15);
   display: flex;
   flex-direction: column;
+  /* Scanline ultra-sutil de pixel-art editor (decorativa, no funcional).
+   * NO añadir aquí `position: relative` — el `position: absolute` de arriba
+   * ya crea contexto positionado para el ::before, y `isolation: isolate`
+   * ya da el stacking context. Sobrescribir la posición rompe el dropdown:
+   * vuelve al flujo flex y aparece AL LADO del trigger en vez de DEBAJO. */
+  isolation: isolate;
+}
+
+.dropdown-menu::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.012) 0 1px,
+    transparent 1px 3px
+  );
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Dropdown alineado a la derecha del wrapper — se aplica cuando el JS
+ * detecta overflow horizontal por la derecha del viewport. */
+.dropdown-menu--align-right {
+  left: auto;
+  right: 0;
 }
 
 @keyframes dropdownFadeIn {
-  from { opacity: 0; transform: translateY(-5px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(-6px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* ── Section header dentro del panel ────────────────────────── */
+.dropdown-section-header {
+  /* Etiqueta tipográfica que separa grupos de acciones (Historial,
+   * Portapapeles, Transformar...). Pequeña y desaturada — no compite
+   * con los items. */
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  opacity: 0.55;
+  padding: 8px 12px 4px;
+  user-select: none;
+}
+
+.dropdown-section-header:first-child {
+  padding-top: 4px;
+}
+
+/* ── Item del dropdown ──────────────────────────────────────── */
 .dropdown-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
   width: 100%;
-  padding: 6px 12px;
+  padding: 6px 10px 6px 8px;
   cursor: pointer;
   background: none;
   border: none;
+  border-radius: 5px;
   text-align: left;
   color: var(--text-primary);
   font-size: 12px;
   font-family: inherit;
   letter-spacing: 0.01em;
-  transition: background-color 0.1s ease;
+  position: relative;
+  transition: background-color 0.1s ease, color 0.1s ease;
 }
 
 .dropdown-item:hover:not(:disabled),
-.dropdown-item:focus-visible {
-  background-color: rgba(140, 82, 255, 0.14);
+.dropdown-item:focus-visible,
+.dropdown-item--submenu-open {
+  background-color: rgba(140, 82, 255, 0.16);
+  color: var(--text-primary);
   outline: none;
 }
 
+/* Indicador de pixel-art a la izquierda del item enfocado:
+ * 3 micro-cuadros que simulan un cursor 8-bit. Es lo que le da el
+ * "guiño pixel" al menú sin sacrificar legibilidad.
+ * `pointer-events: none` es defensivo — sin esto el ::before podría
+ * intercambiar el foco con el botón en algunos navegadores. */
+.dropdown-item:focus-visible::before,
+.dropdown-item:hover:not(:disabled)::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  width: 3px;
+  height: 9px;
+  transform: translateY(-50%);
+  background-image:
+    linear-gradient(to bottom,
+      var(--accent-color) 0 3px,
+      transparent 3px 3px,
+      var(--accent-color) 3px 6px,
+      transparent 6px 6px,
+      var(--accent-color) 6px 9px);
+  border-radius: 1px;
+  opacity: 0.9;
+  pointer-events: none;
+}
+
 .dropdown-item:disabled {
-  opacity: 0.4;
+  opacity: 0.36;
   cursor: not-allowed;
+}
+
+.dropdown-item--danger {
+  color: #ff7a7a;
+}
+
+.dropdown-item--danger:hover:not(:disabled) {
+  background-color: rgba(255, 80, 80, 0.16);
+  color: #ffaaaa;
+}
+
+.dropdown-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--accent-hover);
+  opacity: 0.92;
+  width: 18px;
+}
+
+.dropdown-item:disabled .dropdown-item-icon {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.dropdown-checkmark {
+  color: var(--accent-color);
+  font-weight: 700;
+  font-size: 12px;
 }
 
 .dropdown-item-name {
   flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.dropdown-item-shortcut {
+.dropdown-item-chevron {
+  font-size: 13px;
   color: var(--text-secondary);
-  font-size: 11px;
-  margin-left: 24px;
-  font-variant-numeric: tabular-nums;
-  opacity: 0.65;
+  opacity: 0.6;
+  transition: transform 0.12s ease, opacity 0.12s ease;
 }
 
+.dropdown-item:hover .dropdown-item-chevron,
+.dropdown-item--submenu-open .dropdown-item-chevron {
+  opacity: 1;
+  transform: translateX(2px);
+}
+
+/* ── kbd chips ─────────────────────────────────────────────── */
+.dropdown-item-shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dropdown-kbd {
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 2px 5px;
+  color: var(--text-secondary);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom-color: rgba(0, 0, 0, 0.4);
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+  text-transform: capitalize;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+}
+
+.dropdown-item:hover .dropdown-kbd,
+.dropdown-item:focus-visible .dropdown-kbd {
+  color: var(--text-primary);
+  border-color: rgba(140, 82, 255, 0.4);
+  background: linear-gradient(180deg, rgba(140, 82, 255, 0.12), rgba(140, 82, 255, 0.04));
+}
+
+/* ── Separator ─────────────────────────────────────────────── */
 .dropdown-separator {
   height: 1px;
-  background-color: rgba(255, 255, 255, 0.07);
-  margin: 3px 6px;
+  background-color: rgba(255, 255, 255, 0.06);
+  margin: 4px 8px;
 }
 
-/* ── Seccion central — Children (botones de accion) ── */
+/* ── Submenu (panel anidado) ───────────────────────────────── */
+.dropdown-submenu {
+  /* Posicionado por JS via `style.left/top` — el animación entra
+   * desde la dirección del placement (right/left). */
+  animation-name: submenuSlideIn;
+}
+
+.dropdown-submenu--right {
+  transform-origin: top left;
+}
+
+.dropdown-submenu--left {
+  transform-origin: top right;
+}
+
+@keyframes submenuSlideIn {
+  from { opacity: 0; transform: translateX(-4px) scale(0.985); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.dropdown-submenu--left {
+  animation-name: submenuSlideInLeft;
+}
+
+@keyframes submenuSlideInLeft {
+  from { opacity: 0; transform: translateX(4px) scale(0.985); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+/* ── Sección central — Children (acciones) ──────────────────
+ * Layout en tres "zonas":
+ *   - layerName fluye al inicio (izquierda)
+ *   - ReflexMode fluye al final (derecha)  → justify-content: space-between
+ *   - quick-actions se posiciona ABSOLUTAMENTE en el centro geométrico
+ *     del slot, independientemente del ancho de los hermanos. Así los
+ *     botones siempre están centrados visualmente, incluso si el nombre
+ *     de capa es largo o ReflexMode crece.
+ * `position: relative` es indispensable aquí — es el ancla del absolute
+ * de .quick-actions. */
 .topToolbar-center {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 5px;
+  justify-content: space-between;
+  gap: 8px;
   flex: 1;
-  justify-content: center;
   padding: 0 8px;
   min-width: 0;
 }
@@ -141,7 +374,6 @@
   flex-shrink: 0;
 }
 
-/* Divisor vertical entre grupos */
 .toolbar-divider {
   width: 1px;
   height: 16px;
@@ -150,7 +382,142 @@
   align-self: center;
 }
 
-/* ── Seccion derecha — Branding / info ── */
+/* ── Quick actions (botones IA / 3D en el centro) ───────────
+ * Posicionado absolute para garantizar centrado geométrico real,
+ * insensible al ancho de los hermanos (layerName, ReflexMode). */
+.quick-actions {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 1;
+}
+
+.quick-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 9px;
+  background: rgba(140, 82, 255, 0.06);
+  border: 1px solid rgba(140, 82, 255, 0.2);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    background-color 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease,
+    box-shadow 0.18s ease,
+    transform 0.12s ease;
+}
+
+.quick-action:hover {
+  background: rgba(140, 82, 255, 0.14);
+  border-color: rgba(140, 82, 255, 0.45);
+  color: var(--text-primary);
+}
+
+.quick-action:active {
+  transform: translateY(1px);
+}
+
+.quick-action:focus-visible {
+  outline: 2px solid rgba(140, 82, 255, 0.55);
+  outline-offset: 1px;
+}
+
+/* Estado: panel abierto. Acento púrpura sólido + barra inferior. */
+.quick-action--active {
+  background: rgba(140, 82, 255, 0.22);
+  border-color: var(--accent-color);
+  color: var(--accent-hover);
+  box-shadow:
+    0 0 0 1px rgba(140, 82, 255, 0.25),
+    inset 0 -2px 0 var(--accent-color);
+}
+
+/* Estado: generando — sobreescribe el color púrpura por cyan eléctrico,
+ * lo combina con un punto pulsante a la izquierda y "Generando…" como
+ * label. Tiene precedencia visual sobre `--active` porque es transitorio
+ * y necesita ser inmediatamente reconocible. */
+.quick-action--busy,
+.quick-action--busy.quick-action--active {
+  background: rgba(56, 248, 212, 0.12);
+  border-color: rgba(56, 248, 212, 0.55);
+  color: #38f8d4;
+  box-shadow:
+    0 0 0 1px rgba(56, 248, 212, 0.18),
+    0 0 12px rgba(56, 248, 212, 0.18),
+    inset 0 -2px 0 rgba(56, 248, 212, 0.7);
+}
+
+.quick-action--busy:hover {
+  background: rgba(56, 248, 212, 0.18);
+  border-color: rgba(56, 248, 212, 0.7);
+  color: #6dffe5;
+}
+
+.quick-action__icon {
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+}
+
+.quick-action__label {
+  font-variant-numeric: tabular-nums;
+  /* Layout estable: evita "salto" de ancho cuando el label cambia de
+   * "IA" → "Generando…". Reserva espacio mínimo. */
+  min-width: 1.4em;
+  text-align: left;
+}
+
+/* Punto pulsante delante del label cuando está generando. */
+.quick-action__pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #38f8d4;
+  box-shadow:
+    0 0 8px rgba(56, 248, 212, 0.85),
+    0 0 14px rgba(56, 248, 212, 0.45);
+  animation: quickActionPulse 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes quickActionPulse {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%      { opacity: 0.35; transform: scale(0.7); }
+}
+
+/* En ventanas estrechas, ocultar el label deja sólo el icono — gana
+ * espacio sin perder funcionalidad. El punto pulsante queda visible
+ * como indicador silencioso de "estoy generando". */
+@media (max-width: 1100px) {
+  .quick-action__label {
+    display: none;
+  }
+  .quick-action {
+    padding: 6px 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quick-action__pulse {
+    animation: none;
+    opacity: 0.85;
+  }
+}
+
+/* ── Sección derecha — branding ────────────────────────────── */
 .topToolbar-right {
   display: flex;
   align-items: center;
@@ -179,7 +546,7 @@
   color: var(--text-secondary);
 }
 
-/* ── Responsive: ventanas estrechas ── */
+/* ── Responsive — ventanas estrechas ───────────────────────── */
 @media (max-width: 1200px) {
   .powered-by > span:first-child {
     display: none;
@@ -192,25 +559,30 @@
   }
 }
 
+/* ── Reduced motion ────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .dropdown-menu,
+  .dropdown-submenu,
+  .dropdown-item-chevron {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 
 /* ============================================================
  * MOBILE / TABLET (<= 767px) — top toolbar
  *
  * En mobile el toolbar es la fuente principal de comandos: archivos,
- * edicion, vista, etc. Necesita ser scrollable horizontalmente para no
- * comerse el ancho del editor, y los items necesitan tap targets mas
+ * edición, vista, etc. Necesita ser scrollable horizontalmente para no
+ * comerse el ancho del editor, y los items necesitan tap targets más
  * grandes que los 30px del desktop.
  * ============================================================ */
 @media (max-width: 767px) {
   .topToolbar-container {
-    /* Scroll horizontal para que los menus dropdown no se trunquen y
-     * el usuario pueda alcanzarlos todos sin reordenar nada. */
     overflow-x: auto;
     overflow-y: visible;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
-    /* Esconde la barra de scroll horizontal (UX mas limpio); el gesto
-     * sigue funcionando con un swipe. */
     scrollbar-width: none;
   }
   .topToolbar-container::-webkit-scrollbar {
@@ -228,17 +600,20 @@
     touch-action: manipulation;
   }
 
-  /* Items del dropdown: 44px de alto para que se puedan tap-ear sin
-   * acertar a un target de 24px. Padding mas generoso en horizontal. */
   .dropdown-item {
     min-height: 44px;
-    padding: 10px 14px;
+    padding: 10px 12px 10px 12px;
     font-size: 14px;
+    grid-template-columns: 22px 1fr auto;
   }
 
-  /* Dropdown menu: ancho minimo razonable y limite de viewport. */
   .dropdown-menu {
-    min-width: 200px;
-    max-width: 90vw;
+    min-width: 220px;
+    max-width: 92vw;
+  }
+
+  /* En mobile el chip kbd es ruido — el usuario no tiene teclado físico. */
+  .dropdown-item-shortcut {
+    display: none;
   }
 }

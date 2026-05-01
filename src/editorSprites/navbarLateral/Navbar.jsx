@@ -14,10 +14,23 @@ const NavbarLateral = ({
   className = "",
   showOnlyDropIcons = false, // Control independiente para los íconos de dropdown
   activeTool, // Nueva prop para detectar herramienta activa
+  // Modo colapsado controlado desde el padre. Si no se provee `collapsed`,
+  // se cae a estado interno (modo no controlado) y el render colapsado vive
+  // dentro del propio Navbar como cuadro flotante. Si se provee, el padre
+  // decide dónde pintar el indicador (p. ej. dentro de la TopToolbar).
+  collapsed: collapsedProp,
+  onCollapseChange,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openDropdowns, setOpenDropdowns] = useState({});
   const [selectedSubitems, setSelectedSubitems] = useState({});
+  const [collapsedInternal, setCollapsedInternal] = useState(false);
+  const isControlled = collapsedProp !== undefined;
+  const collapsed = isControlled ? collapsedProp : collapsedInternal;
+  const requestCollapse = (next) => {
+    if (!isControlled) setCollapsedInternal(next);
+    if (onCollapseChange) onCollapseChange(next);
+  };
 
   // Inicializar los subitems seleccionados al cargar el componente
   useEffect(() => {
@@ -201,6 +214,62 @@ const NavbarLateral = ({
     }
   };
 
+  // Busca el item (o subitem de dropdown) cuyo toolValue coincide con la
+  // herramienta activa. Solo se usa para pintar el cuadro flotante en modo
+  // colapsado — el resto de la barra ya tiene su propio resaltado.
+  const findActiveItem = () => {
+    for (const item of items) {
+      if (item.dropdown) {
+        const sub = item.dropdown.find((s) => s.toolValue === activeTool);
+        if (sub) return sub;
+      } else if (item.toolValue === activeTool) {
+        return item;
+      }
+    }
+    return null;
+  };
+
+  // Modo colapsado.
+  //  - Controlado: devolvemos null. El padre decide dónde pintar el
+  //    indicador (típicamente dentro de la TopToolbar superior).
+  //  - No controlado: pintamos un cuadro flotante en la esquina superior
+  //    izquierda del workspace (position:absolute respecto a
+  //    `.workspace2-container`).
+  if (collapsed) {
+    if (isControlled) return null;
+    const activeItem = findActiveItem();
+    const labelTxt = activeItem?.label || "Ninguna";
+    return (
+      <div
+        className={`navbar-collapsed-floating navbar-${theme}`}
+        role="region"
+        aria-label="Barra de herramientas colapsada"
+      >
+        <button
+          type="button"
+          className="navbar-collapsed-current"
+          onClick={() => requestCollapse(false)}
+          title={`${labelTxt} — clic para expandir la barra`}
+          aria-label={`Expandir barra de herramientas. Herramienta actual: ${labelTxt}`}
+          aria-expanded="false"
+        >
+          {activeItem?.icon ? (
+            <span className="navbar-icon" aria-hidden="true">
+              {activeItem.icon}
+            </span>
+          ) : (
+            <span className="navbar-collapsed-placeholder" aria-hidden="true">
+              ≡
+            </span>
+          )}
+          <span className="navbar-collapsed-expand-hint" aria-hidden="true">
+            ›
+          </span>
+        </button>
+      </div>
+    );
+  }
+
   // Renderizar componentes según orientación
   return (
     <>
@@ -230,8 +299,16 @@ const NavbarLateral = ({
           ref={navbarRef}
         >
           <div className="navbar-container">
-          
-
+            <button
+              type="button"
+              className="navbar-collapse-toggle"
+              onClick={() => requestCollapse(true)}
+              title="Colapsar barra de herramientas"
+              aria-label="Colapsar barra de herramientas"
+              aria-expanded="true"
+            >
+              <span aria-hidden="true">‹</span>
+            </button>
 
             <div className={`navbar-menu ${twoColumns ? "two-columns" : ""}`}>
               {items.map(renderMenuItem)}

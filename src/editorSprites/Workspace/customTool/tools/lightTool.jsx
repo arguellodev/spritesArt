@@ -3,7 +3,7 @@ import { LuChevronUp, LuChevronDown } from "react-icons/lu";
 
 import BrushSelect from "./brushSelect";
 
-const LightTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setToolConfigs }) => {
+const LightTool = ({ setToolParameters, toolParameters, toolConfigs, setToolConfigs }) => {
   // Estados para las diferentes configuraciones
   const [borderWidth, setBorderWidth] = useState(1);
   const [opacity, setOpacity] = useState(100);
@@ -357,7 +357,7 @@ const LightTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setTo
   useEffect(() => {
     const lightConfig = toolConfigs.light;
     
-    if (lightConfig !== null) {
+    if (lightConfig) {
       // Cargar configuración guardada
       setBorderWidth(lightConfig.borderWidth || 1);
       setOpacity(lightConfig.opacity || 100);
@@ -507,30 +507,35 @@ const LightTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setTo
           {/* Configuración de grosor (solo para brocha estándar) */}
           {!currentBrush.customBrush && (
             <div className="config-item">
-              <label className="tool-label">Border Width</label>
+              <label className="tool-label" htmlFor="lightTool-borderWidth">Border Width</label>
               <div className="input-container">
-                <input 
+                <input
+                  id="lightTool-borderWidth"
                   type="number"
                   min="1"
                   max="20"
                   value={borderWidth}
                   onChange={handleBorderWidthInput}
                   onBlur={handleBorderWidthBlur}
-                  className="number-input" 
+                  className="number-input"
                 />
                 <span className="tool-value">px</span>
                 <div className="increment-buttons-container">
-                  <button 
+                  <button
+                    type="button"
                     className="increment-btn"
                     onClick={() => handleBorderWidthChange(1)}
                     disabled={(typeof borderWidth === 'number' ? borderWidth : 3) >= 20}
+                    aria-label="Aumentar border width"
                   >
                     <LuChevronUp />
                   </button>
-                  <button 
+                  <button
+                    type="button"
                     className="increment-btn"
                     onClick={() => handleBorderWidthChange(-1)}
                     disabled={(typeof borderWidth === 'number' ? borderWidth : 3) <= 1}
+                    aria-label="Reducir border width"
                   >
                     <LuChevronDown />
                   </button>
@@ -541,10 +546,11 @@ const LightTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setTo
 
           {/* Configuración de Intensidad - Control del iluminado */}
           <div className="config-item">
-            <label className="tool-label">Intensidad</label>
+            <label className="tool-label" htmlFor="lightTool-intensity">Intensidad</label>
             <div className="intensity-slider-container">
               <div className="slider-track-horizontal">
                 <input
+                  id="lightTool-intensity"
                   type="range"
                   min="0"
                   max="1"
@@ -552,6 +558,7 @@ const LightTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setTo
                   value={intensity}
                   onChange={handleIntensityChange}
                   className="intensity-slider"
+                  aria-label="Intensidad del iluminado"
                 />
               </div>
               <div className="current-value-horizontal">

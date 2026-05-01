@@ -1,20 +1,10 @@
 import { useEffect, useState } from "react";
 import { LuChevronUp, LuChevronDown } from "react-icons/lu";
-import ToolColorPicker from "./toolColorPicker";
 
-const LineTool = ({ setToolParameters, tool, toolParameters }) => {
-  // Estados para las diferentes configuraciones
+const LineTool = ({ setToolParameters }) => {
   const [borderWidth, setBorderWidth] = useState(1);
-  const [opacity, setOpacity] = useState(100);
-  const [vertices, setVertices] = useState(5);
-  const [rotation, setRotation] = useState(0);
-  const [pattern, setPattern] = useState("solid");
-  const [pressure, setPressure] = useState(50);
   const [sharpen, setSharpen] = useState(0);
   const [paintMode, setPaintMode] = useState('manual');
-  const [velocitySensibility, setVelocitySensibility] = useState(0);
-  
-  // Estado para el tipo de brocha seleccionada
   const [selectedBrushType, setSelectedBrushType] = useState('standard');
 
   // Definición completa de todas las brochas
@@ -92,22 +82,6 @@ const LineTool = ({ setToolParameters, tool, toolParameters }) => {
     });
   };
 
-  // Función para obtener el color de preview de un píxel
-  const getPreviewPixelColor = (pixel, brushType) => {
-    if (brushType.useCurrentColor && pixel.color === null) {
-      // Usar el color del sistema para el preview
-      const currentColor = toolParameters?.foregroundColor || { r: 0, g: 0, b: 0, a: 1 };
-      const opacity = pixel.opacity || 1;
-      return `rgba(${currentColor.r}, ${currentColor.g}, ${currentColor.b}, ${opacity})`;
-    }
-    
-    if (pixel.color) {
-      return `rgba(${pixel.color.r}, ${pixel.color.g}, ${pixel.color.b}, ${pixel.color.a / 255})`;
-    }
-    
-    return 'transparent';
-  };
-
   // Función para manejar cambios en el grosor con botones
   const handleBorderWidthChange = (increment) => {
     const currentWidth = typeof borderWidth === 'number' ? borderWidth : 3;
@@ -145,34 +119,23 @@ const LineTool = ({ setToolParameters, tool, toolParameters }) => {
   };
 
   useEffect(() => {
-    // Solo actualizar si todos los valores son números válidos
-    if (typeof borderWidth === 'number' && 
-        typeof vertices === 'number' && 
-        typeof rotation === 'number') {
-     
-      const selectedBrush = brushTypes[selectedBrushType];
-      
-      // NO establecemos colores aquí - solo configuraciones de la brocha
-      setToolParameters(prev => ({
-        ...prev,
-        width: borderWidth,
-        vertices: vertices,
-        rotation: rotation,
-        pattern: pattern,
-        pressure: pressure,
-        smoothness: 0,
-        blur: sharpen,
-        paintMode: paintMode,
-        velocitySensibility: velocitySensibility,
-        customBrush: selectedBrush.customBrush,
-        customBrushData: selectedBrush.data, // Datos sin procesar
-        customBrushType: selectedBrush, // Información completa de la brocha
-        // Función para procesar la brocha con cualquier color
-        processCustomBrushData: (color) => processCustomBrushData(selectedBrush, color)
-        // NO establecemos foregroundColor ni backgroundColor aquí
-      }));
-    }
-  }, [borderWidth, opacity, vertices, rotation, pattern, pressure, setToolParameters, sharpen, paintMode, velocitySensibility, selectedBrushType]);
+    if (typeof borderWidth !== 'number') return;
+
+    const selectedBrush = brushTypes[selectedBrushType];
+
+    // NO establecemos colores aquí - solo configuraciones de la brocha
+    setToolParameters((prev) => ({
+      ...prev,
+      width: borderWidth,
+      smoothness: 0,
+      blur: sharpen,
+      paintMode,
+      customBrush: selectedBrush.customBrush,
+      customBrushData: selectedBrush.data,
+      customBrushType: selectedBrush,
+      processCustomBrushData: (color) => processCustomBrushData(selectedBrush, color),
+    }));
+  }, [borderWidth, sharpen, paintMode, selectedBrushType, setToolParameters]);
 
   const currentBrush = brushTypes[selectedBrushType];
 
@@ -183,9 +146,10 @@ const LineTool = ({ setToolParameters, tool, toolParameters }) => {
           
           {/* Selector de tipo de brocha */}
           <div className="config-item">
-            <label className="tool-label">Brush Type</label>
+            <label className="tool-label" htmlFor="lineTool-brushType">Brush Type</label>
             <div className="input-container">
               <select
+                id="lineTool-brushType"
                 value={selectedBrushType}
                 onChange={handleBrushTypeChange}
                 className="select-input brush-selector"
@@ -204,30 +168,35 @@ const LineTool = ({ setToolParameters, tool, toolParameters }) => {
           {/* Configuración de grosor (solo para brocha estándar) */}
           {!currentBrush.customBrush && (
             <div className="config-item">
-              <label className="tool-label">Border Width</label>
+              <label className="tool-label" htmlFor="lineTool-borderWidth">Border Width</label>
               <div className="input-container">
-                <input 
+                <input
+                  id="lineTool-borderWidth"
                   type="number"
                   min="1"
                   max="20"
                   value={borderWidth}
                   onChange={handleBorderWidthInput}
                   onBlur={handleBorderWidthBlur}
-                  className="number-input" 
+                  className="number-input"
                 />
                 <span className="tool-value">px</span>
                 <div className="increment-buttons-container">
-                  <button 
+                  <button
+                    type="button"
                     className="increment-btn"
                     onClick={() => handleBorderWidthChange(1)}
                     disabled={(typeof borderWidth === 'number' ? borderWidth : 3) >= 20}
+                    aria-label="Aumentar border width"
                   >
                     <LuChevronUp />
                   </button>
-                  <button 
+                  <button
+                    type="button"
                     className="increment-btn"
                     onClick={() => handleBorderWidthChange(-1)}
                     disabled={(typeof borderWidth === 'number' ? borderWidth : 3) <= 1}
+                    aria-label="Reducir border width"
                   >
                     <LuChevronDown />
                   </button>
@@ -239,14 +208,15 @@ const LineTool = ({ setToolParameters, tool, toolParameters }) => {
           {/* Configuración de Sharpen (solo para brocha estándar) */}
           {!currentBrush.customBrush && (
             <div className="config-item">
-              <label className="tool-label">Sharpen</label>
+              <label className="tool-label" htmlFor="lineTool-sharpen">Sharpen</label>
               <div className="input-container">
-                <input 
-                  type="number" 
-                  min="0" 
-                  max="1" 
+                <input
+                  id="lineTool-sharpen"
+                  type="number"
+                  min="0"
+                  max="1"
                   step="0.1"
-                  value={sharpen} 
+                  value={sharpen}
                   onChange={(e) => {
                     const value = e.target.value;
                     if (value === '') {
@@ -272,7 +242,7 @@ const LineTool = ({ setToolParameters, tool, toolParameters }) => {
                   className="number-input" 
                 />
                 <div className="increment-buttons-container">
-                  <button 
+                  <button
                     type="button"
                     onClick={() => {
                       const currentSharpen = typeof sharpen === 'number' ? sharpen : 1;
@@ -280,10 +250,11 @@ const LineTool = ({ setToolParameters, tool, toolParameters }) => {
                     }}
                     className="increment-btn"
                     disabled={sharpen >= 1}
+                    aria-label="Aumentar sharpen"
                   >
                     <LuChevronUp />
                   </button>
-                  <button 
+                  <button
                     type="button"
                     onClick={() => {
                       const currentSharpen = typeof sharpen === 'number' ? sharpen : 1;
@@ -291,6 +262,7 @@ const LineTool = ({ setToolParameters, tool, toolParameters }) => {
                     }}
                     className="increment-btn"
                     disabled={sharpen <= 0}
+                    aria-label="Reducir sharpen"
                   >
                     <LuChevronDown />
                   </button>
@@ -301,9 +273,10 @@ const LineTool = ({ setToolParameters, tool, toolParameters }) => {
 
           {/* Configuración de Paint Mode */}
           <div className="config-item">
-            <label className="tool-label">Paint Mode</label>
+            <label className="tool-label" htmlFor="lineTool-paintMode">Paint Mode</label>
             <div className="input-container">
               <select
+                id="lineTool-paintMode"
                 value={paintMode}
                 onChange={(e) => setPaintMode(e.target.value)}
                 className="select-input"

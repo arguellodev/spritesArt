@@ -919,3 +919,66 @@ cursor: grab;
     max-width: 90px;
   }
 }
+
+/* ============================================================
+ * Indicador "herramienta actual" cuando la barra lateral esta
+ * colapsada. Vive como primer hijo de `.toolbar` (lado izquierdo)
+ * y permite re-expandir la barra con un clic.
+ * ============================================================ */
+.toolbar-collapsed-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px 4px 9px;
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--accent-active);
+  border-radius: 6px;
+  background-color: rgba(140, 82, 255, 0.10);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  font-family: inherit;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.toolbar-collapsed-tool:hover {
+  background-color: rgba(140, 82, 255, 0.22);
+  border-color: var(--accent-color);
+}
+
+.toolbar-collapsed-tool:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 1px;
+}
+
+.toolbar-collapsed-tool-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.toolbar-collapsed-tool-hint {
+  font-size: 12px;
+  opacity: 0.7;
+  line-height: 1;
+}
+
+@media (max-width: 767px) {
+  .toolbar-collapsed-tool {
+    min-height: 36px;
+    padding: 6px 10px 6px 11px;
+  }
+  .toolbar-collapsed-tool-icon {
+    font-size: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toolbar-collapsed-tool {
+    transition: none;
+  }
+}
