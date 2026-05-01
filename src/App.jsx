@@ -1,16 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import './App.css';
 import EditorMain from './editorSprites/Editor/editorMain';
+import { LanguageProvider } from './editorSprites/i18n/LanguageContext';
 
 function App() {
-  
+
   // Renderizado de la interfaz
   return (
-    <div className='App'>
-      <EditorMain></EditorMain>
-      
-      
-    </div>
+    <LanguageProvider>
+      <div className='App'>
+        <EditorMain></EditorMain>
+      </div>
+    </LanguageProvider>
   );
 }
 

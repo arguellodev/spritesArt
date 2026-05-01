@@ -348,3 +348,120 @@
   min-width: 4rem;
   width: fit-content;
 }
+
+/* === Modo colapsable de la barra lateral === */
+
+/* Botón pequeño en la parte superior de la barra para colapsarla. Mantiene
+   el área tactil cómoda (>=28px) sin robar verticalidad a las herramientas. */
+.navbar-collapse-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 4px auto 8px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.navbar-collapse-toggle:hover {
+  background: var(--button-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-color);
+}
+
+.navbar-collapse-toggle:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+/* Cuadro flotante que aparece cuando la barra está colapsada. Vive dentro
+   de `.workspace2-container` (position:relative) y queda anclado al borde
+   superior-izquierdo, separado de la esquina para no tocar bordes. */
+.navbar-collapsed-floating {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 50;
+  pointer-events: none; /* el botón hijo recupera los eventos */
+}
+
+.navbar-collapsed-current {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 6px 8px 6px 10px;
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--accent-active);
+  border-radius: 8px;
+  background: rgba(26, 26, 26, 0.92);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 1.2rem;
+  line-height: 1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.navbar-collapsed-current:hover {
+  background: rgba(60, 30, 130, 0.9);
+  border-color: var(--accent-color);
+}
+
+.navbar-collapsed-current:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+.navbar-collapsed-current .navbar-icon {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--text-primary);
+}
+
+.navbar-collapsed-expand-hint {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.navbar-collapsed-placeholder {
+  font-size: 1.1rem;
+  opacity: 0.7;
+}
+
+/* Variante para tema claro: que el cuadro siga siendo legible. */
+.navbar-collapsed-floating.navbar-light .navbar-collapsed-current {
+  background: rgba(255, 255, 255, 0.92);
+  color: #0f172a;
+  border-color: #e2e8f0;
+  border-left-color: var(--accent-active);
+}
+
+.navbar-collapsed-floating.navbar-light .navbar-collapsed-current:hover {
+  background: rgba(245, 240, 255, 0.95);
+  border-color: var(--accent-color);
+}
+
+.navbar-collapsed-floating.navbar-light .navbar-collapsed-current .navbar-icon {
+  color: #0f172a;
+}
+
+/* Respeta usuarios con prefers-reduced-motion. */
+@media (prefers-reduced-motion: reduce) {
+  .navbar-collapse-toggle,
+  .navbar-collapsed-current {
+    transition: none;
+  }
+}

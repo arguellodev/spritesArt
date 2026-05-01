@@ -1,20 +1,24 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import './layerAnimation.css'
 
+import { useAnimationPlayer } from '../hooks/useAnimationPlayer';
+import LayerRow from './layerRow';
 import ConfigOnionSkin from './configOnionSkin';
 import { CgArrowLongRightC } from "react-icons/cg";
 import { BsDashCircleDotted } from "react-icons/bs";
 import CustomContextMenu from './customContextMenu';
 
-import { 
-  LuEye, 
-  LuEyeOff, 
-  LuTrash2, 
-  LuArrowUp, 
-  LuArrowDown, 
-  LuX, 
-  LuChevronDown, 
+import {
+  LuEye,
+  LuEyeOff,
+  LuTrash2,
+  LuArrowUp,
+  LuArrowDown,
+  LuX,
+  LuChevronDown,
   LuChevronRight,
+  LuChevronUp,
+  LuChevronLeft,
   LuGroup,
   LuSquare,
   LuMousePointer,
@@ -33,14 +37,24 @@ import {
   LuDelete,
   LuTrash,
   LuEraser,
-  
+  LuMonitor,
+  LuPalette,
+  LuPencil,
+  LuTag,
+  LuFilm,
 } from "react-icons/lu";
 import { BiSolidLayerPlus } from "react-icons/bi";
-import { curveEps } from 'pixi.js';
+import { createTag, addTag, removeTag, updateTag, findOverlappingTag } from '../animation/animationTags';
+import { BLEND_MODES, BLEND_GROUP_LABELS, getBlendModeLabel } from '../blendModes';
 
 
 
-const LayerAnimation = ({ 
+// Destructura minimal: solo las props realmente consumidas en el árbol activo.
+// El wrapper `memoizedLayerAnimation.jsx` sigue pasando más props (para
+// compatibilidad con `renderLayerWithTimeline` + `LayerRow` si se re-enable en
+// el futuro); React ignora las props extra que el hijo no destructura.
+const LayerAnimation = ({
+  // Capas
   layers,
   addLayer,
   deleteLayer,
@@ -52,103 +66,100 @@ const LayerAnimation = ({
   clearLayer,
   activeLayerId,
   setActiveLayerId,
+
+  // Grupos / selección (consumidos por LayerRow + handlers)
   pixelGroups,
-  selectedGroup,
   selectedPixels,
   dragOffset,
   createPixelGroup,
   deletePixelGroup,
   getLayerGroups,
   selectPixelGroup,
-  clearSelectedGroup,
-  renamePixelGroup,
-  toggleGroupVisibility,
-  setSelectedPixels,
-  autoCropSelection,
-  handleSelectGroup,
-  setSelectionActive,
-  setCroppedSelectionBounds,
-  setOriginalPixelColors,
-  setDragOffset,
-  setSelectionCoords,
-  setTool,
   clearCurrentSelection,
-  getHierarchicalLayers,
   getGroupLayersForParent,
-  selectionActive,
   selectAllCanvas,
-  // Nuevas funciones para drag and drop
-  moveLayerToPosition,
-  moveGroupToLayer,
-  moveGroupToPosition,
 
-  //ANimacion:
+  // Frames
   createFrame,
-
   frames,
- currentFrame,
-
-
+  currentFrame,
   setActiveFrame,
   deleteFrame,
-   duplicateFrame,
-   saveCurrentFrameState,
-  
-   renameFrame,
-   syncWithCurrentFrame,
-   toggleLayerVisibilityInFrame,
-   getLayerVisibility,
+  duplicateFrame,
+  saveCurrentFrameState,
+  toggleLayerVisibilityInFrame,
+  getLayerVisibility,
 
-    //Gestion de onion skin:
-  toggleOnionSkin,
-  setOnionSkinConfig,
-  setOnionSkinFrameConfig,
-  getOnionSkinFrameConfig,
-  getOnionSkinPresets,
-  applyOnionSkinPreset,
-  getOnionSkinInfo,
+  // Onion skin
   onionSkinEnabled,
   onionSkinSettings,
   showOnionSkinForLayer,
-  clearOnionSkinLayerFilter,
 
-  //tiempo de los frames:
-    
+  // Duración / opacidad
   setFrameDuration,
   getFrameDuration,
-  getFrameRate,
-  setDefaultFrameRate,
-  defaultFrameDuration,
-
-  //opacidad de los frames:
   setFrameOpacity,
-    getFrameOpacity,
+  getFrameOpacity,
 
-    //nueva forma de organizar la informacion de frames:
-    framesResume,
-  // estados de animacion:
+  // Modos de fusión
+  // eslint-disable-next-line no-unused-vars
+  resolveLayerBlendMode,
+  setLayerBlendMode,
+  setFrameBlendModeOverride,
 
+  // Resumen de frames (data consolidada)
+  framesResume,
 
-  onTimeUpdate, 
-  onFrameChange, 
-  externalCanvasRef, 
+  // Callbacks de sincronización (no usados directamente pero conservados por API)
+  onTimeUpdate,
+  onFrameChange,
+
+  // Viewport / canvas externo
+  externalCanvasRef,
   viewportOffset = { x: 0, y: 0 },
   viewportWidth = 64,
   viewportHeight = 64,
   zoom = 1,
-  displaySize = 256 ,
+  displaySize = 256,
+
+  // Control de reproducción (compartido con padre)
   isPlaying,
-  setIsPlaying
-,
-onionFramesConfig, // Recibir la configuración actual del estado principal
-setOnionFramesConfig, // Función para actualizar la configuración
-updateFrameConfig,
-addPreviousFrame,
-addNextFrame,
-removeFrame,
-toggleOnionFrames,
-applyOnionFramesPreset,
-clearTintCache,
+  setIsPlaying,
+
+  // Bucle global (compartido con PlayAnimation, lift-eado al workspaceContainer)
+  loopEnabled,
+  setLoopEnabled,
+
+  // Tags + API imperativo del player (para reproducir tags y rangos ad-hoc en
+  // las acciones de los menus contextuales y de TagBand)
+  animationTags = [],
+  setAnimationTags,
+  handlePlayTag,
+  handlePlayRange,
+  playerApiRef,
+  // Ref que el padre (workspaceContainer) provee para que LayerAnimation
+  // exponga su API imperativa de player (el "main player") y handlePlayTag
+  // pueda dirigir bucles a este reproductor en vez del mini.
+  mainPlayerApiRef,
+  // Info del bucle activo (compartido con el chip del mini player). Si
+  // contiene tagName, lo mostramos en el chip principal junto con el rango.
+  loopInfo,
+  // Limpia loopInfo + reset frameRange a full. Compartido con el ✕ del chip.
+  onClearLoop,
+
+  // Onion frames config (pasada a ConfigOnionSkin modal)
+  onionFramesConfig,
+  updateFrameConfig,
+  addPreviousFrame,
+  addNextFrame,
+  removeFrame,
+  toggleOnionFrames,
+  applyOnionFramesPreset,
+  clearTintCache,
+
+  // Colapso del panel (controlado desde workspaceContainer)
+  isCollapsed = false,
+  onToggleCollapse,
 }) => {
   "use memo";
   const getFramesInfo = useCallback(() => {
@@ -171,400 +182,101 @@ clearTintCache,
 //==============Lógica para enviar ref de animacion =============================//
 const internalCanvasRef = useRef(null);
 const { frameNumbers, frameCount } = getFramesInfo();
-  
-//Función helper para obtener informacion de frames resume
 
+// Motor de reproducción compartido con `PlayAnimation` vía `useAnimationPlayer`.
+// `isPlaying/setIsPlaying` vienen del padre, de modo que panel y reproductor
+// reaccionan al mismo estado. `syncedFrameNumber` re-centra el índice del
+// motor cada vez que el editor cambia de frame activo.
+// El panel solo consume velocidad, frame vivo y los handlers play/pause.
+// El tiempo y la duración totales los expone PlayAnimation en su overlay.
+const {
+  playbackSpeed,
+  currentFrame: currentAnimationFrame,
+  setPlaybackSpeed,
+  play,
+  pause,
+  stop,
+  frameRange,
+  setFrameRange,
+  setFrame,
+  setFrameRangeSafe,
+  setPlaybackModeSafe,
+  setPlaybackSpeedSafe,
+} = useAnimationPlayer({
+  frames,
+  externalCanvasRef,
+  internalCanvasRef,
+  viewportOffset,
+  viewportWidth,
+  viewportHeight,
+  zoom,
+  displaySize,
+  isPlaying,
+  setIsPlaying,
+  loopEnabled,
+  onTimeUpdate,
+  onFrameChange,
+  syncedFrameNumber: currentFrame,
+});
 
-// Usar canvas externo si se proporciona, sino usar el interno
-const displayCanvasRef = externalCanvasRef || internalCanvasRef;
-const animationRef = useRef(null);
-const lastTimestampRef = useRef(null);
-const frameKeys = useRef([]);
-const frameIndexRef = useRef(0);
-const lastFrameDrawn = useRef(null);
-const startTimeRef = useRef(null);
-
-// Estados del reproductor
-
-const [currentTime, setCurrentTime] = useState(0);
-const [totalDuration, setTotalDuration] = useState(0);
-const [frameRange, setFrameRange] = useState({ start: 0, end: 0 });
-const [playbackSpeed, setPlaybackSpeed] = useState(1);
-const [currentAnimationFrame, setCurrentAnimationFrame] = useState(0);
-const [originalSize, setOriginalSize] = useState({ width: 64, height: 64 });
-
-// Configurar canvas con el tamaño adecuado
-const setupCanvas = useCallback(() => {
-  if (!displayCanvasRef.current) return;
-  
-  const canvas = displayCanvasRef.current;
-  const ctx = canvas.getContext('2d');
-  
-  // Si es canvas externo, usar las dimensiones del viewport escaladas
-  if (externalCanvasRef) {
-    canvas.width = viewportWidth * zoom;
-    canvas.height = viewportHeight * zoom;
-  } else {
-    // Canvas interno: usar displaySize
-    canvas.width = displaySize;
-    canvas.height = displaySize;
-    
-    // Aplicar estilo CSS para el tamaño visual
-    canvas.style.width = `${displaySize}px`;
-    canvas.style.height = `${displaySize}px`;
-  }
-  
-  // Configurar para pixel art (evitar suavizado)
-  ctx.imageSmoothingEnabled = false;
-  ctx.mozImageSmoothingEnabled = false;
-  ctx.webkitImageSmoothingEnabled = false;
-  ctx.msImageSmoothingEnabled = false;
-  
-  if (!externalCanvasRef) {
-    canvas.style.imageRendering = 'pixelated';
-    canvas.style.imageRendering = '-moz-crisp-edges';
-    canvas.style.imageRendering = 'crisp-edges';
-  }
-}, [displaySize, externalCanvasRef, viewportWidth, viewportHeight, zoom]);
-
-
-
-const stopPlayback = useCallback(() => {
-  if (animationRef.current) {
-    cancelAnimationFrame(animationRef.current);
-    animationRef.current = null;
-  }
-}, []);
-
-
-const drawFrame = useCallback((frameData, frameNumber) => {
-  if (!displayCanvasRef.current || lastFrameDrawn.current === frameNumber) return;
-
-  const ctx = displayCanvasRef.current.getContext("2d");
-  if (!ctx) return;
-
-  const canvasWidth = displayCanvasRef.current.width;
-  const canvasHeight = displayCanvasRef.current.height;
-  
-  // Limpiar canvas
-  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-  ctx.imageSmoothingEnabled = false;
-
-  const visibleLayers = (frameData.layers || [])
-    .filter(layer => layer.visible?.[frameNumber] !== false)
-    .sort((a, b) => a.zIndex - b.zIndex);
-
-  visibleLayers.forEach(layer => {
-    const sourceCanvas = frameData.canvases[layer.id];
-    if (!sourceCanvas) return;
-
-    ctx.globalAlpha = layer.opacity ?? 1;
-    
-    if (externalCanvasRef) {
-      // ✨ MODO VIEWPORT: Extraer región específica y escalar
-      // Igual que en useLayerManager - aplicar viewport y zoom
-      ctx.drawImage(
-        sourceCanvas,                    // Canvas fuente completo
-        viewportOffset.x,               // X de inicio en canvas fuente
-        viewportOffset.y,               // Y de inicio en canvas fuente  
-        viewportWidth,                  // Ancho a extraer
-        viewportHeight,                 // Alto a extraer
-        0,                             // X destino (siempre 0)
-        0,                             // Y destino (siempre 0)
-        viewportWidth * zoom,          // Ancho final escalado
-        viewportHeight * zoom          // Alto final escalado
-      );
-    } else {
-      // ✨ MODO CANVAS INTERNO: Escalar completo al displaySize
-      ctx.drawImage(
-        sourceCanvas, 
-        0, 0, sourceCanvas.width, sourceCanvas.height,  // fuente completa
-        0, 0, canvasWidth, canvasHeight                  // destino completo
-      );
-    }
-  });
-
-  ctx.globalAlpha = 1;
-  lastFrameDrawn.current = frameNumber;
-}, [externalCanvasRef, viewportOffset, viewportWidth, viewportHeight, zoom]);
-// Calcular duración total y preparar frames
+// Exposicion del API imperativo del main player al padre via ref. Mismo
+// shape que el de PlayAnimation (mini), asi handlePlayTag puede dispatcher
+// indistintamente a uno u otro segun el target. useEffect sin deps array
+// re-popula en cada render para mantener referencias frescas.
 useEffect(() => {
+  if (!mainPlayerApiRef) return;
+  mainPlayerApiRef.current = {
+    play, pause, stop,
+    setFrame,
+    setFrameRange: setFrameRangeSafe,
+    setPlaybackMode: setPlaybackModeSafe,
+    setPlaybackSpeed: setPlaybackSpeedSafe,
+  };
+});
 
-  
-  frameKeys.current = Object.keys(frames)
-    .map(Number)
-    .sort((a, b) => a - b);
-  
+// Chip de "Bucle: A–B": visible cuando el rango activo del reproductor no
+// cubre el total de frames disponibles. Convertimos los indices del player
+// (0-based dentro de frameKeys) a frame-numbers visibles (1-based).
+const totalFrames = frameNumbers.length;
+const isFullRange = frameRange.start === 0 && frameRange.end === Math.max(0, totalFrames - 1);
+const rangeFromFrame = frameNumbers[frameRange.start];
+const rangeToFrame = frameNumbers[frameRange.end];
 
-  
-  // ✅ CRÍTICO: Sincronizar frameIndexRef con currentFrame
-  const currentFrameIndex = frameKeys.current.indexOf(currentFrame);
-  if (currentFrameIndex !== -1) {
-    frameIndexRef.current = currentFrameIndex;
-   
-  } else {
-    // Si currentFrame no existe en frameKeys, usar el primer frame
-    frameIndexRef.current = 0;
-  
-  }
-  
-  // Calcular duración total
-  const duration = frameKeys.current.reduce((total, frameNumber) => {
-    const frameData = frames[frameNumber];
-    return total + (frameData.frameDuration || 100);
-  }, 0);
-  
-  setTotalDuration(duration);
-  setFrameRange({ start: 0, end: frameKeys.current.length - 1 });
-  
-  // ✅ NO cambiar currentAnimationFrame aquí si ya está sincronizado
-  const expectedAnimationFrame = frameKeys.current[frameIndexRef.current];
-  if (currentAnimationFrame !== expectedAnimationFrame) {
-    setCurrentAnimationFrame(expectedAnimationFrame || 0);
-  }
-  
-  setCurrentTime(0);
-  
-  // Configurar canvas después de tener los frames
-  setupCanvas();
-  
-  // ✅ Dibujar el frame actual (no el primero)
-  if (frameKeys.current.length > 0) {
-    const currentFrameNumber = frameKeys.current[frameIndexRef.current] || frameKeys.current[0];
-    const currentFrameData = frames[currentFrameNumber];
-    if (currentFrameData) {
-    
-      drawFrame(currentFrameData, currentFrameNumber);
-    }
-  }
-
-  return () => stopPlayback();
-}, [frames, currentFrame]); // ✅ Agregar currentFrame como dependencia
-
-// Reconfigurar canvas cuando cambien viewport o zoom
-useEffect(() => {
-  if (externalCanvasRef) {
-    setupCanvas();
-    // Re-dibujar frame actual con nuevas dimensiones
-    if (frameKeys.current.length > 0) {
-      const currentFrameNumber = frameKeys.current[frameIndexRef.current];
-      const currentFrameData = frames[currentFrameNumber];
-      if (currentFrameData) {
-        lastFrameDrawn.current = null; // Forzar re-dibujado
-        drawFrame(currentFrameData, currentFrameNumber);
-      }
-    }
-  }
-}, [viewportOffset, viewportWidth, viewportHeight, zoom, externalCanvasRef, setupCanvas, frames]);
-
-const startPlayback = useCallback(() => {
-  if (frameKeys.current.length === 0) return;
-  
-  lastTimestampRef.current = null;
-  lastFrameDrawn.current = null;
-  startTimeRef.current = performance.now();
-  animationRef.current = requestAnimationFrame(animateFrames);
-}, []);
-
-
-
-
-
-const animateFrames = useCallback((timestamp) => {
-  if (frameKeys.current.length === 0) {
-  
-    return;
-  }
-
-  if (frameKeys.current.length === 1) {
-
-    return; // No animar si solo hay 1 frame
-  }
-
- 
-
-  // Aplicar rango de frames
-  const availableFrames = frameKeys.current.slice(frameRange.start, frameRange.end + 1);
-  if (availableFrames.length === 0) return;
-
-  // ✅ VERIFICAR que frameIndexRef esté dentro del rango válido
-  let currentRangeIndex = frameIndexRef.current - frameRange.start;
-  if (currentRangeIndex < 0 || currentRangeIndex >= availableFrames.length) {
-
-    currentRangeIndex = 0;
-    frameIndexRef.current = frameRange.start;
-  }
-
-  const currentFrameNumber = availableFrames[currentRangeIndex];
-  const currentFrameData = frames[currentFrameNumber];
-  
-  if (!currentFrameData) {
-    
-    return;
-  }
-
-  const duration = (currentFrameData.frameDuration || 100) / playbackSpeed;
-
-  if (!lastTimestampRef.current) {
-    lastTimestampRef.current = timestamp;
-    drawFrame(currentFrameData, currentFrameNumber);
-    
-    if (isPlaying) {
-      animationRef.current = requestAnimationFrame(animateFrames);
-    }
-    return;
-  }
-
-  const elapsed = timestamp - lastTimestampRef.current;
-
-  if (elapsed >= duration) {
-    const nextRangeIndex = (currentRangeIndex + 1) % availableFrames.length;
-    frameIndexRef.current = frameRange.start + nextRangeIndex;
-    lastTimestampRef.current = timestamp;
-
-    const newFrameNumber = availableFrames[nextRangeIndex];
-    const newFrameData = frames[newFrameNumber];
-    
- 
-    
-    drawFrame(newFrameData, newFrameNumber);
-    
-    // ✅ Throttle de updates
-    setCurrentAnimationFrame(newFrameNumber);
-    
-    if (onFrameChange) {
-      onFrameChange(frameIndexRef.current, newFrameNumber);
-    }
-  }
-
-  // Actualizar tiempo actual (con throttle)
-  if (startTimeRef.current) {
-    const totalElapsed = (timestamp - startTimeRef.current) * playbackSpeed;
-    
-    if (!startTimeRef.lastTimeUpdate || timestamp - startTimeRef.lastTimeUpdate > 100) {
-      startTimeRef.lastTimeUpdate = timestamp;
-      requestIdleCallback(() => {
-        setCurrentTime(totalElapsed);
-      });
-      
-      if (onTimeUpdate) {
-        onTimeUpdate(totalElapsed);
-      }
-    }
-  }
-
-  if (isPlaying) {
-    animationRef.current = requestAnimationFrame(animateFrames);
-  }
-}, [isPlaying, frameRange, playbackSpeed, frames, onFrameChange, onTimeUpdate, drawFrame]);
-
-// ✨ FUNCIÓN DE DIBUJO ADAPTADA CON VIEWPORT Y ZOOM
-
-
-const handlePlay = useCallback(() => {
-  setIsPlaying(true);
-  startTimeRef.current = performance.now() - currentTime / playbackSpeed;
-  startPlayback();
-}, [startPlayback, currentTime, playbackSpeed]);
-
+// El play del panel delega en el motor. `handlePause` además sincroniza el
+// frame activo del editor con donde quedó la reproducción — es una
+// particularidad del panel, no del reproductor.
+const handlePlay = play;
 const handlePause = useCallback(() => {
-
-  setIsPlaying(false);
-  stopPlayback();
-  setActiveFrame(currentAnimationFrame+1);
-}, [stopPlayback]);
-
-const handleStop = useCallback(() => {
-  setIsPlaying(false);
-  stopPlayback();
-  frameIndexRef.current = frameRange.start;
-  setCurrentAnimationFrame(frameRange.start);
-  setCurrentTime(0);
-  
-  if (frameKeys.current.length > 0) {
-    const frameNumber = frameKeys.current[frameRange.start];
-    const frameData = frames[frameNumber];
-    drawFrame(frameData, frameNumber);
-  }
-}, [stopPlayback, frameRange.start, frames, drawFrame]);
-
-const handleReset = useCallback(() => {
-  handleStop();
-  setFrameRange({ start: 0, end: frameKeys.current.length - 1 });
-  setPlaybackSpeed(1);
-}, [handleStop]);
-
-const handleFrameRangeChange = useCallback((type, value) => {
-  const newRange = { ...frameRange };
-  newRange[type] = parseInt(value);
-  
-  // Validar rango
-  if (newRange.start > newRange.end) {
-    if (type === 'start') {
-      newRange.end = newRange.start;
-    } else {
-      newRange.start = newRange.end;
-    }
-  }
-  
-  setFrameRange(newRange);
-  
-  // Si estamos fuera del rango, ajustar frame actual
-  if (frameIndexRef.current < newRange.start || frameIndexRef.current > newRange.end) {
-    frameIndexRef.current = newRange.start;
-    setCurrentAnimationFrame(newRange.start);
-    
-    const frameNumber = frameKeys.current[newRange.start];
-    const frameData = frames[frameNumber];
-    drawFrame(frameData, frameNumber);
-  }
-}, [frameRange, drawFrame, frames]);
-
-const formatTime = (ms) => {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  const remainingMs = Math.floor((ms % 1000) / 10);
-  
-  return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}.${remainingMs.toString().padStart(2, '0')}`;
-};
-
-// Efectos para manejar la reproducción
-useEffect(() => {
-  if (isPlaying) {
-    animationRef.current = requestAnimationFrame(animateFrames);
-  } else {
-    stopPlayback();
-  }
-  
-  return () => stopPlayback();
-}, [isPlaying, animateFrames, stopPlayback]);
+  pause();
+  if (currentAnimationFrame) setActiveFrame(currentAnimationFrame);
+}, [pause, currentAnimationFrame, setActiveFrame]);
 //==============Lógica para enviar ref de animacion =============================//
-  console.log("se esta renderizando layer animation");
   const [editingLayerId, setEditingLayerId] = useState(null);
   const [editingName, setEditingName] = useState('');
-  const [editingGroupId, setEditingGroupId] = useState(null);
-  const [editingGroupName, setEditingGroupName] = useState('');
+  // (Eliminado: `editingGroupId` / `editingGroupName` — solo los leían
+  // `startEditingGroup` / `saveGroupName` / `handleGroupKeyDown`, todos dead
+  // code ligados a una UI de rename-de-grupo que no está en el árbol.)
   const [expandedLayers, setExpandedLayers] = useState({});
   const [newGroupName, setNewGroupName] = useState('');
+  // showCreateGroup: el setter se usa (functional update en stableRowHandlers),
+  // el valor como tal no se lee en el árbol activo.
+  // eslint-disable-next-line no-unused-vars
   const [showCreateGroup, setShowCreateGroup] = useState(null);
   const [selectedFrames, setSelectedFrames] = useState([]); // [1, 2, 3, 4, etc]
-  // Estados para drag and drop
-  const [draggedItem, setDraggedItem] = useState(null);
-  const [dragOverItem, setDragOverItem] = useState(null);
-  const [dropIndicator, setDropIndicator] = useState(null);
-  const [highlightedLayer, setHighlightedLayer] = useState(null);
 
+// (Eliminados useStates sin read en el árbol activo: `draggedItem`/`dragOverItem`/
+// `dropIndicator`/`highlightedLayer` —para drag-and-drop de capas— y
+// `selectedLayerFrames`/`multiSelectMode`/`selectedFrameRange` —para la
+// selección multi-frame por capa. Se consumían únicamente en código que ya
+// eliminé (stubs de copiar/eliminar frames + selectLayerFrame/Range). Si se
+// retoma la feature, estos useState se vuelven a declarar.)
 
-const [loopEnabled, setLoopEnabled] = useState(true);
-const [selectedLayerFrames, setSelectedLayerFrames] = useState({});
-const [multiSelectMode, setMultiSelectMode] = useState(false);
-const [selectedFrameRange, setSelectedFrameRange] = useState(null);
-
-const [isOnionActive, setIsOnionActive] = useState(false);
+// (Eliminado: `isOnionActive` useState — el estado real es `onionFramesConfig.enabled`
+// del padre; este local solo se usaba en el antiguo toggle del topbar.)
 //
 
 const [openOnion, setOpenOnion] = useState(false);
+const onionTriggerRef = useRef(null);
 
 
 //-------GESTION DEL MENU CONTEXTUAL AL DAR CLICK DERECHO -----------------------//
@@ -599,6 +311,13 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
     setContextMenuFrame(prev => ({ ...prev, isVisible: false }));
     setContextMenuLayer(prev => ({ ...prev, isVisible: false }));
   };
+
+  // Derivados para las entradas de tag/loop del menú contextual de celda de frame
+  const focusFrame = selectedFrames.length === 1 ? selectedFrames[0] : currentFrame;
+  const tagsAtFocus = animationTags.filter(t => focusFrame >= t.from && focusFrame <= t.to);
+  const selRange = selectedFrames.length >= 1
+    ? { from: Math.min(...selectedFrames), to: Math.max(...selectedFrames) }
+    : null;
 
   const menuFrameActions = [
     {
@@ -709,7 +428,168 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
         }
         handleCloseMenu();
       }
-    }*/
+    }*/,
+    // Aseprite-like: prohibir solapamiento. Si selRange pisa otro tag, se
+    // deshabilita y el label dice con cual choca.
+    (() => {
+      const rc = selRange ? selRange.to - selRange.from + 1 : 0;
+      const conflictTag = selRange
+        ? findOverlappingTag(animationTags, selRange.from, selRange.to)
+        : null;
+      return {
+        label: !selRange
+          ? 'Crear tag con seleccion'
+          : conflictTag
+            ? `Crear tag · choca con «${conflictTag.name}»`
+            : `Crear tag · ${rc} frame${rc === 1 ? '' : 's'} (${selRange.from}–${selRange.to})`,
+        icon: <LuTag size={14} />,
+        disabled: !selRange || !!conflictTag,
+        type: 'text',
+        placeholder: 'Nombre del tag (p. ej. walk)',
+        helperText: selRange && !conflictTag
+          ? `${rc} frame${rc === 1 ? '' : 's'}:  ${selRange.from} → ${selRange.to}`
+          : null,
+        getValue: () => '',
+        setValue: (name) => {
+          const trimmed = String(name).trim();
+          if (!trimmed || !selRange) return;
+          if (findOverlappingTag(animationTags, selRange.from, selRange.to)) return;
+          setAnimationTags?.(addTag(animationTags, createTag({
+            name: trimmed,
+            from: selRange.from,
+            to: selRange.to,
+          })));
+        }
+      };
+    })(),
+    // Dos entradas: reproducir el rango aqui (main) o en panel (mini).
+    // Delegamos en handlePlayRange (workspaceContainer) que mantiene
+    // loopInfo coherente entre ambos chips.
+    {
+      label: selRange && selectedFrames.length >= 2
+        ? `Reproducir aqui ${selRange.to - selRange.from + 1} frames (${selRange.from}–${selRange.to})`
+        : 'Reproducir rango aqui',
+      icon: <LuRotateCcw size={14} />,
+      disabled: !(selRange && selectedFrames.length >= 2),
+      onClick: () => {
+        if (!selRange) return;
+        handlePlayRange?.(selRange.from, selRange.to, 'main');
+        handleCloseMenu();
+      }
+    },
+    {
+      label: selRange && selectedFrames.length >= 2
+        ? `Reproducir en panel ${selRange.to - selRange.from + 1} frames (${selRange.from}–${selRange.to})`
+        : 'Reproducir rango en panel',
+      icon: <LuMonitor size={14} />,
+      disabled: !(selRange && selectedFrames.length >= 2),
+      onClick: () => {
+        if (!selRange) return;
+        handlePlayRange?.(selRange.from, selRange.to, 'mini');
+        handleCloseMenu();
+      }
+    },
+    ...tagsAtFocus.flatMap(tag => [
+      {
+        label: `Reproducir aqui «${tag.name}»`,
+        icon: <LuPlay size={14} />,
+        onClick: () => { handlePlayTag?.(tag, 'main'); handleCloseMenu(); }
+      },
+      {
+        label: `Reproducir en panel «${tag.name}»`,
+        icon: <LuMonitor size={14} />,
+        onClick: () => { handlePlayTag?.(tag, 'mini'); handleCloseMenu(); }
+      },
+      {
+        label: `Renombrar tag «${tag.name}»`,
+        icon: <LuPencil size={14} />,
+        type: 'text',
+        placeholder: 'Nuevo nombre',
+        helperText: `Frames: ${tag.from} → ${tag.to}`,
+        getValue: () => tag.name,
+        setValue: (name) => {
+          const trimmed = String(name).trim();
+          if (!trimmed) return;
+          setAnimationTags?.(updateTag(animationTags, tag.id, { name: trimmed }));
+        },
+      },
+      {
+        // Picker de color: pre-carga el color actual; confirm aplica updateTag.
+        label: `Color del tag «${tag.name}»`,
+        icon: <LuPalette size={14} />,
+        type: 'color',
+        getValue: () => tag.color || '#4a90e2',
+        setValue: (color) => {
+          setAnimationTags?.(updateTag(animationTags, tag.id, { color }));
+        },
+      },
+      {
+        label: `Eliminar tag «${tag.name}»`,
+        icon: <LuX size={14} />,
+        danger: true,
+        onClick: () => {
+          setAnimationTags?.(removeTag(animationTags, tag.id));
+          handleCloseMenu();
+        }
+      }
+    ])
+  ];
+
+  // === Items para submenús de modos de fusión ===
+  //
+  // Construye la lista agrupada de modos para el submenu del CustomContextMenu.
+  // `currentMode` se marca con `checked: true`. Cada cambio de grupo inserta
+  // un divider con el label del grupo (BLEND_GROUP_LABELS).
+  const buildBlendModeItems = (currentMode, onPick) => {
+    const items = [];
+    let lastGroup = null;
+    for (const m of BLEND_MODES) {
+      if (m.group !== lastGroup && BLEND_GROUP_LABELS[m.group]) {
+        items.push({ divider: true, label: BLEND_GROUP_LABELS[m.group] });
+      }
+      lastGroup = m.group;
+      items.push({
+        id: `blend-${m.id}`,
+        label: m.label,
+        checked: currentMode === m.id,
+        onClick: () => onPick(m.id),
+      });
+    }
+    return items;
+  };
+
+  // Modo de capa actual (lee del frame.layers[i].blendMode del activo)
+  const layerBlendCurrent = (() => {
+    if (!activeLayerId) return 'normal';
+    const layer = layers.find(l => l.id === activeLayerId);
+    return layer?.blendMode ?? 'normal';
+  })();
+
+  // Override per-frame del activo (null si hereda)
+  const frameOverride = (() => {
+    if (!activeLayerId) return null;
+    const frame = frames[currentFrame];
+    const layer = frame?.layers.find(l => l.id === activeLayerId);
+    return layer?.blendModeOverride ?? null;
+  })();
+
+  const layerBlendItems = buildBlendModeItems(
+    layerBlendCurrent,
+    (modeId) => setLayerBlendMode(activeLayerId, modeId)
+  );
+
+  const frameBlendItems = [
+    {
+      id: 'blend-inherit',
+      label: 'Heredar capa',
+      checked: frameOverride === null,
+      onClick: () => setFrameBlendModeOverride(activeLayerId, currentFrame, null),
+    },
+    { divider: true, label: '' },
+    ...buildBlendModeItems(
+      frameOverride ?? layerBlendCurrent,
+      (modeId) => setFrameBlendModeOverride(activeLayerId, currentFrame, modeId)
+    ),
   ];
 
   const menuLayerActions = [
@@ -814,6 +694,20 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
       }
     },
     {
+      label: `Modo de fusión (capa) — ${getBlendModeLabel(layerBlendCurrent)}`,
+      icon: <LuLayers />,
+      type: 'submenu',
+      items: layerBlendItems,
+    },
+    {
+      label: frameOverride !== null
+        ? `Modo de fusión (este frame) · ${getBlendModeLabel(frameOverride)}`
+        : 'Modo de fusión (este frame)',
+      icon: <LuFilm />,
+      type: 'submenu',
+      items: frameBlendItems,
+    },
+    {
       label: 'Eliminar Capa',
       icon: 'T',
       danger: true,
@@ -839,40 +733,29 @@ const [contextMenuFrame, setContextMenuFrame] = useState({
     }
   ];
   
-//solucion para que al cambiar la opacidad no se dispare el cambio en framesresume luego luego:
+// Solución para que al cambiar la opacidad con el slider no se dispare el
+// cambio en framesResume en cada tick (solo al soltar).
+//
+// Antes se sincronizaba con un `useEffect` + `setLocalOpacity`, pero eso es
+// el anti-patrón "cascading setState within effect" que la React team
+// desaconseja. El patrón canónico (React docs: "Adjusting State When a Prop
+// Changes") es: comparar la llave de props con la anterior DURANTE el render
+// y setear ambos estados en cascada — React los batch-ea en un solo commit,
+// sin cascada visible de renders.
 const [localOpacity, setLocalOpacity] = useState(() =>
   Math.round(getFrameOpacity(activeLayerId, currentFrame) * 100)
 );
-
-useEffect(() => {
-  // Actualiza el localOpacity si cambia el frame o la capa
+const [prevOpacityKey, setPrevOpacityKey] = useState(() => `${activeLayerId}:${currentFrame}`);
+const opacityKey = `${activeLayerId}:${currentFrame}`;
+if (prevOpacityKey !== opacityKey) {
+  setPrevOpacityKey(opacityKey);
   setLocalOpacity(Math.round(getFrameOpacity(activeLayerId, currentFrame) * 100));
-}, [activeLayerId, currentFrame]);
+}
 
 
-  // Función auxiliar para crear grupos (necesitarás ajustar el handleCreateGroup)
-  const handleCreateGroupFromMenu = (layerId, groupName) => {
-    if (!selectedPixels?.length) {
-      alert('Selecciona píxeles primero');
-      return;
-    }
-  
-    const pixelsWithOffset = selectedPixels.map(pixel => ({
-      ...pixel,
-      x: pixel.x + dragOffset.x,
-      y: pixel.y + dragOffset.y
-    }));
-    
-    const newGroupId = createPixelGroup(layerId, pixelsWithOffset, groupName);
-  
-    if (newGroupId) {
-      selectPixelGroup(layerId, newGroupId);
-      setActiveLayerId(newGroupId.groupLayerId || newGroupId);
-    }
-  
-    setExpandedLayers(prev => ({ ...prev, [layerId]: true }));
-  };
-  
+  // (Eliminado: `handleCreateGroupFromMenu` — duplicaba `handleCreateGroup`
+  // pero no tenía call site. La versión viva es `handleCreateGroup` más abajo.)
+
 
    
 //-------GESTION DEL MENU CONTEXTUAL AL DAR CLICK DERECHO -----------------------//
@@ -886,55 +769,90 @@ useEffect(() => {
 const [isDragging, setIsDragging] = useState(false);
 const [isDraggingLayerFrame, setIsDraggingLayerFrame] = useState(false);
 
-// Modificar la función handleFrameSelection existente para manejar el mousedown
-const handleFrameMouseDown = (frameNumber, event) => {
+// Selección con modificadores (Shift = rango, Ctrl/Cmd = toggle múltiple,
+// sin modificador = simple). Declarada ANTES de `handleFrameMouseDown` porque
+// éste la llama y el React Compiler exige orden textual (aunque JS hoistee
+// `function` declarations).
+function handleFrameSelection(frameNumber, event) {
   clearCurrentSelection();
   const { ctrlKey, metaKey, shiftKey } = event;
   const isCtrlOrCmd = ctrlKey || metaKey;
 
   if (shiftKey && selectedFrames.length > 0) {
-    // Selección de rango con Shift (mantener comportamiento existente)
     const lastSelected = Math.max(...selectedFrames);
     const start = Math.min(lastSelected, frameNumber);
     const end = Math.max(lastSelected, frameNumber);
     const range = Array.from({length: end - start + 1}, (_, i) => start + i);
     setSelectedFrames(range);
     setActiveFrame(Math.max(...range));
-    setIsDragging(false); // Asegurar que no se active el arrastre
   } else if (isCtrlOrCmd) {
-    // Selección múltiple con Ctrl/Cmd (mantener comportamiento existente)
-    handleFrameSelection(frameNumber, event);
-    setIsDragging(false); // Asegurar que no se active el arrastre
+    const newSelection = selectedFrames.includes(frameNumber)
+      ? selectedFrames.filter(f => f !== frameNumber)
+      : [...selectedFrames, frameNumber].sort((a, b) => a - b);
+
+    setSelectedFrames(newSelection);
+    if (newSelection.length > 0) {
+      setActiveFrame(Math.max(...newSelection));
+    }
   } else {
-    // Iniciar arrastre solo si no hay modificadores
+    setSelectedFrames([frameNumber]);
+    setActiveFrame(frameNumber);
+  }
+}
+
+// `function` (hoisted) en vez de arrow const: permite llamar a
+// `handleFrameSelection` sin TDZ del React Compiler.
+function handleFrameMouseDown(frameNumber, event) {
+  clearCurrentSelection();
+  const { ctrlKey, metaKey, shiftKey } = event;
+  const isCtrlOrCmd = ctrlKey || metaKey;
+
+  if (shiftKey && selectedFrames.length > 0) {
+    const lastSelected = Math.max(...selectedFrames);
+    const start = Math.min(lastSelected, frameNumber);
+    const end = Math.max(lastSelected, frameNumber);
+    const range = Array.from({length: end - start + 1}, (_, i) => start + i);
+    setSelectedFrames(range);
+    setActiveFrame(Math.max(...range));
+    setIsDragging(false);
+  } else if (isCtrlOrCmd) {
+    handleFrameSelection(frameNumber, event);
+    setIsDragging(false);
+  } else {
+    // Arranca arrastre solo si no hay modificadores
     setIsDragging(true);
     setSelectedFrames([frameNumber]);
     setActiveFrame(frameNumber);
   }
-};
+}
 
 // Función simple para manejar el hover durante el arrastre
 const handleFrameMouseEnter = (frameNumber) => {
   // Solo expandir selección si realmente estamos arrastrando
   if (isDragging) {
     setSelectedFrames(prev => {
-      const newSelection = prev.includes(frameNumber) 
-        ? prev 
+      const newSelection = prev.includes(frameNumber)
+        ? prev
         : [...prev, frameNumber].sort((a, b) => a - b);
-      
+
       // Actualizar currentFrame al frame más alto durante el arrastre
       if (newSelection.length > 0) {
         setActiveFrame(Math.max(...newSelection));
       }
-      
+
       return newSelection;
     });
   }
 };
 
+// (Eliminados `stableHandleFrameMouseDown`/`stableHandleFrameMouseEnter` —
+// alimentaban el strip de frame-numbers de la animation-bar, que se movió
+// al header-row de FramesTimeline. Los handlers originales abajo siguen
+// declarados por si se re-enable el `renderLayerWithTimeline` dead code.)
+
 // useEffect para detectar cuando se suelta el mouse globalmente
 useEffect(() => {
-  const handleMouseUp = (event) => {
+  const handleMouseUp = () => {
     if (isDragging) {
       setIsDragging(false);
      
@@ -955,38 +873,6 @@ useEffect(() => {
   };
 }, [isDragging, isDraggingLayerFrame]); 
 
-
-const handleFrameSelection = (frameNumber, event) => {
-  clearCurrentSelection();
-  const { ctrlKey, metaKey, shiftKey } = event;
-  const isCtrlOrCmd = ctrlKey || metaKey;
-
-  if (shiftKey && selectedFrames.length > 0) {
-    // Selección de rango con Shift
-    const lastSelected = Math.max(...selectedFrames);
-    const start = Math.min(lastSelected, frameNumber);
-    const end = Math.max(lastSelected, frameNumber);
-    const range = Array.from({length: end - start + 1}, (_, i) => start + i);
-    setSelectedFrames(range);
-    // NUEVO: Establecer el frame más alto como current
-    setActiveFrame(Math.max(...range));
-  } else if (isCtrlOrCmd) {
-    // Selección múltiple con Ctrl/Cmd
-    const newSelection = selectedFrames.includes(frameNumber)
-      ? selectedFrames.filter(f => f !== frameNumber)
-      : [...selectedFrames, frameNumber].sort((a, b) => a - b);
-    
-    setSelectedFrames(newSelection);
-    // NUEVO: Establecer el frame más alto como current si hay selección
-    if (newSelection.length > 0) {
-      setActiveFrame(Math.max(...newSelection));
-    }
-  } else {
-    // Selección simple
-    setSelectedFrames([frameNumber]);
-    setActiveFrame(frameNumber);
-  }
-};
 
 const handleLayerFrameMouseDown = (layerId, frameIndex, event) => {
   clearCurrentSelection();
@@ -1026,60 +912,36 @@ const handleLayerFrameMouseDown = (layerId, frameIndex, event) => {
 };
 
 const handleLayerFrameMouseEnter = (frameNumber) => {
- 
+
   // Solo expandir selección si realmente estamos arrastrando FRAMES DE CAPAS
   if (isDraggingLayerFrame) {
     setSelectedFrames(prev => {
-      const newSelection = prev.includes(frameNumber) 
-        ? prev 
+      const newSelection = prev.includes(frameNumber)
+        ? prev
         : [...prev, frameNumber].sort((a, b) => a - b);
-      
+
       // Actualizar currentFrame al frame más alto durante el arrastre
       if (newSelection.length > 0) {
         setActiveFrame(Math.max(...newSelection));
       }
-      
+
       return newSelection;
     });
   }
 };
 
+// (Eliminados los 3 stable wrappers que alimentaban a `LayerTimelineCell`
+// —`stableHandleContextMenu`, `stableHandleLayerFrameMouseDown`,
+// `stableHandleLayerFrameMouseEnter`— tras fusionar la celda dentro de
+// `LayerRow`. El nuevo bundle `stableRowHandlers` (ver arriba) cubre todos
+// los handlers del row con el mismo patrón latest-ref.)
 
 
 
-//FUncion para usar el hue de onionSkinSetings:
 
-function hueToRGBA(hue, alpha = 0.4, saturation = 100, lightness = 50) {
-  // Convertimos HSL a RGB
-  const s = saturation / 100;
-  const l = lightness / 100;
-
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs((hue / 60) % 2 - 1));
-  const m = l - c / 2;
-
-  let r = 0, g = 0, b = 0;
-
-  if (0 <= hue && hue < 60) {
-    r = c; g = x; b = 0;
-  } else if (60 <= hue && hue < 120) {
-    r = x; g = c; b = 0;
-  } else if (120 <= hue && hue < 180) {
-    r = 0; g = c; b = x;
-  } else if (180 <= hue && hue < 240) {
-    r = 0; g = x; b = c;
-  } else if (240 <= hue && hue < 300) {
-    r = x; g = 0; b = c;
-  } else if (300 <= hue && hue < 360) {
-    r = c; g = 0; b = x;
-  }
-
-  const R = Math.round((r + m) * 255);
-  const G = Math.round((g + m) * 255);
-  const B = Math.round((b + m) * 255);
-
-  return `rgba(${R}, ${G}, ${B}, ${alpha})`;
-}
+// (Eliminado: `hueToRGBA` — conversor HSL→RGBA para colorear el onion
+// skin por hue; sin call site en el árbol actual. Si se retoma, usar
+// `Color` de una librería en vez de reimplementar.)
 
 
 
@@ -1098,242 +960,39 @@ useEffect(() => {
   });
   
 }, [pixelGroups, currentFrame, frames, saveCurrentFrameState]);
-/*Funciones especiales para la gestion de la animacion: */
+// (Eliminado: `getLayerFrameData` — useCallback con `ctx.getImageData` sobre
+// todo el canvas de cada capa para detectar contenido; declarado pero nunca
+// invocado. Además de ser dead code, era un footgun: si alguien lo cableaba a
+// la UI se ejecutaría sincrónicamente en cada render. Si se necesita saber
+// si una capa tiene contenido, usar `framesResume.computed.resolvedFrames[N]
+// .layerHasContent[layerId]` que se calcula una sola vez fuera del render.)
 
-const getLayerFrameData = useCallback((layerId, frameNumber) => {
-  const frameData = frames[frameNumber];
-  
-  // Debug: Log para verificar estructura
-  
-  
-  if (!frameData) {
-    return { isEmpty: true, visible: true, hasGroups: false };
-  }
-  
-  // Verificar visibilidad del layer en el frame
-  const layerInFrame = frameData.layers?.find(l => l.id === layerId);
-  const isVisibleInFrame = layerInFrame ? (layerInFrame.visible ?? true) : true;
-  
-  // 1. VERIFICAR GRUPOS PRIMERO
-  const hasGroups = frameData.pixelGroups?.[layerId] && 
-                   Object.keys(frameData.pixelGroups[layerId]).length > 0;
-  
-  if (hasGroups) {
-  
-    return {
-      isEmpty: false,
-      visible: isVisibleInFrame,
-      hasGroups: true
-    };
-  }
-  
-  // 2. VERIFICAR CANVAS CON MÚLTIPLES RUTAS POSIBLES
-  let layerCanvas = null;
-  
-  // Intentar diferentes ubicaciones del canvas
-  if (frameData.canvases?.[layerId]) {
-    layerCanvas = frameData.canvases[layerId];
-  } else if (frameData.layerCanvases?.[layerId]) {
-    layerCanvas = frameData.layerCanvases[layerId];
-  } else if (frameData[layerId]?.canvas) {
-    layerCanvas = frameData[layerId].canvas;
-  }
-  
+// (Eliminado: `clearFrameContentCache` — 0 call sites, accedía a un global
+// `window.layerContentCache` que no existe en el código vivo.)
 
-  
-  let hasContent = false;
-  
-  if (layerCanvas && layerCanvas.getContext) {
-    try {
-      const ctx = layerCanvas.getContext('2d');
-      
-      // MEJORA: Verificar todo el canvas, no solo una muestra
-      const imageData = ctx.getImageData(0, 0, layerCanvas.width, layerCanvas.height);
-      
-      // Verificar si hay píxeles con alpha > 0
-      for (let i = 3; i < imageData.data.length; i += 4) {
-        if (imageData.data[i] > 0) {
-          hasContent = true;
-          break;
-        }
-      }
- 
-    } catch (error) {
-  
-      hasContent = false;
-    }
-  }
-  
-  // 3. VERIFICAR PIXELS DIRECTOS (backup)
-  if (!hasContent && frameData.pixels?.[layerId]) {
-    hasContent = frameData.pixels[layerId].length > 0;
-
-  }
-  
-  return {
-    isEmpty: !hasContent,
-    visible: isVisibleInFrame,
-    hasGroups: false
-  };
-}, [frames]);
-
-// FUNCIÓN ADICIONAL: Limpiar cache cuando sea necesario
-const clearFrameContentCache = () => {
-  if (window.layerContentCache) {
-    window.layerContentCache.clear();
-   
-  }
-};
+// (Eliminados: `selectLayerFrame` + `selectFrameRange` — cadena dead code
+// interna: `selectFrameRange` solo llamaba a `selectLayerFrame`, y ninguno
+// de los dos era invocado desde el árbol JSX. La lógica de selección activa
+// es `handleFrameSelection` + `handleFrameMouseDown` + `handleLayerFrameMouseDown`
+// más arriba.)
 
 
+// (Eliminados stubs `clearFrameSelection` / `copySelectedFrames` / `deleteSelectedFrames`:
+// nunca se invocaban en el árbol, y `copySelectedFrames` referenciaba una variable
+// inexistente `layerFrames[layerId][index]` que iba a lanzar ReferenceError si
+// alguien alguna vez lo cableaba a un botón. Si se retoma la feature de copiar/
+// eliminar frames selecionados, leerlos de `framesResume.frames[frameNumber]`
+// es la fuente correcta.)
 
-// Función para seleccionar frame específico de una capa
-const selectLayerFrame = (layerId, frameIndex, ctrlKey = false) => {
-  const frameNumber = frameIndex + 1;
-  
-  // ✅ CRÍTICO: Verificar que el frame existe antes de cambiar
-  if (!frames[frameNumber]) {
-    console.warn(`Intentando acceder a frame inexistente: ${frameNumber}`);
-    return;
-  }
-  
-  const layer = layers.find(l => l.id === layerId);
-  const isGroup = layer?.isGroupLayer;
-  
-  if (ctrlKey && multiSelectMode) {
-    setSelectedLayerFrames(prev => {
-      const layerFrames = prev[layerId] || [];
-      const isSelected = layerFrames.includes(frameIndex);
-      
-      if (isSelected) {
-        return {
-          ...prev,
-          [layerId]: layerFrames.filter(f => f !== frameIndex)
-        };
-      } else {
-        return {
-          ...prev,
-          [layerId]: [...layerFrames, frameIndex]
-        };
-      }
-    });
-  } else {
-    // ✅ CRÍTICO: Guardar estado actual ANTES de cambiar
-    if (currentFrame !== frameNumber) {
-     
-      saveCurrentFrameState();
-    }
-    
-    // ✅ Actualizar selecciones y frame
-    setSelectedLayerFrames({ [layerId]: [frameIndex] });
-    setActiveLayerId(layerId);
-    
-    // ✅ CRÍTICO: Usar setTimeout para asegurar orden de operaciones
-    setTimeout(() => {
-      setActiveFrame(frameNumber);
-      
-      // ✅ Sincronización adicional para grupos
-      if (isGroup) {
-        setTimeout(() => {
-          syncWithCurrentFrame();
-          selectPixelGroup(layer.parentLayerId, layerId);
-        }, 50); // Dar tiempo para que se complete el cambio de frame
-      }
-    }, 0);
-  }
-};
-
-
-
-// Función para seleccionar rango de frames (Shift+click)
-const selectFrameRange = (layerId, frameIndex, shiftKey = false) => {
-  if (shiftKey && selectedLayerFrames[layerId]?.length > 0) {
-    const lastSelected = Math.max(...selectedLayerFrames[layerId]);
-    const start = Math.min(lastSelected, frameIndex);
-    const end = Math.max(lastSelected, frameIndex);
-    const range = Array.from({length: end - start + 1}, (_, i) => start + i);
-    
-    setSelectedLayerFrames(prev => ({
-      ...prev,
-      [layerId]: range
-    }));
-    setSelectedFrameRange({ layerId, start, end });
-  } else {
-    
-    selectLayerFrame(layerId, frameIndex);
-  }
-};
-
-
-// Función para limpiar selección de frames
-const clearFrameSelection = () => {
-  setSelectedLayerFrames({});
-  setSelectedFrameRange(null);
-};
-
-// Función para copiar frames seleccionados
-const copySelectedFrames = () => {
-  const selectedFrames = {};
-  Object.entries(selectedLayerFrames).forEach(([layerId, frameIndices]) => {
-    selectedFrames[layerId] = frameIndices.map(index => ({
-      ...layerFrames[layerId][index],
-      copied: true
-    }));
-  });
-
-  // Aquí implementarías la lógica de copiado real
-};
-
-// Función para eliminar frames seleccionados
-const deleteSelectedFrames = () => {
-  if (Object.keys(selectedLayerFrames).length === 0) return;
-  
-  if (window.confirm('¿Eliminar frames seleccionados?')) {
-    Object.entries(selectedLayerFrames).forEach(([layerId, frameIndices]) => {
-      frameIndices.sort((a, b) => b - a).forEach(index => {
-        if (frameCount > 1) {
-          deleteFrame(index);
-        }
-      });
-    });
-    clearFrameSelection();
-  }
-};
-
-// Funciones de gestión de grupos que faltaban
-const startEditingGroup = (group, e) => {
-  e.stopPropagation();
-  setEditingGroupId(group.id);
-  setEditingGroupName(group.name);
-};
-
-const saveGroupName = () => {
-  if (editingGroupId && editingGroupName.trim()) {
-    const layerId = Object.keys(pixelGroups).find(layerId => 
-      pixelGroups[layerId]?.[editingGroupId]
-    );
-    if (layerId) renamePixelGroup(layerId, editingGroupId, editingGroupName);
-    setEditingGroupId(null);
-  }
-};
-
-const handleGroupKeyDown = (e) => {
-  if (e.key === 'Enter') saveGroupName();
-  else if (e.key === 'Escape') setEditingGroupId(null);
-};
+// (Eliminados: `startEditingGroup` / `saveGroupName` / `handleGroupKeyDown` —
+// trio que implementaba rename inline de grupos; sin call site activo en el
+// árbol actual. La UI de rename vive en otro lado si se retoma.)
 
 const toggleLayerExpansion = (layerId) => {
   setExpandedLayers(prev => ({ ...prev, [layerId]: !prev[layerId] }));
 };
-// Función para asegurar que el grupo se sincronice correctamente
-const ensureGroupInCurrentFrame = (layerId, groupId) => {
-  // Verificar si el grupo existe en el frame actual
-  const currentFrameData = frames[currentFrame];
-  if (!currentFrameData?.pixelGroups?.[layerId]?.[groupId]) {
-    // Si no existe, sincronizar el estado actual
-    saveCurrentFrameState();
-  }
-};
+
+// (Eliminado: `ensureGroupInCurrentFrame` — verificador dead code.)
 const handleCreateGroup = (layerId) => {
   if (!selectedPixels?.length) {
     alert('Selecciona píxeles primero');
@@ -1366,10 +1025,8 @@ const handleCreateGroup = (layerId) => {
   setExpandedLayers(prev => ({ ...prev, [layerId]: true }));
 };
 
-const handleDeleteGroup = (layerId, groupId, e) => {
-  e.stopPropagation();
-  if (window.confirm('¿Eliminar grupo?')) deletePixelGroup(layerId, groupId);
-};
+// (Eliminado: `handleDeleteGroup` — sin call site activo; si se retoma
+// la UI de grupos, llamar directo a `deletePixelGroup` del prop.)
   // Efecto para la reproducción automática
   
   // Funciones de control de animación
@@ -1439,18 +1096,9 @@ const handleLastFrame = () => {
 
  
 
-  // Función para ir a un frame específico
-  const goToFrame = (frameIndex) => {
-    setActiveFrame(frameIndex + 1); // Los frames empiezan en 1
-  };
-
-  // Funciones heredadas del LayerManager
-  const getOrderedLayers = () => {
-    // Solo devolver capas principales (no grupos)
-    return layers.filter(l => !l.isGroupLayer).sort((a, b) => {
-      return (b.zIndex || 0) - (a.zIndex || 0);
-    });
-  };
+  // (Eliminados: `goToFrame` —wrapper trivial sobre setActiveFrame sin call site—
+  // y `getOrderedLayers` —filter+sort reutilizado inline en `getVisualLayerIndex`/
+  // `isLastLayer` sin consumidor directo.)
 
   const getVisualLayerIndex = (layer) => {
     const orderedLayers = layers
@@ -1498,6 +1146,40 @@ const handleLastFrame = () => {
     }
   };
 
+  // --- Navegación RÁPIDA entre capas (visible siempre, vital en modo
+  // collapsed donde el timeline con las filas no está renderizado) ---
+  // Convención visual del editor: zIndex DESC = top-to-bottom en el stack.
+  // "prev" = capa visualmente arriba (mayor zIndex); "next" = abajo.
+  const handlePrevLayer = () => {
+    const ordered = layers
+      .filter(l => !l.isGroupLayer)
+      .sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0));
+    const idx = ordered.findIndex(l => l.id === activeLayerId);
+    if (idx > 0) {
+      clearCurrentSelection();
+      handleLayerChange(ordered[idx - 1].id);
+    }
+  };
+  const handleNextLayer = () => {
+    const ordered = layers
+      .filter(l => !l.isGroupLayer)
+      .sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0));
+    const idx = ordered.findIndex(l => l.id === activeLayerId);
+    if (idx >= 0 && idx < ordered.length - 1) {
+      clearCurrentSelection();
+      handleLayerChange(ordered[idx + 1].id);
+    }
+  };
+  const activeLayerName = layers.find(l => l.id === activeLayerId)?.name || '—';
+  const canPrevLayer = (() => {
+    const ordered = layers.filter(l => !l.isGroupLayer);
+    return ordered.length > 1 && !isFirstLayer(layers.find(l => l.id === activeLayerId) || {});
+  })();
+  const canNextLayer = (() => {
+    const ordered = layers.filter(l => !l.isGroupLayer);
+    return ordered.length > 1 && !isLastLayer(layers.find(l => l.id === activeLayerId) || {});
+  })();
+
   const handleLayerChange = (layerId) => {
  
     showOnionSkinForLayer(layerId)
@@ -1525,289 +1207,129 @@ const handleLastFrame = () => {
     else if (e.key === 'Escape') setEditingLayerId(null);
   };
 
+// Bundle de handlers para `LayerRow`. Latest-ref pattern: los wrappers exportados
+// tienen identidad FIJA durante la vida del componente, pero por dentro llaman
+// a la versión más reciente del handler. Con esto, los cambios de `currentFrame`
+// (que ocurren 60fps durante playback) no invalidan la `React.memo` de las
+// filas — solo se re-renderean si cambian props de datos (layer, flags, frame
+// data); los handlers permanecen con la misma referencia.
+const rowHandlersRef = useRef(null);
+useEffect(() => {
+  rowHandlersRef.current = {
+    onLayerContextMenu: (e, layerId) => {
+      clearCurrentSelection();
+      handleContextMenu(e, 'layer');
+      handleLayerChange(layerId);
+    },
+    onLayerClick: (layerId) => {
+      clearCurrentSelection();
+      handleLayerChange(layerId);
+    },
+    onStartEditing: (layer, e) => startEditing(layer, e),
+    onEditingNameChange: (value) => setEditingName(value),
+    onSaveLayerName: () => saveLayerName(),
+    onLayerKeyDown: (e) => handleKeyDown(e),
+    onToggleExpand: (layerId) => toggleLayerExpansion(layerId),
+    onSelectContent: (layerId) => {
+      setActiveLayerId(layerId);
+      selectAllCanvas();
+    },
+    onToggleGroupCreate: (layerId) => {
+      setShowCreateGroup(prev => (prev === layerId ? null : layerId));
+    },
+    onToggleLayerVisibility: (layerId) => {
+      if (layerId === activeLayerId) clearCurrentSelection();
+      toggleLayerVisibility(layerId);
+    },
+    onDeleteLayer: (layer) => {
+      if (layer.isGroupLayer) {
+        if (window.confirm('¿Eliminar este grupo de todos los frames?')) {
+          deletePixelGroup(layer.parentLayerId, layer.id);
+          deleteLayer(layer.id);
+        }
+      } else {
+        if (window.confirm('¿Eliminar esta capa de todos los frames?')) {
+          deleteLayer(layer.id);
+        }
+      }
+    },
+    onFrameContextMenu: (e, type) => handleContextMenu(e, type),
+    onFrameMouseDown: (layerId, frameIndex, event) =>
+      handleLayerFrameMouseDown(layerId, frameIndex, event),
+    onFrameMouseEnter: (frameNumber) => handleLayerFrameMouseEnter(frameNumber),
+    onToggleFrameVisibility: (layerId, frameNumber) =>
+      toggleLayerVisibilityInFrame(layerId, frameNumber),
+  };
+});
+const stableRowHandlers = useMemo(() => ({
+  onLayerContextMenu: (...args) => rowHandlersRef.current?.onLayerContextMenu(...args),
+  onLayerClick: (...args) => rowHandlersRef.current?.onLayerClick(...args),
+  onStartEditing: (...args) => rowHandlersRef.current?.onStartEditing(...args),
+  onEditingNameChange: (...args) => rowHandlersRef.current?.onEditingNameChange(...args),
+  onSaveLayerName: (...args) => rowHandlersRef.current?.onSaveLayerName(...args),
+  onLayerKeyDown: (...args) => rowHandlersRef.current?.onLayerKeyDown(...args),
+  onToggleExpand: (...args) => rowHandlersRef.current?.onToggleExpand(...args),
+  onSelectContent: (...args) => rowHandlersRef.current?.onSelectContent(...args),
+  onToggleGroupCreate: (...args) => rowHandlersRef.current?.onToggleGroupCreate(...args),
+  onToggleLayerVisibility: (...args) => rowHandlersRef.current?.onToggleLayerVisibility(...args),
+  onDeleteLayer: (...args) => rowHandlersRef.current?.onDeleteLayer(...args),
+  onFrameContextMenu: (...args) => rowHandlersRef.current?.onFrameContextMenu(...args),
+  onFrameMouseDown: (...args) => rowHandlersRef.current?.onFrameMouseDown(...args),
+  onFrameMouseEnter: (...args) => rowHandlersRef.current?.onFrameMouseEnter(...args),
+  onToggleFrameVisibility: (...args) => rowHandlersRef.current?.onToggleFrameVisibility(...args),
+}), []);
 
-const renderLayerWithTimeline = (layer, depth = 0) => {
-  const isGroup = layer.isGroupLayer;
+
+// Builder recursivo: para `layer` devuelve un array plano con su `<LayerRow>`
+// y, si está expandido, los rows de sus hijos. `LayerRow` es un único
+// componente memoizado (definido abajo) que absorbe layer-info + timeline.
+// Antes eran dos piezas separadas (`renderLayerWithTimeline` + `LayerTimelineCell`).
+//
+// Actualmente NO se invoca desde el árbol JSX activo — está preparado para
+// re-habilitar la vista de filas por capa debajo del header cuando se desee.
+// eslint-disable-next-line no-unused-vars
+const renderLayerWithTimeline = (layer) => {
   const children = getGroupLayersForParent(layer.id);
-  const isExpanded = expandedLayers[layer.id];
+  const isExpanded = !!expandedLayers[layer.id];
   const hasChildren = children.length > 0;
   const layerGroups = getLayerGroups(layer.id);
 
   const elementsToRender = [];
 
   elementsToRender.push(
-    <div key={layer.id} className={`animation-layer-row ${isGroup ? 'group-layer' : ''}`}>
-      {/* Parte izquierda - Info de la capa/grupo (sin cambios) */}
-      <div
-        onContextMenu={(e) => {
-          clearCurrentSelection();
-          handleContextMenu(e, 'layer');
-          handleLayerChange(layer.id);
-        }}
-        className={`layer-info ${layer.visible ? 'visible' : 'hidden'} ${activeLayerId === layer.id ? 'selected' : ''}`}
-        style={{ paddingLeft: `0px` }}
-        onClick={() => {   clearCurrentSelection();handleLayerChange(layer.id)}}
-      >
-        {/* ... resto del contenido de layer-info sin cambios ... */}
-        <div className="layer-content">
-          {editingLayerId === layer.id ? (
-            <input
-              type="text"
-              value={editingName}
-              onChange={(e) => setEditingName(e.target.value)}
-              onBlur={saveLayerName}
-              onKeyDown={handleKeyDown}
-              autoFocus
-              className="layer-name-input"
-              onClick={(e) => e.stopPropagation()}
-            />
-          ) : (
-            <div
-              className="layer-name"
-              onDoubleClick={(e) => startEditing(layer, e)}
-              title="Doble clic para editar"
-            >
-              {isGroup ? (
-                <>
-                  <LuGroup className="group-icon" />
-                  {layer.name}
-                </>
-              ) : (
-                <>
-                  {layer.name}
-                  {layerGroups.length > 0 && (
-                    <span className="group-count">({layerGroups.length})</span>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {hasChildren && (
-            <button
-              className="expand-toggle"
-              onClick={(e) => { 
-                e.stopPropagation(); 
-                toggleLayerExpansion(layer.id); 
-              }}
-              title={isExpanded ? 'Colapsar' : 'Expandir'}
-            >
-              {isExpanded ? <LuChevronDown /> : <LuChevronRight />}
-            </button>
-          )}
-        </div>
-
-        {/* ... resto de layer-actions sin cambios ... */}
-        <div className="layer-actions">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setActiveLayerId(layer.id);
-              if (isGroup) {
-                selectAllCanvas();
-              } else {
-                selectAllCanvas();
-              }
-            }}
-            title={isGroup ? "Seleccionar grupo" : "Seleccionar contenido de la capa"}
-            className="layer-btn select-content-btn"
-          >
-            <LuMousePointer />
-          </button>
-
-          {!isGroup && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowCreateGroup(showCreateGroup === layer.id ? null : layer.id);
-              }}
-              title="Crear grupo"
-              className={`layer-btn ${selectedPixels?.length ? 'has-selection' : ''}`}
-              disabled={!selectedPixels?.length}
-            >
-              <LuGroup />
-            </button>
-          )}
-
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (layer.id === activeLayerId) {
-                clearCurrentSelection();
-              }
-              if (isGroup) {
-                toggleLayerVisibility(layer.id);
-              } else {
-                toggleLayerVisibility(layer.id);
-              }
-            }}
-            title={layer.visible ? 'Ocultar' : 'Mostrar'}
-            className="layer-btn"
-          >
-            {layer.visible ? <LuEye /> : <LuEyeOff />}
-          </button>
-
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isGroup) {
-                if (window.confirm('¿Eliminar este grupo de todos los frames?')) {
-                  deletePixelGroup(layer.parentLayerId, layer.id);
-                  deleteLayer(layer.id);
-                }
-              } else {
-                if (window.confirm('¿Eliminar esta capa de todos los frames?')) {
-                  deleteLayer(layer.id);
-                }
-              }
-            }}
-            title="Eliminar"
-            className="layer-btn delete-btn"
-            disabled={!isGroup && layers.length <= 1}
-          >
-            <LuTrash2 />
-          </button>
-
-          <button><BsDashCircleDotted /></button>
-        </div>
-
-        {/* ... resto de showCreateGroup sin cambios ... */}
-      </div>
-
-      {/* Parte derecha - Timeline ACTUALIZADA CON ACCESO DIRECTO */}
-      <div className="timeline-frames">
-  {frameNumbers.map((frameNumber) => {
-    // ✅ ACCESO DIRECTO A framesResume - sin funciones intermedias
-    const resolvedFrame = framesResume?.computed?.resolvedFrames?.[frameNumber];
-    const directFrame = framesResume?.frames?.[frameNumber];
-    const frameData = resolvedFrame || directFrame;
-
-    // ✅ Acceso directo a propiedades
-    const isEmpty = !(frameData?.layerHasContent?.[layer.id] ?? false);
-    const isVisibleInFrame = frameData?.layerVisibility?.[layer.id] ?? true;
-    const hasGroups = directFrame?.pixelGroups?.[layer.id] && 
-                     Object.keys(directFrame.pixelGroups[layer.id]).length > 0;
-    const layerOpacity = frameData?.layerOpacity?.[layer.id] ?? 1.0;
-
-    // Estados del frame
-    const isCurrent = currentFrame === frameNumber;
-    const isActive = activeLayerId === layer.id && isCurrent;
-    const isSelectedGlobal = selectedFrames.includes(frameNumber);
-    const isSelectedInActiveLayer = isSelectedGlobal && activeLayerId === layer.id;
-
-    // ✅ Verificar si es keyframe usando acceso directo
-    const isKeyframe = framesResume?.computed?.keyframes?.[layer.id]?.includes(frameNumber) ?? false;
-   
-    return (
-      <div
-        onContextMenu={(e) => {
-          handleContextMenu(e, 'frame');
-          if (!isSelectedInActiveLayer) {
-            handleLayerFrameMouseDown(layer.id, frameNumber - 1, e); // Ajustar índice
-          }
-        }}
-        key={`${layer.id}_frame_${frameNumber}`}
-        className={`timeline-frame ${isGroup ? 'group-frame' : ''} ${
-          isEmpty && !hasGroups ? 'empty' : 'filled'
-        } ${isVisibleInFrame ? 'visible' : 'hidden'} ${
-          isSelectedInActiveLayer ? 'current' : ''
-        } ${isActive ? 'active' : ''} ${
-          isSelectedInActiveLayer ? 'selected-frame' : ''
-        } ${isKeyframe ? 'keyframe' : ''}`}
-        style={{
-          opacity: isVisibleInFrame ? layerOpacity : 0.3
-        }}
-        onClick={(e) => e.stopPropagation()}
-        onMouseDown={(e) => {
-          if (e.button === 2 && selectedFrames.length > 1) {
-            e.preventDefault();
-            e.stopPropagation();
-            return;
-          }
-          handleLayerFrameMouseDown(layer.id, frameNumber - 1, e); // Ajustar índice
-        }}
-        onMouseEnter={() => handleLayerFrameMouseEnter(frameNumber)}
-        title={`Frame ${frameNumber} - ${isEmpty && !hasGroups ? 'Vacío' : 'Con contenido'}${isKeyframe ? ' (Keyframe)' : ''}`}
-      >
-        <div className="frame-content">
-          {isEmpty && !hasGroups ? (
-            <div className="empty-indicator" />
-          ) : (
-            <div className="filled-indicator">
-              {hasGroups && <div className="groups-indicator" />}
-              {isKeyframe && <div className="keyframe-indicator" />}
-            </div>
-          )}
-        </div>
-
-        {isSelectedInActiveLayer && <div className="frame-selection-indicator" />}
-
-        {/* Onion skin */}
-        {onionSkinEnabled &&
-          activeLayerId === layer.id &&
-          currentFrame !== frameNumber &&
-          (
-            (frameNumber < currentFrame &&
-              currentFrame - frameNumber <= onionSkinSettings.previousFrames) ||
-            (frameNumber > currentFrame &&
-              frameNumber - currentFrame <= onionSkinSettings.nextFrames)
-          ) && (
-            <div className="onion-skin">
-              <p>{frameNumber}</p>
-            </div>
-        )}
-
-        <button
-          className="frame-visibility-btn"
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleLayerVisibilityInFrame(layer.id, frameNumber);
-          }}
-          title={isVisibleInFrame ? 'Ocultar frame' : 'Mostrar frame'}
-        >
-          {isVisibleInFrame ? <LuEye size={12} /> : <LuEyeOff size={12} />}
-        </button>
-      </div>
-    );
-  })}
-</div>
-    </div>
+    <LayerRow
+      key={layer.id}
+      layer={layer}
+      isExpanded={isExpanded}
+      hasChildren={hasChildren}
+      layerGroupsCount={layerGroups.length}
+      layersLength={layers.length}
+      frameNumbers={frameNumbers}
+      currentFrame={currentFrame}
+      activeLayerId={activeLayerId}
+      editingLayerId={editingLayerId}
+      editingName={editingName}
+      selectedFrames={selectedFrames}
+      selectedPixels={selectedPixels}
+      framesResume={framesResume}
+      onionSkinEnabled={onionSkinEnabled}
+      onionSkinSettings={onionSkinSettings}
+      handlers={stableRowHandlers}
+    />
   );
 
-  // Renderizar hijos si están expandidos
   if (isExpanded && hasChildren) {
     children
       .sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0))
       .forEach(childLayer => {
-        const childElements = renderLayerWithTimeline(childLayer, depth + 1);
-        if (Array.isArray(childElements)) {
-          elementsToRender.push(...childElements);
-        } else {
-          elementsToRender.push(childElements);
-        }
+        elementsToRender.push(...renderLayerWithTimeline(childLayer));
       });
   }
-// Dentro de renderLayerWithTimeline, antes del return
 
   return elementsToRender;
 };
 
 
-
-const MemoizedFrameNumber = React.memo(({ frameNumber, isCurrent, isSelected, onMouseDown, onMouseEnter }) => (
-  <div
-    className={`frame-number ${isCurrent ? 'current' : ''} ${isSelected ? 'selected' : ''}`}
-    onMouseDown={onMouseDown}
-    onMouseEnter={onMouseEnter}
-    style={{ userSelect: 'none' }}
-    title={`Frame ${frameNumber}\nArrastrar para seleccionar múltiples`}
-  >
-    {frameNumber}
-    {isSelected && !isCurrent && (
-      <div className="selection-indicator" />
-    )}
-  </div>
-));
 
   return (
     <>
@@ -1833,285 +1355,338 @@ const MemoizedFrameNumber = React.memo(({ frameNumber, isCurrent, isSelected, on
         }}
         
       />
-      <ConfigOnionSkin
-       
-    
-  isOpen={openOnion}
-  onClose={() => setOpenOnion(false)}
-  onionFramesConfig={onionFramesConfig}
-  setOnionFramesConfig={setOnionFramesConfig}
-  updateFrameConfig={updateFrameConfig}
-  addPreviousFrame={addPreviousFrame}
-  addNextFrame={addNextFrame}
-  removeFrame={removeFrame}
-  toggleOnionFrames={toggleOnionFrames}
-  applyOnionFramesPreset={applyOnionFramesPreset}
-  clearTintCache={clearTintCache}
-/>
-      {/* Header con controles de animación */}
-      <>
-      <div className="animation-header">
-        
-    
-        <div className="header-center">
-          {/* Controles de reproducción */}
-          <div className="playback-controls">
-            <button 
-              onClick={handleFirstFrame}
-              title="Primer frame"
-              className="control-btn"
-            >
+      {/* Barra de animación unificada — UNA SOLA FILA a la misma altura.
+          - Sticky-left: TODOS los controles (playback + layer + frame tools).
+          - Centro: frame-numbers strip (scroll horizontal).
+          - Sticky-right: onion skin.
+          Mismo alto, mismo contenedor, un solo scrollbar continuo. */}
+      <div className="animation-bar-unified">
+        <div className="unified-timeline-left">
+          {/* Playback */}
+          <div className="toolbar-group" role="group" aria-label="Reproducción">
+            <button onClick={handleFirstFrame} title="Primer frame" className="control-btn">
               <LuSkipBack />
             </button>
-            
-            <button 
-              onClick={handlePrevFrame}
-              title="Frame anterior"
-              className="control-btn"
-            >
+            <button onClick={handlePrevFrame} title="Frame anterior" className="control-btn">
               <LuStepBack />
             </button>
-            
-            <button 
-  onClick={isPlaying ? handlePause : handlePlay}  // ✅ Lógica condicional correcta
-  title={isPlaying ? 'Pausar' : 'Reproducir'}
-  className="control-btn play-btn"
->
-  {isPlaying ? <LuPause /> : <LuPlay />}
-</button>
-            
-            <button 
-              onClick={handleNextFrame}
-              title="Siguiente frame"
-              className="control-btn"
+            <button
+              onClick={isPlaying ? handlePause : handlePlay}
+              title={isPlaying ? 'Pausar' : 'Reproducir'}
+              className="control-btn play-btn"
             >
+              {isPlaying ? <LuPause /> : <LuPlay />}
+            </button>
+            <button onClick={handleNextFrame} title="Siguiente frame" className="control-btn">
               <LuStepForward />
             </button>
-            
-            <button 
-              onClick={handleLastFrame}
-              title="Último frame"
-              className="control-btn"
-            >
+            <button onClick={handleLastFrame} title="Último frame" className="control-btn">
               <LuSkipForward />
             </button>
+          </div>
 
+          <div className="toolbar-divider" aria-hidden />
+
+          {/* Velocidad + loop */}
+          <div className="toolbar-group" role="group" aria-label="Velocidad">
             <button
               onClick={() => setLoopEnabled(!loopEnabled)}
               title={loopEnabled ? 'Desactivar bucle' : 'Activar bucle'}
               className={`setting-btn ${loopEnabled ? 'active' : ''}`}
-              style={{marginLeft:'10px'}}
             >
               <LuRotateCcw />
             </button>
-            <div className="speed-control-overlay">
-                <select 
-                  value={playbackSpeed} 
-                  onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
-                  className="speed-select-overlay"
-                  title="Velocidad de reproducción"
+            <select
+              value={playbackSpeed}
+              onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
+              className="speed-select-overlay"
+              title="Velocidad de reproducción"
+            >
+              <option value={0.25}>0.25x</option>
+              <option value={0.5}>0.5x</option>
+              <option value={0.75}>0.75x</option>
+              <option value={1}>1x</option>
+              <option value={1.25}>1.25x</option>
+              <option value={1.5}>1.5x</option>
+              <option value={2}>2x</option>
+              <option value={4}>4x</option>
+            </select>
+            {!isFullRange && rangeFromFrame != null && rangeToFrame != null && (
+              <div
+                className="loop-range-chip"
+                style={
+                  loopInfo?.target === 'main' && loopInfo?.tagColor
+                    ? { '--loop-chip-accent': loopInfo.tagColor }
+                    : undefined
+                }
+                title={
+                  loopInfo?.target === 'main' && loopInfo?.tagName
+                    ? `Bucle: tag «${loopInfo.tagName}» (frames ${rangeFromFrame}–${rangeToFrame})`
+                    : `Bucle activo: frames ${rangeFromFrame}–${rangeToFrame}`
+                }
+              >
+                <span className="loop-range-chip__label">
+                  {loopInfo?.target === 'main' && loopInfo?.tagName
+                    ? `«${loopInfo.tagName}»`
+                    : 'Bucle'}
+                </span>
+                <span className="loop-range-chip__value">{rangeFromFrame}–{rangeToFrame}</span>
+                <button
+                  className="loop-range-chip__close"
+                  onClick={() => {
+                    // Reset frameRange + clear loopInfo (si era target=main).
+                    // Llamamos onClearLoop si existe (provisto por workspaceContainer);
+                    // si no, fallback al reset directo de frameRange para mantener
+                    // compatibilidad con call-sites legacy.
+                    if (onClearLoop) onClearLoop('main');
+                    else setFrameRange({ start: 0, end: Math.max(0, totalFrames - 1) });
+                  }}
+                  title="Salir del bucle"
+                  aria-label="Salir del bucle"
                 >
-                  <option value={0.25}>0.25x</option>
-                  <option value={0.5}>0.5x</option>
-                  <option value={0.75}>0.75x</option>
-                  <option value={1}>1x</option>
-                  <option value={1.25}>1.25x</option>
-                  <option value={1.5}>1.5x</option>
-                  <option value={2}>2x</option>
-                  <option value={4}>4x</option>
-                </select>
+                  <LuX size={11} />
+                </button>
               </div>
+            )}
           </div>
 
-          {/* Configuración de reproducción */}
-          <div className="playback-settings">
+          <div className="toolbar-divider" aria-hidden />
+
+          {/* (Movido: "Nueva capa" + ↑↓ ahora viven en la esquina top-left
+              del grid de FramesTimeline, encima de la columna de capas.) */}
+
+          {/* Frame actual: badge + duración + acciones */}
+          <div className="toolbar-group" role="group" aria-label="Frame actual">
+            <span
+              className="frame-badge"
+              title={`Frame actual: ${currentFrame}`}
+              aria-label={`Frame actual ${currentFrame}`}
+            >
+              {currentFrame}
+            </span>
             <div className="frame-rate-control">
-              <label>Frame Options:</label>
-              <p className='playback-current-framerate'>{currentFrame}</p>
               <input
                 type="number"
                 min="10"
                 max="1000"
                 step="10"
-                value={frames[currentFrame.toString()]?.frameDuration}
+                value={frames[currentFrame.toString()]?.frameDuration ?? 100}
                 onChange={(e) => setFrameDuration(currentFrame, Number(e.target.value))}
+                onFocus={(e) => e.target.select()}
+                onMouseUp={(e) => e.preventDefault()}
                 className="frame-rate-input"
+                title="Duración del frame (ms)"
+                aria-label="Duración del frame en milisegundos"
               />
-              
-              <span>ms</span>
+              <div className="frame-rate-spin" aria-hidden>
+                <button
+                  type="button"
+                  className="frame-rate-spin-btn"
+                  tabIndex={-1}
+                  onClick={() => {
+                    const cur = frames[currentFrame.toString()]?.frameDuration ?? 100;
+                    setFrameDuration(currentFrame, Math.min(1000, cur + 10));
+                  }}
+                  title="Aumentar 10 ms"
+                  aria-label="Aumentar duración"
+                >
+                  <LuChevronUp />
+                </button>
+                <button
+                  type="button"
+                  className="frame-rate-spin-btn"
+                  tabIndex={-1}
+                  onClick={() => {
+                    const cur = frames[currentFrame.toString()]?.frameDuration ?? 100;
+                    setFrameDuration(currentFrame, Math.max(10, cur - 10));
+                  }}
+                  title="Disminuir 10 ms"
+                  aria-label="Disminuir duración"
+                >
+                  <LuChevronDown />
+                </button>
+              </div>
             </div>
-            
-            <div className="frame-controls">
-              
-              
-              <button
-                onClick={addFrame}
-                title="Añadir frame"
-                className="frame-control-btn"
-              >
-                <LuPlus />
-              </button>
-              <button
-  onClick={() => duplicateFrameHandler(currentFrame)}
-  title="Duplicar frame actual"
-  className="frame-control-btn"
->
-  <LuCopy />
-</button>
-<button
-          className="frame-control-btn"
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleLayerVisibilityInFrame(activeLayerId, currentFrame);
-          }}
-          //title={isVisibleInFrame ? 'Ocultar frame' : 'Mostrar frame'}
-        >
-         <LuEye size={12} /> 
-        </button>
-<button
-  onClick={() => deleteFrameHandler(currentFrame)}
-  title="Eliminar frame actual"
-  className="frame-control-btn"
-  disabled={frameCount <= 1}
->
-  <LuTrash2 />
-</button>
- 
-            </div>
-            <div className="zoom-slider-container">
-              <p>Opacidad: {localOpacity}%</p>
-            
+            <span className="frame-rate-unit">ms</span>
+            <button onClick={addFrame} title="Añadir frame" className="frame-control-btn">
+              <LuPlus />
+            </button>
+            <button
+              onClick={() => duplicateFrameHandler(currentFrame)}
+              title="Duplicar frame actual"
+              className="frame-control-btn"
+            >
+              <LuCopy />
+            </button>
+            <button
+              className="frame-control-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleLayerVisibilityInFrame(activeLayerId, currentFrame);
+              }}
+              title="Alternar visibilidad del frame"
+            >
+              <LuEye size={12} />
+            </button>
+            <button
+              onClick={() => deleteFrameHandler(currentFrame)}
+              title="Eliminar frame actual"
+              className="frame-control-btn"
+              disabled={frameCount <= 1}
+            >
+              <LuTrash2 />
+            </button>
+          </div>
+
+          <div className="toolbar-divider" aria-hidden />
+
+          {/* Navegación rápida entre capas — esencial cuando el panel está
+              colapsado (no hay lista de filas visible). Doble clic en el
+              nombre activa edición inline (mismo flujo que en LayerRow). */}
+          <div className="toolbar-group layer-nav-group" role="group" aria-label="Capa activa">
+            <button
+              onClick={handlePrevLayer}
+              disabled={!canPrevLayer}
+              title="Capa anterior (arriba)"
+              className="control-btn layer-nav-btn"
+              aria-label="Capa anterior"
+            >
+              <LuChevronLeft />
+            </button>
+            {editingLayerId === activeLayerId ? (
               <input
-    type="range"
-    min="0"
-    max="100"
-    step="10"
-    value={localOpacity}
-    onChange={(e) => {
-      const val = Number(e.target.value);
-      setLocalOpacity(val); // solo cambia el estado local del slider
-    }}
-    onMouseUp={() => {
-      setFrameOpacity(activeLayerId,currentFrame,localOpacity / 100); // solo cuando termina el cambio, se actualiza el estado global
-    }}
-    className="zoom-slider"
-  />
-
+                type="text"
+                value={editingName}
+                onChange={(e) => setEditingName(e.target.value)}
+                onBlur={saveLayerName}
+                onKeyDown={handleKeyDown}
+                autoFocus
+                onFocus={(e) => e.target.select()}
+                className="layer-nav-input"
+                aria-label="Editar nombre de capa"
+              />
+            ) : (
+              <span
+                className="layer-nav-label"
+                title={`Capa actual: ${activeLayerName} — doble clic para renombrar`}
+                aria-label={`Capa actual ${activeLayerName}`}
+                onDoubleClick={(e) => {
+                  const activeLayer = layers.find(l => l.id === activeLayerId);
+                  if (activeLayer) startEditing(activeLayer, e);
+                }}
+              >
+                {activeLayerName}
+              </span>
+            )}
+            <button
+              onClick={handleNextLayer}
+              disabled={!canNextLayer}
+              title="Capa siguiente (abajo)"
+              className="control-btn layer-nav-btn"
+              aria-label="Capa siguiente"
+            >
+              <LuChevronRight />
+            </button>
           </div>
-           
+
+          <div className="toolbar-divider" aria-hidden />
+
+          {/* Opacidad (layer en este frame) */}
+          <div
+            className="toolbar-group opacity-group"
+            role="group"
+            aria-label="Opacidad de la capa en este frame"
+          >
+            <label className="opacity-label">Op</label>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="10"
+              value={localOpacity}
+              onChange={(e) => setLocalOpacity(Number(e.target.value))}
+              onMouseUp={() => {
+                setFrameOpacity(activeLayerId, currentFrame, localOpacity / 100);
+              }}
+              className="zoom-slider"
+              aria-label="Opacidad"
+            />
+            <span className="opacity-value">{localOpacity}%</span>
           </div>
-
-          
         </div>
 
-        <div className='header-right'>
-        
+        {/* Spacer flexible entre la toolbar izquierda y el onion-skin derecho.
+            El strip de frame-numbers YA NO vive aquí — ahora es el header row
+            de FramesTimeline (timeline.jsx) para que column-aligne con las
+            filas de capas. */}
+        <div className="unified-timeline-spacer" aria-hidden />
 
-          <div className="onion-skin-container">
-      <div className="onion-skin-toggle" onClick={()=>{toggleOnionFrames();
-        setIsOnionActive(!isOnionActive);
-      }}>
-        <div className="onion-icon">
-          <LuLayers/>
-        </div>
-        <span className="onion-text">Onion Skin</span>
-        <div className={`toggle-switch ${onionFramesConfig.enabled ? 'active' : ''}`}>
-          <div className="toggle-slider"></div>
-        </div>
-      </div>
-      
-      <button className="config-button" onClick={()=>{setOpenOnion(true)}}>
-       <LuSettings/>
-      </button>
-            </div>
-
-
-            
-        </div>
-        
-       
-      </div>
-      <div className="timeline-header">
-          <div className="layers-header">
-            
-            <div className="layer-actions-container">
-          {/* Controles de capas */}
-          <div className='layer-manager-actions'>
-      
-          
-          <button 
-            className="add-layer-btn" 
-            onClick={()=>{
-              clearCurrentSelection();
-              addLayer();
+        {/* Sticky right: onion skin */}
+        <div className="unified-timeline-right">
+          <div
+            className="onion-skin-toggle"
+            onClick={() => { toggleOnionFrames(); }}
+            title="Onion Skin"
+            role="switch"
+            aria-checked={!!onionFramesConfig.enabled}
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === ' ' || e.key === 'Enter') {
+                e.preventDefault();
+                toggleOnionFrames();
+              }
             }}
-            title="Añadir nueva capa"
           >
-            Nueva Capa <BiSolidLayerPlus />
-          </button>
-          <div className='layer-move-actions'>
-         <button 
-            onClick={handleMoveActiveLayerUp}
-            title="Mover capa activa arriba"
-            className="header-btn"
-            disabled={!canMoveActiveLayerUp()}
-          >
-            <LuArrowUp />
-          </button>
-          
-          <button 
-            onClick={handleMoveActiveLayerDown}
-            title="Mover capa activa abajo"
-            className="header-btn"
-            disabled={!canMoveActiveLayerDown()}
-          >
-            <LuArrowDown />
-          </button>
-
-         </div>
+            <LuLayers />
+            <div className={`toggle-switch ${onionFramesConfig.enabled ? 'active' : ''}`}>
+              <div className="toggle-slider"></div>
+            </div>
           </div>
-          
-          
-
+          <button
+            ref={onionTriggerRef}
+            className="config-button"
+            onClick={() => setOpenOnion(v => !v)}
+            aria-expanded={openOnion}
+            aria-haspopup="dialog"
+            title="Configurar Onion Skin"
+          >
+            <LuSettings />
+          </button>
+          <ConfigOnionSkin
+            isOpen={openOnion}
+            onClose={() => setOpenOnion(false)}
+            anchorRef={onionTriggerRef}
+            onionFramesConfig={onionFramesConfig}
+            updateFrameConfig={updateFrameConfig}
+            addPreviousFrame={addPreviousFrame}
+            addNextFrame={addNextFrame}
+            removeFrame={removeFrame}
+            toggleOnionFrames={toggleOnionFrames}
+            applyOnionFramesPreset={applyOnionFramesPreset}
+            clearTintCache={clearTintCache}
+          />
+          {/* Toggle collapse: oculta el timeline grid de capas/frames y deja
+              solo esta barra. La navegación de capas (layer-nav-group) +
+              playback + frame-tools siguen funcionando — es el modo "HUD"
+              para cuando el timeline no se necesita visible. */}
+          {typeof onToggleCollapse === 'function' && (
+            <button
+              className="config-button collapse-toggle-btn"
+              onClick={onToggleCollapse}
+              title={isCollapsed ? 'Expandir panel de capas' : 'Colapsar panel de capas'}
+              aria-label={isCollapsed ? 'Expandir panel' : 'Colapsar panel'}
+              aria-pressed={isCollapsed}
+            >
+              {isCollapsed ? <LuChevronUp /> : <LuChevronDown />}
+            </button>
+          )}
         </div>
-
-
-          </div>
-          <div className="frames-header">
-            {/*AQui puede ir la seccion de tag para ver los nombres de los tags de varios frames */}
-           
-            <div className="frame-numbers">
-  {frameNumbers.map((frameNumber) => {
-    const isSelected = selectedFrames.includes(frameNumber);
-    const isCurrent = isPlaying 
-      ? currentAnimationFrame === frameNumber 
-      : currentFrame === frameNumber;
-    
-    return (
-      <MemoizedFrameNumber
-        key={frameNumber}
-        frameNumber={frameNumber}
-        isCurrent={isCurrent}
-        isSelected={isSelected}
-        onMouseDown={(event) => handleFrameMouseDown(frameNumber, event)}
-        onMouseEnter={() => handleFrameMouseEnter(frameNumber)}
-      />
-    );
-  })}
-</div>
-            
-          </div>
-        </div>
-
-      </>
-    
-
-
-
-     
-
+      </div>
     </>
   );
 };
+
+// (FrameNumberCell movida a `./layerRow.jsx` como named export — la usa
+// ahora `timeline.jsx` en su header row del grid. Ver ese archivo.)
 
 export default LayerAnimation;

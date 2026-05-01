@@ -1,0 +1,142 @@
+.script-runner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: #1a1a22;
+  color: #e7e7ea;
+  font-size: 12px;
+  height: 100%;
+}
+
+.script-runner__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #2c2c34;
+}
+
+.script-runner__header h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.script-runner__close {
+  background: transparent;
+  border: none;
+  color: #bbb;
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.script-runner__close:hover {
+  color: #fff;
+}
+
+.script-runner__examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  padding-bottom: 4px;
+}
+
+.script-runner__examples-label {
+  font-size: 10px;
+  color: #8a8a95;
+  text-transform: uppercase;
+}
+
+.script-runner__example-btn {
+  background: #2a2a33;
+  border: 1px solid #3a3a45;
+  color: #cfcfdc;
+  border-radius: 3px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.script-runner__example-btn:hover {
+  background: #33333e;
+  color: #fff;
+}
+
+.script-runner__editor {
+  flex: 1;
+  min-height: 220px;
+  background: #0f0f15;
+  color: #e7e7ea;
+  border: 1px solid #2c2c34;
+  border-radius: 4px;
+  padding: 10px;
+  font-family: "Fira Code", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  resize: vertical;
+  outline: none;
+  white-space: pre;
+}
+
+.script-runner__footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.script-runner__run {
+  background: #4a90e2;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 16px;
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.script-runner__run:hover:not(:disabled) {
+  background: #5aa0f2;
+}
+
+.script-runner__run:disabled {
+  background: #3a3a45;
+  cursor: wait;
+}
+
+.script-runner__hint {
+  font-size: 11px;
+  color: #8a8a95;
+}
+
+.script-runner__hint code {
+  background: #2a2a33;
+  padding: 1px 5px;
+  border-radius: 2px;
+  color: #ffd84a;
+}
+
+.script-runner__error,
+.script-runner__logs {
+  margin: 0;
+  background: #0f0f15;
+  border: 1px solid #2c2c34;
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-family: monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.script-runner__error {
+  color: #ff7070;
+  border-color: #4a2a2a;
+}
+
+.script-runner__logs {
+  color: #a0c0ff;
+}

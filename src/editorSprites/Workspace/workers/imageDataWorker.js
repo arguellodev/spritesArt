@@ -421,17 +421,6 @@ class ImageDataWorkerPool {
           }
         };
         
-        // Heartbeat para mantener el worker activo
-        setInterval(function() {
-          self.postMessage({
-            type: 'heartbeat',
-            stats: {
-              tasksCompleted: performanceStats.tasksCompleted,
-              cacheHitRate: workerCache.getStats().hitRate,
-              memoryUsage: canvasMap.size
-            }
-          });
-        }, 30000); // Cada 30 segundos
       `;
   
       const blob = new Blob([workerCode], { type: 'application/javascript' });
@@ -448,17 +437,6 @@ class ImageDataWorkerPool {
         errors: 0,
         createdAt: Date.now(),
         lastUsed: Date.now()
-      });
-      
-      // Manejar heartbeat
-      worker.addEventListener('message', (e) => {
-        if (e.data.type === 'heartbeat') {
-          const stats = this.workerStats.get(workerId);
-          if (stats) {
-            stats.lastUsed = Date.now();
-            stats.heartbeatStats = e.data.stats;
-          }
-        }
       });
       
       console.log('👷 Created new ImageData worker: ' + workerId);

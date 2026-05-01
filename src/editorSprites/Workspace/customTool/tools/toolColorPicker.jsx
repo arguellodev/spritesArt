@@ -29,7 +29,6 @@ const ToolColorPicker = ({ color = { r: 255, g: 0, b: 0, a: 1 }, onChange, hexCo
       color.b !== currentColor.b ||
       color.a !== currentColor.a
     ) {
-      console.log('ToolColorPicker: Actualizando color interno desde prop:', color);
       setCurrentColor(color);
     }
   }, [color, currentColor]);
@@ -77,7 +76,6 @@ const ToolColorPicker = ({ color = { r: 255, g: 0, b: 0, a: 1 }, onChange, hexCo
   };
 
   const updateColor = (newColor) => {
-    console.log('ToolColorPicker: Actualizando color:', newColor);
     setCurrentColor(newColor);
     onChange?.(newColor);
   };

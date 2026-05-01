@@ -15,22 +15,6 @@
     --shadow-dark: rgba(0, 0, 0, 0.3);
 }
 
-/* Contenedor principal de la toolbar */
-.toolbar-container {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 1000;
-    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
-    border-bottom: 1px solid var(--border-color);
-    box-shadow: 
-        0 4px 20px rgba(0, 0, 0, 0.4),
-        inset 0 1px 0 var(--shadow-light);
-    backdrop-filter: blur(10px);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
 /* Herramienta individual en la toolbar */
 .customTool-section {
     display: inline-flex;
@@ -191,14 +175,12 @@
 
 .color-button:hover {
     border-color: var(--accent-color);
-    transform: scale(1.1);
     box-shadow: 0 0 0 2px rgba(124, 77, 255, 0.2);
 }
 
 .color-button.active {
     border-color: var(--accent-color);
-    box-shadow: 0 0 0 2px rgba(124, 77, 255, 0.3);
-    transform: scale(1.05);
+    box-shadow: 0 0 0 2px rgba(124, 77, 255, 0.4);
 }
 
 .color-value {
@@ -385,8 +367,7 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 .horizontal-slider::-webkit-slider-thumb:hover {
-    transform: scale(1.2);
-    box-shadow: 0 0 0 2px rgba(124, 77, 255, 0.3);
+    box-shadow: 0 0 0 4px rgba(124, 77, 255, 0.35);
 }
 
 .current-value-horizontal {
@@ -405,8 +386,11 @@ input[type="number"]::-webkit-outer-spin-button {
 .toggle-switch {
     position: relative;
     display: inline-block;
-    width: 32px;
-    height: 16px;
+    width: 36px;
+    height: 20px;
+    /* Aumentamos el area de tap sin alterar el tamano visible. */
+    padding: 6px 0;
+    box-sizing: content-box;
 }
 
 .toggle-input {
@@ -431,12 +415,13 @@ input[type="number"]::-webkit-outer-spin-button {
 .toggle-label:before {
     position: absolute;
     content: "";
-    height: 12px;
-    width: 12px;
-    left: 1px;
-    bottom: 1px;
+    height: 14px;
+    width: 14px;
+    left: 2px;
+    top: 50%;
+    transform: translateY(-50%);
     background: white;
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, left 0.2s ease;
     border-radius: 50%;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
@@ -447,7 +432,7 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 .toggle-input:checked + .toggle-label:before {
-    transform: translateX(16px);
+    transform: translate(16px, -50%);
 }
 
 /* Botón de opciones avanzadas */
@@ -695,12 +680,11 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 .intensity-slider::-webkit-slider-thumb:hover {
-    transform: scale(1.1);
-    box-shadow: 0 0 0 3px rgba(124, 77, 255, 0.3);
+    box-shadow: 0 0 0 5px rgba(124, 77, 255, 0.35);
 }
 
 .intensity-slider::-webkit-slider-thumb:active {
-    transform: scale(0.95);
+    box-shadow: 0 0 0 5px rgba(124, 77, 255, 0.55);
 }
 
 .intensity-slider::-moz-range-thumb {
@@ -715,8 +699,7 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 .intensity-slider::-moz-range-thumb:hover {
-    transform: scale(1.1);
-    box-shadow: 0 0 0 3px rgba(124, 77, 255, 0.3);
+    box-shadow: 0 0 0 5px rgba(124, 77, 255, 0.35);
 }
 
 .intensity-slider::-moz-range-track {

@@ -1,10 +1,12 @@
-import { useEffect, useState, useCallback } from "react";
-import { LuPencil, LuTrash2, LuPlus, LuCheck, LuX, LuPalette, LuRefreshCw } from "react-icons/lu";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { LuPencil, LuTrash2, LuPlus, LuCheck, LuX, LuPalette, LuRefreshCw, LuGripVertical, LuGripHorizontal, LuRuler } from "react-icons/lu";
 import ToolColorPicker from "./tools/toolColorPicker";
 import { PiMouseLeftClickFill } from "react-icons/pi";
 import { PiMouseRightClickFill } from "react-icons/pi";
 import CustomSelect from "./customSelect";
 import SimpleEyedropper from "./simpleEyeDropper";
+import PaletteManager from "../palette/paletteManager";
 // Al inicio del componente, después de los otros imports
 
 import './layerColor.css'
@@ -57,6 +59,8 @@ const LayerColor = ({ tool, toolParameters, setToolParameters, getLayerPixelData
   // Estados para la paleta de colores
   const [utilColors, setUtilColors] = useState([{"r":0,"g":0,"b":0,"a":1},{"r":255,"g":255,"b":255,"a":1},{"r":255,"g":0,"b":0,"a":0}]);
   const [actualPalette, setActualPalette] = useState([]);
+  // Panel de paletas predefinidas (DB16, PICO-8, ...): oculto por defecto.
+  const [showPaletteManager, setShowPaletteManager] = useState(false);
   const [showPalettePicker, setShowPalettePicker] = useState(false);
   const [editingColorIndex, setEditingColorIndex] = useState(null);
   const [isEditingPalette, setIsEditingPalette] = useState(false);
@@ -70,6 +74,113 @@ const LayerColor = ({ tool, toolParameters, setToolParameters, getLayerPixelData
 
   // NUEVO: Estado para colores recientes
   const [recentColors, setRecentColors] = useState([]);
+
+  // ─── Densidad de la paleta inline (1=micro 12px ↔ 5=grande 36px). Persistida. ───
+  // Permite al usuario ver decenas de colores sin scroll bajando la densidad,
+  // o tener swatches cómodos de click subiéndola.
+  const [paletteDensity, setPaletteDensity] = useState(() => {
+    try {
+      const v = parseInt(localStorage.getItem('pixcalli.layerColor.density'), 10);
+      return Number.isFinite(v) && v >= 1 && v <= 5 ? v : 3;
+    } catch { return 3; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('pixcalli.layerColor.density', String(paletteDensity)); } catch {
+      // localStorage puede fallar en modo privado; no es crítico para la UI.
+    }
+  }, [paletteDensity]);
+  const SWATCH_SIZES_PX = [12, 16, 22, 28, 36];
+  const swatchSizePx = SWATCH_SIZES_PX[paletteDensity - 1] ?? 22;
+
+  // ─── Tamaño del módulo: alto local + ancho del RightPanel padre. ───
+  const [moduleHeight, setModuleHeight] = useState(() => {
+    try {
+      const v = parseInt(localStorage.getItem('pixcalli.layerColor.height'), 10);
+      return Number.isFinite(v) && v >= 220 ? v : null;
+    } catch { return null; }
+  });
+  const [panelWidth, setPanelWidth] = useState(() => {
+    try {
+      const v = parseInt(localStorage.getItem('pixcalli.rightPanel.width'), 10);
+      return Number.isFinite(v) && v >= 280 && v <= 720 ? v : null;
+    } catch { return null; }
+  });
+
+  const resizeRef = useRef({ active: false });
+
+  // Aplica el ancho persistido al ancestro RightPanel cuando el módulo se monta
+  // o cuando cambia panelWidth tras un drag. Tocamos el DOM directamente porque
+  // el contenedor padre vive fuera de este componente; alternativa más limpia
+  // sería un context, pero esto evita acoplar layerColor con workspaceContainer.
+  useEffect(() => {
+    if (!panelWidth) return;
+    const aside = document.querySelector('.pc-right-panel');
+    if (aside) aside.style.width = panelWidth + 'px';
+  }, [panelWidth]);
+
+  const startResize = useCallback((mode) => (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Capturar referencias DOM SÍNCRONAMENTE; los SyntheticEvent de React se
+    // recicla al volver del handler y `currentTarget` queda null.
+    const handleEl = e.currentTarget;
+    const moduleEl = handleEl?.parentElement || containerRef.current;
+    const aside = document.querySelector('.pc-right-panel');
+    const startW = aside ? aside.getBoundingClientRect().width : 300;
+    const startH = moduleEl ? moduleEl.getBoundingClientRect().height : 0;
+    const prevTransition = aside ? aside.style.transition : '';
+    if (aside) aside.style.transition = 'none';
+    resizeRef.current = { active: true, mode, startX: e.clientX, startY: e.clientY, startW, startH, aside, moduleEl, prevTransition };
+
+    const onMove = (ev) => {
+      const r = resizeRef.current;
+      if (!r.active) return;
+      if (r.mode === 'horizontal' && r.aside) {
+        // Drag a la izquierda → ancho mayor (panel pegado al borde derecho).
+        const dx = r.startX - ev.clientX;
+        const w = Math.max(280, Math.min(720, r.startW + dx));
+        r.aside.style.width = w + 'px';
+      } else if (r.mode === 'vertical' && r.moduleEl) {
+        const dy = ev.clientY - r.startY;
+        const h = Math.max(220, Math.min(window.innerHeight - 80, r.startH + dy));
+        r.moduleEl.style.height = h + 'px';
+      }
+    };
+    const onUp = () => {
+      const r = resizeRef.current;
+      if (!r.active) return;
+      if (r.mode === 'horizontal' && r.aside) {
+        const w = Math.round(r.aside.getBoundingClientRect().width);
+        setPanelWidth(w);
+        try { localStorage.setItem('pixcalli.rightPanel.width', String(w)); } catch { /* ignore */ }
+        r.aside.style.transition = r.prevTransition || '';
+      } else if (r.mode === 'vertical' && r.moduleEl) {
+        const h = Math.round(r.moduleEl.getBoundingClientRect().height);
+        setModuleHeight(h);
+        try { localStorage.setItem('pixcalli.layerColor.height', String(h)); } catch { /* ignore */ }
+      }
+      resizeRef.current.active = false;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = mode === 'horizontal' ? 'ew-resize' : 'ns-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }, []);
+
+  const resetSize = useCallback(() => {
+    setModuleHeight(null);
+    setPanelWidth(null);
+    try {
+      localStorage.removeItem('pixcalli.layerColor.height');
+      localStorage.removeItem('pixcalli.rightPanel.width');
+    } catch { /* ignore */ }
+    const aside = document.querySelector('.pc-right-panel');
+    if (aside) aside.style.width = '';
+  }, []);
 
   // Definición de paletas de colores predefinidas organizadas por categorías
   const colorPalettes = {
@@ -263,7 +374,7 @@ const LayerColor = ({ tool, toolParameters, setToolParameters, getLayerPixelData
   };
 
   // Herramientas que necesitan configuración de formas
-  const shapeTools = ['circle', 'ellipse', 'square', 'rectangle', 'polygon', 'triangle'];
+  const shapeTools = ['circle', 'ellipse', 'square', 'rectangle', 'polygon', 'triangle', 'polygonPencil'];
   const isShapeTool = shapeTools.includes(tool);
 
   // NUEVO: Función para añadir color a recientes
@@ -686,9 +797,15 @@ const addToRecentColors = (color) => {
     setHexBorder(rgbToHex(borderColor));
   }, [foregroundColor, backgroundColor, fillColor, borderColor]);
 
-  useEffect(()=>{
-    generateIndexedPalette()
-  },[isPressed ]);
+  // Regenerar la paleta indexada solo al soltar el mouse y solo si el modo
+  // indexado está activo. Antes corría en cada cambio de isPressed (incluyendo
+  // pointerdown), forzando un getImageData de toda la capa + 1M objetos en
+  // canvas grandes — causa de lag al primer click.
+  useEffect(() => {
+    if (isPressed) return;
+    if (!isIndexedMode) return;
+    generateIndexedPalette();
+  }, [isPressed]);
 
   useEffect(()=>{
     if(toolParameters.isGradientMode){
@@ -720,6 +837,61 @@ const addToRecentColors = (color) => {
     setShowPalettePicker(false);
     setShowIndexedColorPicker(false);
     setShowGradientPicker(false);
+  };
+
+  // Portal para sacar el color-picker del overflow clip del RightPanel.
+  // El picker usa `position: absolute; right: 100%; top: 0` anclado al
+  // container. Renderizamos un wrapper fixed en las mismas coordenadas del
+  // container (top-left) dentro de document.body; el picker conserva su
+  // posición relativa al wrapper y escapa del `overflow: hidden/auto` del
+  // panel derecho.
+  const containerRef = useRef(null);
+  const [anchorRect, setAnchorRect] = useState(null);
+  const anyPickerOpen =
+    showPrimaryPicker || showSecondaryPicker || showPalettePicker ||
+    showGradientPicker || showIndexedColorPicker;
+
+  useLayoutEffect(() => {
+    if (!anyPickerOpen || !containerRef.current) return;
+    const r = containerRef.current.getBoundingClientRect();
+    setAnchorRect({ top: r.top, left: r.left });
+  }, [anyPickerOpen]);
+
+  useEffect(() => {
+    if (!anyPickerOpen) return;
+    const update = () => {
+      if (!containerRef.current) return;
+      const r = containerRef.current.getBoundingClientRect();
+      setAnchorRect((prev) => {
+        if (prev && prev.top === r.top && prev.left === r.left) return prev;
+        return { top: r.top, left: r.left };
+      });
+    };
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [anyPickerOpen]);
+
+  const portalPicker = (picker) => {
+    if (!anchorRect) return null;
+    return createPortal(
+      <div
+        style={{
+          position: "fixed",
+          top: anchorRect.top,
+          left: anchorRect.left,
+          width: 0,
+          height: 0,
+          zIndex: 10000,
+        }}
+      >
+        {picker}
+      </div>,
+      document.body
+    );
   };
 
   // Función para agregar un nuevo color a la paleta (solo en modo normal)
@@ -1038,93 +1210,159 @@ const addToRecentColors = (color) => {
   };
 
   return (
-    <div className="layer-color-container" 
+    <div className="layer-color-container"
+    ref={containerRef}
     onContextMenu={preventContextMenu}
+    style={moduleHeight ? { height: moduleHeight + 'px' } : undefined}
     >
+      {/* Handles de resize: borde izquierdo (ancho del RightPanel), borde inferior (alto). */}
+      <div
+        className="layer-color-resize layer-color-resize-h"
+        onPointerDown={startResize('horizontal')}
+        title="Arrastra para redimensionar el ancho del panel · Doble click para resetear"
+        onDoubleClick={resetSize}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Redimensionar ancho del panel"
+      >
+        <LuGripVertical size={10} />
+      </div>
+      <div
+        className="layer-color-resize layer-color-resize-v"
+        onPointerDown={startResize('vertical')}
+        title="Arrastra para redimensionar el alto del módulo · Doble click para resetear"
+        onDoubleClick={resetSize}
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Redimensionar alto del módulo"
+      >
+        <LuGripHorizontal size={10} />
+      </div>
       <div className="layer-color-header">
         <h3 className="layer-color-title">Colores</h3>
-        
 
-    
+
         <div className="header-controls">
-          
+          <button
+            type="button"
+            onClick={() => setShowPaletteManager((v) => !v)}
+            title="Abrir galería: explorar paletas predefinidas, custom, buscar y aplicar"
+            style={{
+              background: showPaletteManager ? '#7c4dff' : 'transparent',
+              color: showPaletteManager ? '#fff' : '#bbb',
+              border: '1px solid #3a3a45',
+              borderRadius: 6,
+              padding: '4px 10px',
+              cursor: 'pointer',
+              fontSize: 11,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              fontWeight: 600,
+            }}
+          >
+            <LuPalette size={12} />
+            Galería
+          </button>
         </div>
       </div>
+
+      <PaletteManager
+        open={showPaletteManager}
+        onClose={() => setShowPaletteManager(false)}
+        activeColor={toolParameters?.foregroundColor ?? foregroundColor}
+        onColorPick={(rgba) => {
+          const withAlpha = { ...rgba, a: 255 };
+          setForegroundColor(withAlpha);
+          setHexForeground(
+            `#${withAlpha.r.toString(16).padStart(2, '0')}${withAlpha.g
+              .toString(16)
+              .padStart(2, '0')}${withAlpha.b.toString(16).padStart(2, '0')}`
+          );
+          setToolParameters?.((prev) => ({ ...prev, foregroundColor: withAlpha }));
+        }}
+        onPaletteApply={({ name, colors }) => {
+          // Reemplaza la paleta inline. Las paletas del modal son hex strings
+          // ("#rrggbb"); las paletas inline son objetos {r,g,b,a:1}. Convertir.
+          const rgbaColors = colors.map((hex) => {
+            const h = hex.replace('#', '');
+            return {
+              r: parseInt(h.substring(0, 2), 16),
+              g: parseInt(h.substring(2, 4), 16),
+              b: parseInt(h.substring(4, 6), 16),
+              a: 1,
+            };
+          });
+          setActualPalette(rgbaColors);
+          setSelectedPaletteName(name);
+          setIsIndexedMode(false);
+          setIsEditingPalette(false);
+        }}
+      />
 
       <div className="layer-color-content">
         {/* Mostrar colores normales o editor de gradiente según el modo */}
         {!isGradientMode || tool != 'fill' ? (
-          // Colores principales normales
+          // Colores principales: layout compacto en filas únicas (sin scroll).
+          // Container query (CSS) los pone lado a lado cuando el panel está
+          // suficientemente ancho. Util-colors siempre van como strip horizontal.
           <div className="primary-colors-section">
-            <div className="primary-colors-row">
+            <div className="primary-colors-stack">
               {/* Color Primario (Foreground/Border) */}
-              <div className="layer-color-item">
-                <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:'10px'}}>
-                <label className="layer-color-label">{primaryColorData.label}</label> 
-                <PiMouseLeftClickFill/>
-                </div>
-                
-                <div className="layer-color-input-wrapper">
+              <div className="layer-color-item layer-color-item--compact">
+                <PiMouseLeftClickFill className="layer-color-mouse" title="Click izquierdo" />
+                <span className="layer-color-tag">{primaryColorData.label}</span>
                 <div className="layer-color-overlay">
-                  <div 
+                  <div
                     className={`layer-color-button ${showPrimaryPicker ? 'layer-active' : ''}`}
                     style={{ backgroundColor: `rgba(${primaryColorData.color.r}, ${primaryColorData.color.g}, ${primaryColorData.color.b}, ${primaryColorData.color.a})` }}
                     onClick={() => {
                       closeAllPickers();
                       setShowPrimaryPicker(!showPrimaryPicker);
                     }}
+                    role="button"
+                    aria-label={`Color ${primaryColorData.label} ${primaryColorData.hex}`}
                   >
                     {showPrimaryPicker && <div className="layer-color-arrow"></div>}
                   </div>
-                  </div>
-                  <span className="layer-color-hex">{primaryColorData.hex}</span>
                 </div>
-              </div>
-
-              <div className="layer-util-colors">
-                    {utilColors.map((color,index)=>(
-                     
-                    <div className="util-color-overlay">
-                        <button
-                      key={`util-color-${index}` }
-                      className="util-color-button"
-                      
-                      onMouseDown={(e)=>handlePaletteColorClick(color, index, e)}
-                      style={{
-                        background:`rgba(${color.r},${color.g},${color.b},${color.a})`
-                      }}
-                      >
-                      </button>
-                    </div>
-                    
-                      
-                   
-                
-                    ))}
+                <span className="layer-color-hex">{primaryColorData.hex}</span>
               </div>
 
               {/* Color Secundario (Background/Fill) */}
-              <div className="layer-color-item">
-              <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:'10px'}}>
-                <label className="layer-color-label">{secondaryColorData.label}</label> 
-                <PiMouseRightClickFill/>
-                </div>
-                <div className="layer-color-input-wrapper">
-                  <div className="layer-color-overlay">
-                  <div 
+              <div className="layer-color-item layer-color-item--compact">
+                <PiMouseRightClickFill className="layer-color-mouse" title="Click derecho" />
+                <span className="layer-color-tag">{secondaryColorData.label}</span>
+                <div className="layer-color-overlay">
+                  <div
                     className={`layer-color-button ${showSecondaryPicker ? 'layer-active' : ''}`}
                     style={{ backgroundColor: `rgba(${secondaryColorData.color.r}, ${secondaryColorData.color.g}, ${secondaryColorData.color.b}, ${secondaryColorData.color.a})` }}
                     onClick={() => {
                       closeAllPickers();
                       setShowSecondaryPicker(!showSecondaryPicker);
                     }}
+                    role="button"
+                    aria-label={`Color ${secondaryColorData.label} ${secondaryColorData.hex}`}
                   >
                     {showSecondaryPicker && <div className="layer-color-arrow"></div>}
                   </div>
-                    </div>
-                 
-                  <span className="layer-color-hex">{secondaryColorData.hex}</span>
                 </div>
+                <span className="layer-color-hex">{secondaryColorData.hex}</span>
+              </div>
+
+              {/* Util colors / atajos: strip horizontal con wrap. */}
+              <div className="layer-util-colors layer-util-colors--strip">
+                <span className="layer-util-label">Atajos</span>
+                {utilColors.map((color, index) => (
+                  <div key={`util-color-${index}`} className="util-color-overlay">
+                    <button
+                      className="util-color-button"
+                      onMouseDown={(e) => handlePaletteColorClick(color, index, e)}
+                      style={{ background: `rgba(${color.r},${color.g},${color.b},${color.a})` }}
+                      aria-label={`Atajo de color ${index + 1}`}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -1210,7 +1448,6 @@ const addToRecentColors = (color) => {
                       e.stopPropagation(); // 🔥 ESTO EVITA LA PROPAGACIÓN
                       e.preventDefault();   // 🔥 OPCIONAL: evita comportamiento por defecto
                       removeGradientStop(stop.id);
-                      console.log("Stop eliminado:", stop.id);
                     }}
                     onMouseDown={(e) => {
                       e.stopPropagation(); // 🔥 También detener en mouseDown
@@ -1287,6 +1524,23 @@ const addToRecentColors = (color) => {
                 {isEditingPalette ? <LuCheck size={14} /> : <LuPencil size={14} />}
               </button>
             )}
+
+            {/* Densidad de la paleta inline. Permite mostrar muchos colores
+                comprimiendo el tamaño del swatch o agrandarlos para click cómodo. */}
+            <div className="palette-density-control" title={`Densidad ${paletteDensity}/5 · ${swatchSizePx}px`}>
+              <LuRuler size={12} className="palette-density-icon" />
+              <input
+                type="range"
+                min="1"
+                max="5"
+                step="1"
+                value={paletteDensity}
+                onChange={(e) => setPaletteDensity(parseInt(e.target.value, 10))}
+                className="palette-density-slider"
+                aria-label="Densidad de la paleta"
+              />
+              <span className="palette-density-value">{swatchSizePx}px</span>
+            </div>
           </div>
         </div>
 
@@ -1326,7 +1580,10 @@ const addToRecentColors = (color) => {
           </>
         )}
 
-        <div className="color-palette-grid">
+        <div
+          className={`color-palette-grid density-${paletteDensity}`}
+          style={{ '--pc-swatch-size': swatchSizePx + 'px' }}
+        >
           {currentPalette.map((color, index) => (
             <div
               key={isIndexedMode ? `indexed-${index}` : `normal-${index}`}
@@ -1422,7 +1679,7 @@ const addToRecentColors = (color) => {
       </div>
 
       {/* Color Pickers */}
-      {showPrimaryPicker && !isGradientMode && (
+      {showPrimaryPicker && !isGradientMode && portalPicker(
          <ToolColorPicker
           color={primaryColorData.color}
           onChange={primaryColorData.setColor}
@@ -1432,7 +1689,7 @@ const addToRecentColors = (color) => {
         />
       )}
 
-      {showSecondaryPicker && !isGradientMode && (
+      {showSecondaryPicker && !isGradientMode && portalPicker(
         <ToolColorPicker
           color={secondaryColorData.color}
           onChange={secondaryColorData.setColor}
@@ -1442,7 +1699,7 @@ const addToRecentColors = (color) => {
         />
       )}
 
-      {showPalettePicker && editingColorIndex !== null && !isIndexedMode && !isGradientMode && (
+      {showPalettePicker && editingColorIndex !== null && !isIndexedMode && !isGradientMode && portalPicker(
         <ToolColorPicker
           color={actualPalette[editingColorIndex]}
           onChange={updatePaletteColor}
@@ -1452,7 +1709,7 @@ const addToRecentColors = (color) => {
       )}
 
       {/* Color picker para gradiente */}
-      {showGradientPicker && selectedStopId !== null && isGradientMode && (
+      {showGradientPicker && selectedStopId !== null && isGradientMode && portalPicker(
         <ToolColorPicker
           color={getSelectedStopColor()}
           onChange={(newColor) => updateGradientStop(selectedStopId, { color: newColor })}
@@ -1462,7 +1719,7 @@ const addToRecentColors = (color) => {
         />
       )}
 
-      {showIndexedColorPicker && editingIndexedColor && !isGradientMode && (
+      {showIndexedColorPicker && editingIndexedColor && !isGradientMode && portalPicker(
         <div className="indexed-color-picker-container">
           <div className="indexed-color-picker-header">
             <h4>Editar Color Indexado</h4>

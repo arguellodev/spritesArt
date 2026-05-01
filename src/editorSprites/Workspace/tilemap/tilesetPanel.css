@@ -1,0 +1,107 @@
+.tileset-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: #1e1e24;
+  color: #e7e7ea;
+  font-size: 12px;
+}
+
+.tileset-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #2c2c34;
+}
+
+.tileset-panel__title {
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #bbb;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+.tileset-panel__dims {
+  font-size: 10px;
+  color: #8a8a95;
+  font-family: monospace;
+}
+
+.tileset-panel__atlas-wrap {
+  position: relative;
+  background: #141418;
+  border: 1px solid #2c2c34;
+  border-radius: 4px;
+  padding: 4px;
+  overflow: auto;
+  max-height: 240px;
+}
+
+.tileset-panel__atlas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  cursor: crosshair;
+  display: block;
+}
+
+.tileset-panel__sel {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  pointer-events: none;
+  box-sizing: border-box;
+  border: 2px solid #ffd84a;
+  box-shadow: 0 0 0 1px #000 inset;
+}
+
+.tileset-panel__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.tileset-panel__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  background: #2a2a33;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 10px;
+  color: #ccc;
+}
+
+.tileset-panel__item:hover {
+  background: #33333e;
+}
+
+.tileset-panel__item.is-active {
+  border-color: #ffd84a;
+  background: #3a3020;
+  color: #ffd84a;
+}
+
+.tileset-panel__remove {
+  background: transparent;
+  border: none;
+  color: #c85050;
+  cursor: pointer;
+  padding: 0 6px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.tileset-panel__remove:hover {
+  color: #ff7070;
+}

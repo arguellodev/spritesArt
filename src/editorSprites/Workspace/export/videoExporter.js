@@ -1,4 +1,5 @@
 // VideoExporter.js - Sistema para convertir frames a video
+import { isValidBlendMode, toCompositeOperation } from '../blendModes.js';
 
 class VideoExporter {
   constructor() {
@@ -191,10 +192,13 @@ class VideoExporter {
       this.ctx.globalAlpha *= layer.opacity;
     }
     
-    if (layer.blendMode) {
-      this.ctx.globalCompositeOperation = layer.blendMode;
-    }
-    
+    const overrideId = layer.blendModeOverride;
+    const baseId = layer.blendMode;
+    const effectiveId = (overrideId != null && isValidBlendMode(overrideId))
+      ? overrideId
+      : (isValidBlendMode(baseId) ? baseId : 'normal');
+    this.ctx.globalCompositeOperation = toCompositeOperation(effectiveId);
+
     // Aplicar transformaciones de posición y escala
     if (layer.transform) {
       const { x = 0, y = 0, scaleX = 1, scaleY = 1, rotation = 0 } = layer.transform;
@@ -215,7 +219,10 @@ class VideoExporter {
     } else if (layer.type === 'text' && layer.textData) {
       this.renderTextLayer(layer, scaleFactor);
     }
-    
+
+    // Resetear composite operation para no contaminar la siguiente capa
+    this.ctx.globalCompositeOperation = 'source-over';
+
     this.ctx.restore();
   }
 

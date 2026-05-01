@@ -3,7 +3,7 @@ import { LuChevronUp, LuChevronDown } from "react-icons/lu";
 import ToolColorPicker from "./toolColorPicker";
 import BrushSelect from "./brushSelect";
 
-const CurveTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setToolConfigs }) => {
+const CurveTool = ({ setToolParameters, toolParameters, toolConfigs, setToolConfigs }) => {
   // Estados para las diferentes configuraciones
   const [borderWidth, setBorderWidth] = useState(1);
   const [opacity, setOpacity] = useState(100);
@@ -355,7 +355,7 @@ const CurveTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setTo
   useEffect(() => {
     const curveConfig = toolConfigs.curve;
     
-    if (curveConfig !== null) {
+    if (curveConfig) {
       // Cargar configuración guardada
       setBorderWidth(curveConfig.borderWidth || 1);
       setOpacity(curveConfig.opacity || 100);
@@ -500,30 +500,35 @@ const CurveTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setTo
           {/* Configuración de grosor (solo para brocha estándar) */}
           {!currentBrush.customBrush && (
             <div className="config-item">
-              <label className="tool-label">Border Width</label>
+              <label className="tool-label" htmlFor="curveTool-borderWidth">Border Width</label>
               <div className="input-container">
-                <input 
+                <input
+                  id="curveTool-borderWidth"
                   type="number"
                   min="1"
                   max="20"
                   value={borderWidth}
                   onChange={handleBorderWidthInput}
                   onBlur={handleBorderWidthBlur}
-                  className="number-input" 
+                  className="number-input"
                 />
                 <span className="tool-value">px</span>
                 <div className="increment-buttons-container">
-                  <button 
+                  <button
+                    type="button"
                     className="increment-btn"
                     onClick={() => handleBorderWidthChange(1)}
                     disabled={(typeof borderWidth === 'number' ? borderWidth : 3) >= 20}
+                    aria-label="Aumentar border width"
                   >
                     <LuChevronUp />
                   </button>
-                  <button 
+                  <button
+                    type="button"
                     className="increment-btn"
                     onClick={() => handleBorderWidthChange(-1)}
                     disabled={(typeof borderWidth === 'number' ? borderWidth : 3) <= 1}
+                    aria-label="Reducir border width"
                   >
                     <LuChevronDown />
                   </button>
@@ -535,14 +540,15 @@ const CurveTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setTo
           {/* Configuración de Sharpen (solo para brocha estándar) */}
           {!currentBrush.customBrush && (
             <div className="config-item">
-              <label className="tool-label">Sharpen</label>
+              <label className="tool-label" htmlFor="curveTool-sharpen">Sharpen</label>
               <div className="input-container">
-                <input 
-                  type="number" 
-                  min="0" 
-                  max="1" 
+                <input
+                  id="curveTool-sharpen"
+                  type="number"
+                  min="0"
+                  max="1"
                   step="0.1"
-                  value={sharpen} 
+                  value={sharpen}
                   onChange={(e) => {
                     const value = e.target.value;
                     if (value === '') {
@@ -568,7 +574,7 @@ const CurveTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setTo
                   className="number-input" 
                 />
                 <div className="increment-buttons-container">
-                  <button 
+                  <button
                     type="button"
                     onClick={() => {
                       const currentSharpen = typeof sharpen === 'number' ? sharpen : 1;
@@ -576,10 +582,11 @@ const CurveTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setTo
                     }}
                     className="increment-btn"
                     disabled={sharpen >= 1}
+                    aria-label="Aumentar sharpen"
                   >
                     <LuChevronUp />
                   </button>
-                  <button 
+                  <button
                     type="button"
                     onClick={() => {
                       const currentSharpen = typeof sharpen === 'number' ? sharpen : 1;
@@ -587,6 +594,7 @@ const CurveTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setTo
                     }}
                     className="increment-btn"
                     disabled={sharpen <= 0}
+                    aria-label="Reducir sharpen"
                   >
                     <LuChevronDown />
                   </button>
@@ -597,9 +605,10 @@ const CurveTool = ({ setToolParameters, tool, toolParameters, toolConfigs, setTo
 
           {/* Configuración de Paint Mode */}
           <div className="config-item">
-            <label className="tool-label">Paint Mode</label>
+            <label className="tool-label" htmlFor="curveTool-paintMode">Paint Mode</label>
             <div className="input-container">
               <select
+                id="curveTool-paintMode"
                 value={paintMode}
                 onChange={(e) => setPaintMode(e.target.value)}
                 className="select-input"

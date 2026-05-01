@@ -1,7 +1,20 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { nanoid } from 'nanoid';
 import React from 'react';
+import { produce, setAutoFreeze } from 'immer';
+
+// Deshabilitar autoFreeze global de Immer. Por default freezea el resultado,
+// lo cual es correcto para consumidores puros pero rompe código existente
+// que muta arrays derivados (`.sort()`, `.push()`, etc. sobre slices de
+// framesResume como `frameSequence`, `keyframes`, `framesByLayer`). Migrar
+// todos los consumidores a clones antes de mutar sería invasivo; deshabilitar
+// el freeze aquí preserva compatibilidad. Se pierde la salvaguarda de dev
+// ("mutaste sin produce"), pero ganamos no romper código viejo.
+setAutoFreeze(false);
 import { useOptimizedFloodFill } from './optimizedFloodFill';
+import { isValidBlendMode, DEFAULT_BLEND_MODE } from '../blendModes';
+import { drawLayerBlended } from '../pixelBlender';
+import { makeDefault3DLayerMetadata } from '../threeD/schema';
 /**
  * Custom hook for tracking pointer/mouse interactions
  */
@@ -16,6 +29,7 @@ function throttle(func, limit) {
     }
   };
 }
+
 
 // ✅ NUEVA: Función debounce personalizada  
 function debounce(func, delay) {
@@ -46,54 +60,40 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [relativeToTarget, setRelativeToTarget] = useState({ x: 0, y: 0 });
   
-  // Refs para el throttling
-  const lastUpdateTime = useRef(0);
-  const positionUpdateTimer = useRef(null);
-  const POSITION_UPDATE_INTERVAL = 8; // ~60fps para preview
-  
   // Refs estables para las dependencias
   const ignoreRefsRef = useRef(ignoreRefs);
   const optionsRef = useRef(options);
-  
+
+  // RAF id para el throttling de posición — solo 1 actualización por frame del monitor
+  const positionRafRef = useRef(null);
+
   // Función para obtener posición actual sin causar re-render
   const getCurrentPosition = useCallback(() => {
     const currentPosition = positionRef.current || { x: 0, y: 0 };
     const currentRelativeToTarget = relativeToTargetRef.current || { x: 0, y: 0 };
-    
+
     return {
-      position: { 
-        x: typeof currentPosition.x === 'number' ? currentPosition.x : 0, 
-        y: typeof currentPosition.y === 'number' ? currentPosition.y : 0 
+      position: {
+        x: typeof currentPosition.x === 'number' ? currentPosition.x : 0,
+        y: typeof currentPosition.y === 'number' ? currentPosition.y : 0
       },
-      relativeToTarget: { 
-        x: typeof currentRelativeToTarget.x === 'number' ? currentRelativeToTarget.x : 0, 
-        y: typeof currentRelativeToTarget.y === 'number' ? currentRelativeToTarget.y : 0 
+      relativeToTarget: {
+        x: typeof currentRelativeToTarget.x === 'number' ? currentRelativeToTarget.x : 0,
+        y: typeof currentRelativeToTarget.y === 'number' ? currentRelativeToTarget.y : 0
       }
     };
   }, []);
-  
-  // Función para actualizar estados de posición con throttling
+
+  // Actualización de posición sincronizada con el refresh rate del monitor.
+  // RAF garantiza exactamente 1 actualización por frame, sin apilamiento de timers.
   const schedulePositionUpdate = useCallback(() => {
-    const now = Date.now();
-    
-    // Solo actualizar si ha pasado suficiente tiempo
-    if (now - lastUpdateTime.current >= POSITION_UPDATE_INTERVAL) {
-      const current = getCurrentPosition();
-      setPosition(current.position);
-      setRelativeToTarget(current.relativeToTarget);
-      lastUpdateTime.current = now;
-    } else {
-      // Programar actualización para más tarde
-      if (positionUpdateTimer.current) {
-        clearTimeout(positionUpdateTimer.current);
-      }
-      
-      positionUpdateTimer.current = setTimeout(() => {
+    if (positionRafRef.current === null) {
+      positionRafRef.current = requestAnimationFrame(() => {
         const current = getCurrentPosition();
         setPosition(current.position);
         setRelativeToTarget(current.relativeToTarget);
-        lastUpdateTime.current = Date.now();
-      }, POSITION_UPDATE_INTERVAL - (now - lastUpdateTime.current));
+        positionRafRef.current = null;
+      });
     }
   }, [getCurrentPosition]);
   
@@ -114,11 +114,15 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
     pathRef.current = path;
   }, [path]);
 
-  // Limpiar timer al desmontar
+  // Limpiar RAF pendiente al desmontar.
+  // (Antes usaba un `setTimeout` en `positionUpdateTimer` — ese ref ya no existe
+  // tras migrar a `positionRafRef` + requestAnimationFrame; esto es el cleanup
+  // actualizado para la implementación RAF.)
   useEffect(() => {
     return () => {
-      if (positionUpdateTimer.current) {
-        clearTimeout(positionUpdateTimer.current);
+      if (positionRafRef.current !== null) {
+        cancelAnimationFrame(positionRafRef.current);
+        positionRafRef.current = null;
       }
     };
   }, []);
@@ -404,6 +408,9 @@ const paintBatchTimer = useRef(null);
 
 // Estados para manejo de frames
 const [frames, setFrames] = useState({});
+// Ref siempre actualizada — permite leer frames sin stale closure en undo/redo
+const framesRef = useRef({});
+useEffect(() => { framesRef.current = frames; }, [frames]);
 const [framesResume, setFramesResume] = useState({
   metadata: {
     frameCount: 1,
@@ -419,7 +426,16 @@ const [framesResume, setFramesResume] = useState({
     frameSequence: [1],
     totalFrames: 1,
     keyframes: {}
-  }
+  },
+  // Bolsa extensible para metadata específica de tipos de capa o features
+  // futuras. El parser viejo (v2.0.0) ignora claves que no conoce → forward
+  // compatible. Los proyectos sin esta clave la reciben vacía al cargar.
+  extensions: {
+    // Capas 3D: para cada layer.id con type:'3d' guarda asset, base settings
+    // (cámara, brillo, outlines, animación...) y frameOverrides{frameNumber}.
+    // Ver docs/threeD-layer-schema.md (a crear en Fase 5).
+    threeDLayers: {},
+  },
 });
 const [currentFrame, setCurrentFrame] = useState(1);
 const [frameCount, setFrameCount] = useState(1);
@@ -445,16 +461,24 @@ const [selectedGroup, setSelectedGroup] = useState(null);
 
   ///=========Funciones de utilidad para la gestion de grupos =================
 
+  // Cache para la jerarquía: se recalcula solo cuando cambia la referencia de `layers`.
+  // Evita el O(n²) filter-dentro-de-map en cada render.
+  const hierarchicalLayersCache = useRef({ layersRef: null, result: [] });
+
   // 4. NUEVA FUNCIÓN para obtener capas de forma jerárquica
 const getHierarchicalLayers = useCallback(() => {
+  if (hierarchicalLayersCache.current.layersRef === layers) {
+    return hierarchicalLayersCache.current.result;
+  }
   const mainLayers = layers.filter(layer => !layer.isGroupLayer);
-  
-  return mainLayers.map(mainLayer => ({
+  const result = mainLayers.map(mainLayer => ({
     ...mainLayer,
-    groupLayers: layers.filter(layer => 
+    groupLayers: layers.filter(layer =>
       layer.isGroupLayer && layer.parentLayerId === mainLayer.id
     ).sort((a, b) => a.zIndex - b.zIndex)
   }));
+  hierarchicalLayersCache.current = { layersRef: layers, result };
+  return result;
 }, [layers]);
 
 // 7. NUEVA FUNCIÓN para obtener solo las capas principales (para UI)
@@ -469,33 +493,36 @@ const getGroupLayersForParent = useCallback((parentLayerId) => {
   ).sort((a, b) => a.zIndex - b.zIndex);
 }, [layers]);
 
- // ✅ NUEVO: Cache para canvas bajo demanda
+ // Cache LRU para canvas bajo demanda: elimina el más antiguo (primer entry del Map)
+ // cuando supera el límite, en lugar de limpiar todo.
  const canvasCache = useRef(new Map());
- const maxCacheSize = useRef(50); // Límite de canvas en cache
+ const MAX_CANVAS_CACHE = 100;
 
  // ✅ NUEVO: Función para obtener o crear canvas solo cuando se necesita
  const getOrCreateCanvas = useCallback((layerId, frameNumber, forceCreate = false) => {
    const cacheKey = `${layerId}_${frameNumber}`;
-   
-   // Si existe en cache, devolverlo
-   if (canvasCache.current.has(cacheKey) && !forceCreate) {
-     return canvasCache.current.get(cacheKey);
+   const cache = canvasCache.current;
+
+   if (!forceCreate && cache.has(cacheKey)) {
+     // Mover al final para marcar como recientemente usado (LRU)
+     const existing = cache.get(cacheKey);
+     cache.delete(cacheKey);
+     cache.set(cacheKey, existing);
+     return existing;
    }
-   
-   // Crear nuevo canvas solo si es necesario
+
    const canvas = document.createElement('canvas');
    canvas.width = width;
    canvas.height = height;
    const ctx = canvas.getContext('2d', { willReadFrequently: true });
    ctx.imageSmoothingEnabled = false;
-   
-   // Limpiar cache si está lleno
-   if (canvasCache.current.size >= maxCacheSize.current) {
-     const firstKey = canvasCache.current.keys().next().value;
-     canvasCache.current.delete(firstKey);
+
+   // LRU eviction: eliminar el entry más antiguo (primero del Map)
+   if (cache.size >= MAX_CANVAS_CACHE) {
+     cache.delete(cache.keys().next().value);
    }
-   
-   canvasCache.current.set(cacheKey, canvas);
+
+   cache.set(cacheKey, canvas);
    return canvas;
  }, [width, height]);
 
@@ -687,67 +714,69 @@ const getOnionSkinFrameConfig = useCallback((frameOffset) => {
 
 
 
+// === Modos de fusión de capa ===
+//
+// Granularidad: cada capa tiene un blendMode global (denormalizado por frame
+// para seguir el patrón de visible/opacity). Un override opcional por frame
+// vive en `frame.layers[i].blendModeOverride` y, si !== null, gana sobre el
+// blendMode de capa.
+//
+// IMPORTANTE: declarado AQUI (no junto a setLayerBlendMode/setFrameBlendModeOverride
+// abajo) porque los useCallback de renderCurrentFrameOnly y
+// renderCurrentFrameWithAdjacent listan resolveLayerBlendMode en su deps array
+// — declararlo abajo causa TDZ ReferenceError al primer render.
+
+const resolveLayerBlendMode = useCallback((layerId, frameNumber) => {
+  const frame = frames[String(frameNumber)];
+  if (!frame) return DEFAULT_BLEND_MODE;
+  const layer = frame.layers.find(l => l.id === layerId);
+  if (!layer) return DEFAULT_BLEND_MODE;
+  const override = layer.blendModeOverride;
+  if (override != null && isValidBlendMode(override)) return override;
+  return isValidBlendMode(layer.blendMode) ? layer.blendMode : DEFAULT_BLEND_MODE;
+}, [frames]);
+
+
 // 4. FUNCIÓN DE RENDERIZADO SIMPLE POR FRAME (NUEVA)
 
 
 const renderCurrentFrameOnly = useCallback((ctx) => {
   const hierarchicalLayers = getHierarchicalLayers();
   const sortedMainLayers = hierarchicalLayers.sort((a, b) => a.zIndex - b.zIndex);
-  
+
+  // Cada layer va via drawLayerBlended: 'normal' fast-path nativo, otros modos
+  // pixel-by-pixel exacto (match Aseprite math). isFirstDrawn fuerza 'normal'
+  // en la primera capa visible (no hay nada debajo para blendear).
+  let isFirstDrawn = true;
+  const dstW = Math.round(viewportWidth * zoom);
+  const dstH = Math.round(viewportHeight * zoom);
+  const srcRect = { x: viewportOffset.x, y: viewportOffset.y, w: viewportWidth, h: viewportHeight };
+  const dstRect = { w: dstW, h: dstH };
+
   for (const mainLayer of sortedMainLayers) {
-    // CAMBIO: Usar la visibilidad del frame actual solamente
     const isVisible = mainLayer.visible[currentFrame] ?? true;
     if (!isVisible) continue;
-    
-    // Renderizar capa principal
+
     const mainCanvas = layerCanvasesRef.current[mainLayer.id];
     if (mainCanvas) {
       const layerOpacity = mainLayer.opacity ?? 1.0;
-      
-      if (layerOpacity !== 1.0) {
-        ctx.globalAlpha = layerOpacity;
-      }
-      
-      ctx.drawImage(
-        mainCanvas,
-        viewportOffset.x, viewportOffset.y,
-        viewportWidth, viewportHeight,
-        0, 0,
-        viewportWidth * zoom, viewportHeight * zoom
-      );
-      
-      if (layerOpacity !== 1.0) {
-        ctx.globalAlpha = 1.0;
-      }
+      const blendId = isFirstDrawn ? 'normal' : resolveLayerBlendMode(mainLayer.id, currentFrame);
+      drawLayerBlended(ctx, mainCanvas, blendId, layerOpacity, srcRect, dstRect);
+      isFirstDrawn = false;
     }
-    
-    // Renderizar capas de grupo
+
     for (const groupLayer of mainLayer.groupLayers) {
       if (!groupLayer.visible) continue;
-      
       const groupCanvas = layerCanvasesRef.current[groupLayer.id];
       if (groupCanvas) {
         const groupOpacity = groupLayer.opacity ?? 1.0;
-        
-        if (groupOpacity !== 1.0) {
-          ctx.globalAlpha = groupOpacity;
-        }
-        
-        ctx.drawImage(
-          groupCanvas,
-          viewportOffset.x, viewportOffset.y,
-          viewportWidth, viewportHeight,
-          0, 0,
-          viewportWidth * zoom, viewportHeight * zoom
-        );
-        
-        if (groupOpacity !== 1.0) {
-          ctx.globalAlpha = 1.0;
-        }
+        const groupBlendId = isFirstDrawn ? 'normal' : resolveLayerBlendMode(groupLayer.id, currentFrame);
+        drawLayerBlended(ctx, groupCanvas, groupBlendId, groupOpacity, srcRect, dstRect);
+        isFirstDrawn = false;
       }
     }
   }
-}, [getHierarchicalLayers, currentFrame, viewportOffset, viewportWidth, viewportHeight, zoom]);
+}, [getHierarchicalLayers, currentFrame, viewportOffset, viewportWidth, viewportHeight, zoom, resolveLayerBlendMode]);
 
 
 //funcion pseudo onion skin:
@@ -816,53 +845,68 @@ const [onionFramesConfig, setOnionFramesConfig] = useState({
 // ============ SISTEMA DE CANVAS PRE-RENDERIZADO CON MATICES ============
 const tintedCanvasCache = useRef(new Map()); // Cache para canvas con matices
 
-// Función para aplicar matiz a un canvas (manipulación directa de píxeles)
-const applyTintToCanvas = useCallback((sourceCanvas, config, frameNumber, layerId) => {
+// Versión de contenido por capa+frame: se incrementa al pintar.
+// Permite invalidar el caché de onion skin cuando cambia el contenido real.
+const paintVersionRef = useRef({});
+
+// Límite del cache de canvas teñidos. Con keys por viewport, puede crecer
+// durante un paneo; mantenemos LRU-ish por orden de inserción del Map.
+const TINTED_CACHE_MAX = 64;
+
+// Aplica matiz a la REGIÓN DEL VIEWPORT de un canvas (no al canvas completo).
+// - Crea un canvas del tamaño del viewport, no del canvas fuente.
+// - El recoloreado usa compositing GPU (`source-in` + fillRect) en lugar de un
+//   loop JS sobre w*h píxeles con getImageData/putImageData.
+const applyTintToCanvas = useCallback((sourceCanvas, config, frameNumber, layerId, vx, vy, vw, vh) => {
   const { hue, saturation, brightness, opacity } = config;
-  
-  const cacheKey = `frame_${frameNumber}_layer_${layerId}_${hue}_${saturation}_${brightness}_${opacity}`;
-  
-  if (tintedCanvasCache.current.has(cacheKey)) {
-    return tintedCanvasCache.current.get(cacheKey);
+
+  // Clamp mínimo para no crear canvas 0x0 cuando el viewport queda fuera
+  const regionW = Math.max(1, Math.round(vw));
+  const regionH = Math.max(1, Math.round(vh));
+  const regionX = Math.round(vx);
+  const regionY = Math.round(vy);
+
+  const contentVersion = paintVersionRef.current[`${layerId}_${frameNumber}`] ?? 0;
+  const cacheKey = `f${frameNumber}_l${layerId}_${hue}_${saturation}_${brightness}_${opacity}_v${contentVersion}_r${regionX},${regionY},${regionW},${regionH}`;
+
+  const cached = tintedCanvasCache.current.get(cacheKey);
+  if (cached) {
+    // refresh LRU: reinsertar lo mueve al final
+    tintedCanvasCache.current.delete(cacheKey);
+    tintedCanvasCache.current.set(cacheKey, cached);
+    return cached;
   }
-  
+
   const tintedCanvas = document.createElement('canvas');
-  tintedCanvas.width = sourceCanvas.width;
-  tintedCanvas.height = sourceCanvas.height;
+  tintedCanvas.width = regionW;
+  tintedCanvas.height = regionH;
   const tintedCtx = tintedCanvas.getContext('2d');
-  
-  tintedCtx.drawImage(sourceCanvas, 0, 0);
-  
+
+  // drawImage con source rect = viewport del source. Si la región se sale del
+  // source, el navegador recorta sola — igual que el comportamiento previo.
+  tintedCtx.drawImage(sourceCanvas, regionX, regionY, regionW, regionH, 0, 0, regionW, regionH);
+
   if (hue !== 0 || saturation !== 100 || brightness !== 100) {
-    const imageData = tintedCtx.getImageData(0, 0, tintedCanvas.width, tintedCanvas.height);
-    const data = imageData.data;
-    
     const targetHue = (hue % 360) / 360;
     const targetSaturation = saturation / 100;
-    const targetLightness = (brightness / 100) * 0.5; // Lightness fijo basado en brightness
-    
-    // Convertir el color objetivo a RGB una sola vez
+    const targetLightness = (brightness / 100) * 0.5;
     const [targetR, targetG, targetB] = hslToRgb(targetHue, targetSaturation, targetLightness);
-    
-    for (let i = 0; i < data.length; i += 4) {
-      const a = data[i + 3]; // Solo necesitamos el alpha original
-      
-      // Solo procesar píxeles no transparentes
-      if (a > 0) {
-        // IGNORAR COMPLETAMENTE EL COLOR ORIGINAL
-        // Aplicar el mismo color a todos los píxeles visibles
-        data[i] = targetR;     // Red = color objetivo
-        data[i + 1] = targetG; // Green = color objetivo  
-        data[i + 2] = targetB; // Blue = color objetivo
-        // data[i + 3] = a;    // Alpha = transparencia original (preservada)
-      }
-    }
-    
-    tintedCtx.putImageData(imageData, 0, 0);
+
+    // Reemplaza el color preservando el alpha: 'source-in' mantiene solo los
+    // píxeles donde ya había contenido y los pinta con el fill. Equivalente al
+    // loop original pero sin salir a CPU ni iterar en JS.
+    tintedCtx.globalCompositeOperation = 'source-in';
+    tintedCtx.fillStyle = `rgb(${targetR}, ${targetG}, ${targetB})`;
+    tintedCtx.fillRect(0, 0, regionW, regionH);
+    tintedCtx.globalCompositeOperation = 'source-over';
   }
-  
+
+  if (tintedCanvasCache.current.size >= TINTED_CACHE_MAX) {
+    const oldestKey = tintedCanvasCache.current.keys().next().value;
+    if (oldestKey !== undefined) tintedCanvasCache.current.delete(oldestKey);
+  }
   tintedCanvasCache.current.set(cacheKey, tintedCanvas);
-  
+
   return tintedCanvas;
 }, []);
 
@@ -960,41 +1004,47 @@ const renderCurrentFrameWithAdjacent = useCallback((ctx) => {
     // Renderizar capa principal del frame con matiz
     const mainCanvas = frameData.canvases[activeLayerId];
     if (mainCanvas) {
-      const tintedCanvas = applyTintToCanvas(mainCanvas, config, frameIndex, activeLayerId);
+      // El tinted canvas ya viene recortado al viewport, se dibuja 1:1 y se
+      // escala al zoom en destino.
+      const tintedCanvas = applyTintToCanvas(
+        mainCanvas, config, frameIndex, activeLayerId,
+        viewportOffset.x, viewportOffset.y, viewportWidth, viewportHeight
+      );
       const layerOpacity = (activeLayer.opacity ?? 1.0) * config.opacity;
-      
+
       ctx.globalAlpha = layerOpacity;
       ctx.drawImage(
         tintedCanvas,
-        viewportOffset.x, viewportOffset.y,
-        viewportWidth, viewportHeight,
+        0, 0, tintedCanvas.width, tintedCanvas.height,
         0, 0,
-        viewportWidth * zoom, viewportHeight * zoom
+        Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
       );
       ctx.globalAlpha = 1.0;
     }
-    
+
     // Renderizar capas de grupo relacionadas con matiz
-    const groupLayers = frameData.layers.filter(layer => 
+    const groupLayers = frameData.layers.filter(layer =>
       layer.isGroupLayer && layer.parentLayerId === activeLayerId
     );
-    
+
     for (const groupLayer of groupLayers) {
       const isGroupVisible = groupLayer.visible && (groupLayer.visible[frameIndex] !== false);
       if (!isGroupVisible) continue;
-      
+
       const groupCanvas = frameData.canvases[groupLayer.id];
       if (groupCanvas) {
-        const tintedGroupCanvas = applyTintToCanvas(groupCanvas, config, frameIndex, groupLayer.id);
+        const tintedGroupCanvas = applyTintToCanvas(
+          groupCanvas, config, frameIndex, groupLayer.id,
+          viewportOffset.x, viewportOffset.y, viewportWidth, viewportHeight
+        );
         const groupOpacity = (groupLayer.opacity ?? 1.0) * config.opacity;
-        
+
         ctx.globalAlpha = groupOpacity;
         ctx.drawImage(
           tintedGroupCanvas,
-          viewportOffset.x, viewportOffset.y,
-          viewportWidth, viewportHeight,
+          0, 0, tintedGroupCanvas.width, tintedGroupCanvas.height,
           0, 0,
-          viewportWidth * zoom, viewportHeight * zoom
+          Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
         );
         ctx.globalAlpha = 1.0;
       }
@@ -1012,60 +1062,37 @@ const renderCurrentFrameWithAdjacent = useCallback((ctx) => {
     renderFrameWithConfig(frameIndex, config);
   }
   
-  // ============ RENDERIZAR FRAME ACTUAL (mantener tu código existente) ============
+  // ============ RENDERIZAR FRAME ACTUAL ============
+  // Mismo flujo que renderCurrentFrameOnly pero comparte ctx con neighbors.
+  let isFirstDrawnActive = true;
+  const _activeDstW = Math.round(viewportWidth * zoom);
+  const _activeDstH = Math.round(viewportHeight * zoom);
+  const _activeSrcRect = { x: viewportOffset.x, y: viewportOffset.y, w: viewportWidth, h: viewportHeight };
+  const _activeDstRect = { w: _activeDstW, h: _activeDstH };
   for (const mainLayer of sortedMainLayers) {
     const isVisible = mainLayer.visible[currentFrame] ?? true;
     if (!isVisible) continue;
-    
-    // Renderizar capa principal
+
     const mainCanvas = layerCanvasesRef.current[mainLayer.id];
     if (mainCanvas) {
       const layerOpacity = mainLayer.opacity ?? 1.0;
-      
-      if (layerOpacity !== 1.0) {
-        ctx.globalAlpha = layerOpacity;
-      }
-      
-      ctx.drawImage(
-        mainCanvas,
-        viewportOffset.x, viewportOffset.y,
-        viewportWidth, viewportHeight,
-        0, 0,
-        viewportWidth * zoom, viewportHeight * zoom
-      );
-      
-      if (layerOpacity !== 1.0) {
-        ctx.globalAlpha = 1.0;
-      }
+      const blendId = isFirstDrawnActive ? 'normal' : resolveLayerBlendMode(mainLayer.id, currentFrame);
+      drawLayerBlended(ctx, mainCanvas, blendId, layerOpacity, _activeSrcRect, _activeDstRect);
+      isFirstDrawnActive = false;
     }
-    
-    // Renderizar capas de grupo
+
     for (const groupLayer of mainLayer.groupLayers) {
       if (!groupLayer.visible) continue;
-      
       const groupCanvas = layerCanvasesRef.current[groupLayer.id];
       if (groupCanvas) {
         const groupOpacity = groupLayer.opacity ?? 1.0;
-        
-        if (groupOpacity !== 1.0) {
-          ctx.globalAlpha = groupOpacity;
-        }
-        
-        ctx.drawImage(
-          groupCanvas,
-          viewportOffset.x, viewportOffset.y,
-          viewportWidth, viewportHeight,
-          0, 0,
-          viewportWidth * zoom, viewportHeight * zoom
-        );
-        
-        if (groupOpacity !== 1.0) {
-          ctx.globalAlpha = 1.0;
-        }
+        const groupBlendId = isFirstDrawnActive ? 'normal' : resolveLayerBlendMode(groupLayer.id, currentFrame);
+        drawLayerBlended(ctx, groupCanvas, groupBlendId, groupOpacity, _activeSrcRect, _activeDstRect);
+        isFirstDrawnActive = false;
       }
     }
   }
-  
+
   // ============ RENDERIZAR FRAMES SIGUIENTES ============
   // Ordenar por offset descendente para que los más lejanos se rendericen primero
   const enabledNextFrames = onionFramesConfig.nextFrames
@@ -1080,14 +1107,15 @@ const renderCurrentFrameWithAdjacent = useCallback((ctx) => {
 }, [
   onionFramesConfig,
   applyTintToCanvas,
-  getHierarchicalLayers, 
-  currentFrame, 
-  viewportOffset, 
-  viewportWidth, 
-  viewportHeight, 
-  zoom, 
-  frames, 
-  activeLayerId
+  getHierarchicalLayers,
+  currentFrame,
+  viewportOffset,
+  viewportWidth,
+  viewportHeight,
+  zoom,
+  frames,
+  activeLayerId,
+  resolveLayerBlendMode
 ]);
 
 
@@ -1432,7 +1460,7 @@ const renderCachedIsolationMask = useCallback((ctx) => {
     viewportOffset.x, viewportOffset.y,     // Origen en la máscara
     viewportWidth, viewportHeight,          // Tamaño a tomar de la máscara
     0, 0,                                   // Destino en el canvas composite
-    viewportWidth * zoom, viewportHeight * zoom  // Tamaño escalado
+    Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)  // Tamaño escalado
   );
   
   // ✅ RESTAURAR el estado del contexto INMEDIATAMENTE
@@ -1456,7 +1484,7 @@ const compositeRender = useCallback(() => {
   ctx.save();
   
   // Limpiar canvas
-  ctx.clearRect(0, 0, viewportWidth * zoom, viewportHeight * zoom);
+  ctx.clearRect(0, 0, Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom));
   
   // ✅ ASEGURAR estado limpio para renderizado base
   ctx.globalCompositeOperation = 'source-over';
@@ -1484,7 +1512,7 @@ const compositeRender = useCallback(() => {
       viewportOffset.x, viewportOffset.y,
       viewportWidth, viewportHeight,
       0, 0,
-      viewportWidth * zoom, viewportHeight * zoom
+      Math.round(viewportWidth * zoom), Math.round(viewportHeight * zoom)
     );
     
     ctx.restore();
@@ -1581,919 +1609,483 @@ const getLighterInfo = useCallback(() => {
 }, [activeLighter, tempLighterCanvas, tempLighterLayerId, tempLighterFrameId]);
 
 
- // Render the composite canvas whenever layers or viewport changes
+ // Viewport changes: render directo en el mismo frame que el CSS para evitar desync
  useEffect(() => {
-  // Render directo sin timeouts
+  compositeRender();
+}, [viewportOffset, compositeRender]);
+
+ // Layer changes: rAF para no bloquear el hilo principal
+ useEffect(() => {
   requestAnimationFrame(compositeRender);
-}, [layers, viewportOffset, compositeRender]);
+}, [layers, compositeRender]);
 
 
 
 
 
 
-// ===== SISTEMA DE UNDO/REDO SERIALIZADO GLOBAL =====
+// ===== SISTEMA DE UNDO/REDO — STACK UNIFICADO (v2) =====
+//
+// Diseño:
+//  - historyRef: array de entradas, nunca causa re-renders. Max 200 entradas.
+//  - historyIndexRef: posición actual en el stack (apunta a la última entrada aplicada).
+//  - isRestoringRef: bloquea pushes durante undo/redo.
+//  - historyVersion: estado mínimo solo para que canUndo/canRedo cambien en UI.
+//
+// Tipos de entrada:
+//  - { type:'pixel_changes', layerId, frameId, timestamp, changes:{added,modified,removed} }
+//  - { type:'frame_state', timestamp, ...framesResume }
+//
+// Merge automático de pixel_changes:
+//  Pinceladas dentro de la misma capa, mismo frame y <300ms se fusionan en
+//  una sola entrada, así Ctrl+Z deshace la pincelada completa, no píxel a píxel.
 
-// Estados para el sistema de versiones (mantener existentes)
-const [history, setHistory] = useState([]);
-const [currentIndex, setCurrentIndex] = useState(-1);
+const historyRef = useRef([]);
+const historyIndexRef = useRef(-1);
 const isRestoringRef = useRef(false);
+const framesResumeDebounceRef = useRef(null);
 
-// Stack específico para cambios de píxeles
-const [pixelChangesStack, setPixelChangesStack] = useState([]);
-const [pixelChangesIndex, setPixelChangesIndex] = useState(0);
-const pendingPixelChanges = useRef([]);
+// Estado mínimo — solo para disparar re-render cuando canUndo/canRedo cambia.
+const [historyVersion, setHistoryVersion] = useState(0);
+const _bumpVersion = useCallback(() => setHistoryVersion(v => v + 1), []);
 
-// Referencias para controlar el guardado
-const previousFramesResumeRef = useRef(null);
-const isInitializedRef = useRef(false);
+// ---- Merge de dos entradas pixel_changes ----
+// Concatena los arrays en orden: undo/redo los recorre en sentido inverso/directo.
+// No deduplicamos aquí para mantener la lógica simple y sin errores.
+const _mergePixelEntries = (base, incoming) => {
+  base.changes.added.push(...incoming.changes.added);
+  base.changes.modified.push(...incoming.changes.modified);
+  base.changes.removed.push(...incoming.changes.removed);
+  base.timestamp = incoming.timestamp; // actualizar timestamp al último trazo
+};
 
-// ✅ FUNCIÓN SIMPLE: historyPush desde cero
-const historyPush = useCallback((data) => {
+// ---- Push principal ----
+const historyPush = useCallback((entry) => {
   if (isRestoringRef.current) return;
-  
+
+  const stack = historyRef.current;
+  const idx = historyIndexRef.current;
+
+  // Truncar el futuro si estamos en medio del stack
+  if (idx < stack.length - 1) {
+    stack.splice(idx + 1);
+  }
+
   let entryToSave;
-  
-  if (data && data.changes && data.layerId && data.frameId) {
-    // Es un cambio de píxeles - asegurar que tenga type
-    entryToSave = {
-      ...data,
-      type: 'pixel_changes'
-    };
-  } else if (data) {
-    // Es otro tipo de dato, preservar como está
-    entryToSave = data;
-  } else {
-    // Es un cambio de frames - crear snapshot de framesResume
-    if (!framesResume || !framesResume.frames || Object.keys(framesResume.frames).length === 0) {
+
+  if (entry && entry.type === 'pixel_changes') {
+    // Intentar fusionar con la entrada anterior si es elegible
+    const last = stack[stack.length - 1];
+    if (
+      last &&
+      last.type === 'pixel_changes' &&
+      last.layerId === entry.layerId &&
+      last.frameId === entry.frameId &&
+      entry.timestamp - last.timestamp < 300
+    ) {
+      _mergePixelEntries(last, entry);
+      // No mover el índice ni cambiar la versión aquí — la entrada ya existe
+      _bumpVersion();
       return;
     }
-    
-    entryToSave = {
-      ...JSON.parse(JSON.stringify(framesResume)),
+    entryToSave = entry;
+
+  } else if (entry) {
+    entryToSave = entry;
+
+  } else {
+    // Snapshot de framesResume para cambios estructurales
+    if (!framesResume?.frames || Object.keys(framesResume.frames).length === 0) return;
+
+    const snapshot = {
+      ...structuredClone(framesResume),
       timestamp: Date.now(),
-      type: 'frame_state'
+      type: 'frame_state',
     };
-  }
-  
-  setHistory(prev => {
-    const newHistory = [...prev];
-    
-    // Eliminar versiones futuras si estamos en medio del historial
-    if (currentIndex >= 0 && currentIndex < newHistory.length - 1) {
-      newHistory.splice(currentIndex + 1);
-    }
-    
-    // Verificar duplicados solo para frame_state
-    if (entryToSave.type === 'frame_state' && newHistory.length > 0) {
-      const lastEntry = newHistory[newHistory.length - 1];
-      if (lastEntry.type === 'frame_state') {
-        const currentStr = JSON.stringify(entryToSave);
-        const lastStr = JSON.stringify(lastEntry);
-        if (currentStr === lastStr) {
-          return prev; // No agregar duplicados
-        }
-      }
-    }
-    
-    newHistory.push(entryToSave);
-    
-    // Mantener solo los últimos 50 estados
-    if (newHistory.length > 50) {
-      newHistory.shift();
-    }
-    
-    return newHistory;
-  });
-  
-  setCurrentIndex(prev => prev + 1);
-}, [framesResume]);
 
-// ✅ USEEFFECT SIMPLE: Detectar cambios en framesResume
+    // Evitar duplicados consecutivos de frame_state
+    const last = stack[stack.length - 1];
+    if (last?.type === 'frame_state') {
+      const a = JSON.stringify({ frames: last.frames, layers: last.layers, metadata: last.metadata });
+      const b = JSON.stringify({ frames: snapshot.frames, layers: snapshot.layers, metadata: snapshot.metadata });
+      if (a === b) return;
+    }
+
+    entryToSave = snapshot;
+  }
+
+  stack.push(entryToSave);
+  historyIndexRef.current = stack.length - 1;
+
+  // Limitar a 200 entradas — eliminar las más antiguas
+  if (stack.length > 200) {
+    stack.shift();
+    historyIndexRef.current = stack.length - 1;
+  }
+
+  _bumpVersion();
+}, [framesResume, _bumpVersion]);
+
+// ---- Firma estructural de framesResume ----
+// Solo incluye campos que el usuario puede deshacer:
+// layers, frames, visibilidad, opacidad, duración, nombre, orden, blend modes.
+// EXCLUYE: layerHasContent, canvases, pixelGroups, computed
+// (esos cambian al pintar y NO deben generar entradas de historial).
+const lastStructuralSigRef = useRef(null);
+
+const _getStructuralSig = (fr) => {
+  if (!fr?.frames || !fr?.layers) return '';
+  try {
+    return JSON.stringify({
+      fk: Object.keys(fr.frames).sort(),
+      lk: Object.keys(fr.layers).sort(),
+      ln: Object.fromEntries(Object.entries(fr.layers).map(([k, l]) => [k, l.name])),
+      lz: Object.fromEntries(Object.entries(fr.layers).map(([k, l]) => [k, l.zIndex])),
+      lp: Object.fromEntries(Object.entries(fr.layers).map(([k, l]) => [k, l.parentLayerId ?? null])),
+      lb: Object.fromEntries(Object.entries(fr.layers).map(([k, l]) => [k, l.blendMode ?? 'normal'])),
+      fv: Object.fromEntries(Object.entries(fr.frames).map(([k, f]) => [k, f.layerVisibility])),
+      fo: Object.fromEntries(Object.entries(fr.frames).map(([k, f]) => [k, f.layerOpacity])),
+      fd: Object.fromEntries(Object.entries(fr.frames).map(([k, f]) => [k, f.duration])),
+      ft: Object.fromEntries(Object.entries(fr.frames).map(([k, f]) => [k, f.tags])),
+      fbo: Object.fromEntries(Object.entries(fr.frames).map(([k, f]) => [k, f.layerBlendModeOverride ?? {}])),
+      fc: fr.metadata?.frameCount,
+    });
+  } catch {
+    return '';
+  }
+};
+
+// ---- Detectar cambios ESTRUCTURALES en framesResume (debounced 80ms) ----
+// Se ignoran cambios de layerHasContent/canvases/pixelGroups/computed para
+// que los trazos de pintura no contaminen el stack con frame_states inútiles.
 useEffect(() => {
-  // 1. Evitar guardado durante restauración (undo/redo)
-  if (isRestoringRef.current) {
-    console.log('⏸️ Guardado pausado: restauración activa');
-    return;
-  }
-  
-  // 2. Verificar que framesResume tiene contenido
-  if (!framesResume || !framesResume.frames || Object.keys(framesResume.frames).length === 0) {
-    console.log('⏳ Esperando frames válidos...');
-    return;
-  }
-  
-  // 3. Guardar automáticamente
-  console.log('🔄 Cambio detectado en framesResume, guardando...');
-  historyPush();
-  
-}, [framesResume, historyPush]);
+  if (isRestoringRef.current) return;
+  if (!framesResume?.frames || Object.keys(framesResume.frames).length === 0) return;
 
-// ✅ NUEVO: Función para inicializar el historial
-const initializeHistory = useCallback(() => {
-  if (history.length === 0) {
-    const initialState = {
-      ...framesResume,
-      timestamp: Date.now(),
-      reason: 'initial'
-    };
-    
-    setHistory([initialState]);
-    setCurrentIndex(0);
-    console.log('📚 Historial inicializado');
-  }
-}, [framesResume, history.length]);
+  const sig = _getStructuralSig(framesResume);
+  if (sig === lastStructuralSigRef.current) return; // Solo metadata cambió — ignorar
 
-// ✅ NUEVO: useEffect para inicializar historial
-useEffect(() => {
-  if (Object.keys(framesResume.frames).length > 1) {
-    initializeHistory();
-  }
-}, [framesResume, initializeHistory]);
+  clearTimeout(framesResumeDebounceRef.current);
+  framesResumeDebounceRef.current = setTimeout(() => {
+    if (isRestoringRef.current) return;
+    const currentSig = _getStructuralSig(framesResume);
+    if (currentSig === lastStructuralSigRef.current) return;
+    lastStructuralSigRef.current = currentSig;
+    historyPush();
+  }, 80);
 
+  return () => clearTimeout(framesResumeDebounceRef.current);
+}, [framesResume]); // historyPush excluido intencionalmente
 
-
-// ✅ NUEVO: Función para guardar cambios de píxeles en el stack
+// ---- Guardar cambios de píxeles en el stack ----
 const savePixelChangesToStack = useCallback((changes, layerId, frameId) => {
   if (isRestoringRef.current) return;
-  
-  if (!changes || (changes.added.length === 0 && changes.modified.length === 0 && changes.removed.length === 0)) {
-    return;
-  }
+  if (!changes || (changes.added.length === 0 && changes.modified.length === 0 && changes.removed.length === 0)) return;
 
-  const changeEntry = {
+  historyPush({
     id: nanoid(),
     timestamp: Date.now(),
     layerId,
     frameId,
     changes,
-    type: 'pixel_changes'
-  };
-console.log("se agregaron los cambios.............................................", changes)
- historyPush(changeEntry);
-}, [pixelChangesIndex]);
+    type: 'pixel_changes',
+  });
+}, [historyPush]);
 
 // ✅ MODIFICAR: Función logPixelChanges para incluir guardado en stack
 
 
-// ✅ NUEVO: Función para aplicar cambios de píxeles al canvas
+// ---- Aplicar patch de píxeles al canvas (undo reverse=true, redo reverse=false) ----
+// Antes leía/escribía TODO el canvas con getImageData/putImageData(0,0,w,h), lo
+// que escalaba O(w*h) aunque el patch afectara 10 píxeles. Ahora computamos el
+// bbox de los puntos tocados y operamos solo en esa sub-región.
 const applyPixelChangesToCanvas = useCallback((changes, layerId, frameId, reverse = false) => {
-  const frame = frames[frameId];
-  if (!frame || !frame.canvases[layerId]) return false;
-  
+  const frame = framesRef.current[frameId];
+  if (!frame?.canvases[layerId]) return false;
+
   const canvas = frame.canvases[layerId];
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return false;
-  
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+  // Calcular bbox de todos los puntos del patch
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const updateBbox = (arr) => {
+    for (let i = 0; i < arr.length; i++) {
+      const p = arr[i];
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    }
+  };
+  updateBbox(changes.added);
+  updateBbox(changes.modified);
+  updateBbox(changes.removed);
+
+  if (minX === Infinity) return true; // patch vacío, nada que aplicar
+
+  const regionX = Math.max(0, minX);
+  const regionY = Math.max(0, minY);
+  const regionEndX = Math.min(canvas.width - 1, maxX);
+  const regionEndY = Math.min(canvas.height - 1, maxY);
+  const regionW = regionEndX - regionX + 1;
+  const regionH = regionEndY - regionY + 1;
+  if (regionW <= 0 || regionH <= 0) return true;
+
+  const imageData = ctx.getImageData(regionX, regionY, regionW, regionH);
   const data = imageData.data;
-  
+
+  const idxAt = (x, y) => ((y - regionY) * regionW + (x - regionX)) * 4;
+  const inRegion = (x, y) => x >= regionX && x <= regionEndX && y >= regionY && y <= regionEndY;
+
   if (reverse) {
-    // Aplicar cambios en reversa para undo
-    
-    // Restaurar píxeles eliminados
-    changes.removed.forEach(pixel => {
-      const index = (pixel.y * canvas.width + pixel.x) * 4;
-      data[index] = pixel.color.r;
-      data[index + 1] = pixel.color.g;
-      data[index + 2] = pixel.color.b;
-      data[index + 3] = pixel.color.a;
-    });
-    
-    // Restaurar píxeles modificados al estado anterior
-    changes.modified.forEach(pixel => {
-      const index = (pixel.y * canvas.width + pixel.x) * 4;
-      data[index] = pixel.oldColor.r;
-      data[index + 1] = pixel.oldColor.g;
-      data[index + 2] = pixel.oldColor.b;
-      data[index + 3] = pixel.oldColor.a;
-    });
-    
-    // Eliminar píxeles añadidos
-    changes.added.forEach(pixel => {
-      const index = (pixel.y * canvas.width + pixel.x) * 4;
-      data[index] = 0;
-      data[index + 1] = 0;
-      data[index + 2] = 0;
-      data[index + 3] = 0;
-    });
-    
+    // Iterar en orden inverso para deshacer correctamente múltiples sub-patches mergeados
+    for (let i = changes.removed.length - 1; i >= 0; i--) {
+      const p = changes.removed[i];
+      if (!inRegion(p.x, p.y)) continue;
+      const idx = idxAt(p.x, p.y);
+      data[idx] = p.color.r; data[idx+1] = p.color.g; data[idx+2] = p.color.b; data[idx+3] = p.color.a;
+    }
+    for (let i = changes.modified.length - 1; i >= 0; i--) {
+      const p = changes.modified[i];
+      if (!inRegion(p.x, p.y)) continue;
+      const idx = idxAt(p.x, p.y);
+      data[idx] = p.oldColor.r; data[idx+1] = p.oldColor.g; data[idx+2] = p.oldColor.b; data[idx+3] = p.oldColor.a;
+    }
+    for (let i = changes.added.length - 1; i >= 0; i--) {
+      const p = changes.added[i];
+      if (!inRegion(p.x, p.y)) continue;
+      const idx = idxAt(p.x, p.y);
+      data[idx] = 0; data[idx+1] = 0; data[idx+2] = 0; data[idx+3] = 0;
+    }
   } else {
-    // Aplicar cambios normales para redo
-    
-    // Aplicar píxeles añadidos
-    changes.added.forEach(pixel => {
-      const index = (pixel.y * canvas.width + pixel.x) * 4;
-      data[index] = pixel.color.r;
-      data[index + 1] = pixel.color.g;
-      data[index + 2] = pixel.color.b;
-      data[index + 3] = pixel.color.a;
+    changes.added.forEach(p => {
+      if (!inRegion(p.x, p.y)) return;
+      const idx = idxAt(p.x, p.y);
+      data[idx] = p.color.r; data[idx+1] = p.color.g; data[idx+2] = p.color.b; data[idx+3] = p.color.a;
     });
-    
-    // Aplicar píxeles modificados
-    changes.modified.forEach(pixel => {
-      const index = (pixel.y * canvas.width + pixel.x) * 4;
-      data[index] = pixel.newColor.r;
-      data[index + 1] = pixel.newColor.g;
-      data[index + 2] = pixel.newColor.b;
-      data[index + 3] = pixel.newColor.a;
+    changes.modified.forEach(p => {
+      if (!inRegion(p.x, p.y)) return;
+      const idx = idxAt(p.x, p.y);
+      data[idx] = p.newColor.r; data[idx+1] = p.newColor.g; data[idx+2] = p.newColor.b; data[idx+3] = p.newColor.a;
     });
-    
-    // Eliminar píxeles removidos
-    changes.removed.forEach(pixel => {
-      const index = (pixel.y * canvas.width + pixel.x) * 4;
-      data[index] = 0;
-      data[index + 1] = 0;
-      data[index + 2] = 0;
-      data[index + 3] = 0;
+    changes.removed.forEach(p => {
+      if (!inRegion(p.x, p.y)) return;
+      const idx = idxAt(p.x, p.y);
+      data[idx] = 0; data[idx+1] = 0; data[idx+2] = 0; data[idx+3] = 0;
     });
   }
-  
-  ctx.putImageData(imageData, 0, 0);
-  return true;
-}, [frames]);
 
-const syncFramesFromResume = useCallback((newFramesResume) => {
-  if (!newFramesResume || !newFramesResume.frames) return;
+  ctx.putImageData(imageData, regionX, regionY);
+  return true;
+}, []);
+
+// ---- Reconstruir frames desde un snapshot de framesResume, preservando canvases actuales ----
+const syncFramesFromResume = useCallback((snapshot) => {
+  if (!snapshot?.frames) return null;
+
+  const currentCanvases = {};
+  Object.keys(framesRef.current).forEach(k => {
+    currentCanvases[Number(k)] = { ...framesRef.current[k].canvases };
+  });
 
   const newFrames = {};
-  
-  // Convertir cada frame del resume al formato de frames
-  Object.keys(newFramesResume.frames).forEach(frameKey => {
+  Object.keys(snapshot.frames).forEach(frameKey => {
     const frameNumber = Number(frameKey);
-    const resumeFrame = newFramesResume.frames[frameKey];
-    
-    // Crear layers array desde la definición global y el frame específico
-    const frameLayers = Object.keys(newFramesResume.layers).map(layerId => {
-      const globalLayer = newFramesResume.layers[layerId];
+    const resumeFrame = snapshot.frames[frameKey];
+
+    const frameLayers = Object.keys(snapshot.layers).map(layerId => {
+      const gl = snapshot.layers[layerId];
       return {
         id: layerId,
-        name: globalLayer.name,
-        visible: {
-          ...{}, // base
-          [frameNumber]: resumeFrame.layerVisibility[layerId] ?? true
-        },
+        name: gl.name,
+        visible: { [frameNumber]: resumeFrame.layerVisibility[layerId] ?? true },
         opacity: resumeFrame.layerOpacity[layerId] ?? 1.0,
-        zIndex: globalLayer.zIndex,
-        isGroupLayer: globalLayer.type === 'group',
-        parentLayerId: globalLayer.parentLayerId || null
+        zIndex: gl.zIndex,
+        isGroupLayer: gl.type === 'group',
+        parentLayerId: gl.parentLayerId || null,
+        blendMode: gl.blendMode ?? 'normal',
+        blendModeOverride: resumeFrame.layerBlendModeOverride?.[layerId] ?? null,
       };
     });
 
-    // Crear canvases para este frame
     const frameCanvases = {};
     frameLayers.forEach(layer => {
-      // Si existe canvas en resume, usarlo; si no, crear uno nuevo
-      if (resumeFrame.canvases && resumeFrame.canvases[layer.id]) {
-        frameCanvases[layer.id] = resumeFrame.canvases[layer.id];
-      } else {
-        frameCanvases[layer.id] = getOrCreateCanvas(layer.id, frameNumber, true);
-      }
+      frameCanvases[layer.id] =
+        currentCanvases[frameNumber]?.[layer.id] ||
+        resumeFrame.canvases?.[layer.id] ||
+        getOrCreateCanvas(layer.id, frameNumber, true);
     });
 
-    // Crear el frame completo
     newFrames[frameNumber] = {
       layers: frameLayers,
       pixelGroups: resumeFrame.pixelGroups || {},
       canvases: frameCanvases,
       frameDuration: resumeFrame.duration || defaultFrameDuration,
-      tags: resumeFrame.tags || []
+      tags: resumeFrame.tags || [],
     };
   });
 
   return newFrames;
-}, [getOrCreateCanvas, defaultFrameDuration]);
+}, [frames, getOrCreateCanvas, defaultFrameDuration]);
 
-
-const undoPixelChanges = useCallback(() => {
-  if (pixelChangesIndex <= 1) {
-    console.warn("No hay cambios de píxeles para deshacer");
-    return false;
-  }
-  
-  const changeEntry = pixelChangesStack[pixelChangesIndex];
-  if (!changeEntry) return false;
-  
-  console.log("🔄 Deshaciendo cambios de píxeles:", changeEntry);
-  
-  // Marcar que estamos restaurando
+// ---- Helpers de aplicación de frame_state ----
+const _applyFrameSnapshot = useCallback((snapshot) => {
   isRestoringRef.current = true;
-  
-  // Aplicar cambios en reversa
-  const success = applyPixelChangesToCanvas(
-    changeEntry.changes, 
-    changeEntry.layerId, 
-    changeEntry.frameId, 
-    true // reverse = true
-  );
-  
-  if (success) {
-    setPixelChangesIndex(prev => prev - 1);
-    
-    // Re-renderizar si es el frame actual
-    if (changeEntry.frameId === currentFrame) {
-      requestAnimationFrame(compositeRender);
-    }
+  setFramesResume(snapshot);
+  const newFrames = syncFramesFromResume(snapshot);
+  if (!newFrames) { isRestoringRef.current = false; return; }
+  setFrames(newFrames);
+  setFrameCount(Object.keys(newFrames).length);
+  const nums = Object.keys(newFrames).map(Number);
+  if (!nums.includes(currentFrame)) {
+    setCurrentFrame(Math.min(...nums));
+  } else {
+    const fd = newFrames[currentFrame];
+    setLayers(fd.layers);
+    setPixelGroups(fd.pixelGroups);
+    layerCanvasesRef.current = { ...fd.canvases };
   }
-  
-  // Permitir guardar nuevamente después de un breve delay
-  setTimeout(() => {
-    isRestoringRef.current = false;
-  }, 100);
-  
-  return success;
-}, [pixelChangesStack, pixelChangesIndex, applyPixelChangesToCanvas, currentFrame, compositeRender]);
+  setTimeout(() => { isRestoringRef.current = false; }, 100);
+}, [syncFramesFromResume, currentFrame]);
 
-// ✅ NUEVO: Función para rehacer cambios de píxeles
-const redoPixelChanges = useCallback(() => {
-  if (pixelChangesIndex >= pixelChangesStack.length - 1) {
-    console.warn("No hay cambios de píxeles para rehacer");
-    return false;
-  }
-  
-  const nextIndex = pixelChangesIndex + 1;
-  const changeEntry = pixelChangesStack[nextIndex];
-  if (!changeEntry) return false;
-  
-  console.log("🔄 Rehaciendo cambios de píxeles:", changeEntry);
-  
-  // Marcar que estamos restaurando
-  isRestoringRef.current = true;
-  
-  // Aplicar cambios normales
-  const success = applyPixelChangesToCanvas(
-    changeEntry.changes, 
-    changeEntry.layerId, 
-    changeEntry.frameId, 
-    false // reverse = false
-  );
-  
-  if (success) {
-    setPixelChangesIndex(nextIndex);
-    
-    // Re-renderizar si es el frame actual
-    if (changeEntry.frameId === currentFrame) {
-      requestAnimationFrame(compositeRender);
-    }
-  }
-  
-  // Permitir guardar nuevamente después de un breve delay
-  setTimeout(() => {
-    isRestoringRef.current = false;
-  }, 100);
-  
-  return success;
-}, [pixelChangesStack, pixelChangesIndex, applyPixelChangesToCanvas, currentFrame, compositeRender]);
-
+// ---- setActiveFrame (necesario para varios lugares) ----
 const setActiveFrame = useCallback((frameNumber) => {
-  if (frameNumber === currentFrame) {
-    console.log(`Ya estamos en el frame ${frameNumber}, ignorando cambio`);
-    return true;
-  }
-
-  if (!frames[frameNumber]) {
-    console.warn(`Frame ${frameNumber} no existe`);
-    return false;
-  }
+  if (frameNumber === currentFrame) return true;
+  if (!frames[frameNumber]) return false;
 
   const frameData = frames[frameNumber];
-  
   frameData.layers.forEach(layer => {
     if (!frameData.canvases[layer.id]) {
       frameData.canvases[layer.id] = getOrCreateCanvas(layer.id, frameNumber, true);
     }
   });
-  
-  // Actualizar referencias
   setLayers(frameData.layers);
   setPixelGroups(frameData.pixelGroups);
   layerCanvasesRef.current = frameData.canvases;
-  
   setCurrentFrame(frameNumber);
-  
-  // ✅ FIX: Actualizar activeLayerId al cambiar frame
-  // Usar la primera capa visible del frame, o la primera capa si no hay visibles
-  const visibleLayers = frameData.layers.filter(layer => 
-    !layer.isGroupLayer && (layer.visible[frameNumber] !== false)
-  );
-  const targetLayer = visibleLayers.length > 0 ? visibleLayers[0] : frameData.layers[0];
-  
-  if (targetLayer && targetLayer.id !== activeLayerId) {
-    setActiveLayerId(targetLayer.id);
-  }
-  
+
+  const visibleLayers = frameData.layers.filter(l => !l.isGroupLayer && l.visible[frameNumber] !== false);
+  const target = visibleLayers[0] ?? frameData.layers[0];
+  if (target && target.id !== activeLayerId) setActiveLayerId(target.id);
+
   requestAnimationFrame(compositeRender);
   return true;
 }, [currentFrame, frames, getOrCreateCanvas, activeLayerId, compositeRender]);
 
-// ✅ FUNCIONES ORIGINALES DE FRAMES (renombradas para evitar conflictos)
-const undoFrames = useCallback(() => {
-  console.log("Undo frames activado");
-  console.log("Current index:", currentIndex);
-  console.log("History length:", history.length);
-  
-  if (currentIndex < 1) {
-    console.warn("No hay versiones anteriores para deshacer");
-    return false;
-  }
-  
-  isRestoringRef.current = true;
-  
-  const newIndex = currentIndex - 1;
-  const previousVersion = history[newIndex];
-  
-  console.log("Restaurando versión anterior:", previousVersion);
-  
-  // 1. Actualizar framesResume
-  setFramesResume(previousVersion);
-  
-  // 2. Sincronizar frames desde framesResume
-  const newFrames = syncFramesFromResume(previousVersion);
-  setFrames(newFrames);
-  
-  // 3. Actualizar frameCount
-  setFrameCount(Object.keys(newFrames).length);
-  
-  // 4. Verificar si el currentFrame sigue siendo válido
-  const newFrameNumbers = Object.keys(newFrames).map(Number);
-  if (!newFrameNumbers.includes(currentFrame)) {
-    // Si el frame actual ya no existe, cambiar al primer frame disponible
-    const firstFrame = Math.min(...newFrameNumbers);
-    setActiveFrame(firstFrame);
-  } else {
-    // Si el frame actual sigue existiendo, sincronizar layers y canvas
-    const currentFrameData = newFrames[currentFrame];
-    setLayers(currentFrameData.layers);
-    setPixelGroups(currentFrameData.pixelGroups);
-    layerCanvasesRef.current = { ...currentFrameData.canvases };
-  }
-  
-  // 5. Actualizar índice
-  setCurrentIndex(newIndex);
-  
-  setTimeout(() => {
-    isRestoringRef.current = false;
-  }, 100);
-  
-  return true;
-}, [currentIndex, history, syncFramesFromResume, currentFrame, setActiveFrame]);
-
-const redoFrames = useCallback(() => {
-  console.log("Redo frames activado");
-  
-  if (currentIndex >= history.length - 1) {
-    console.warn("No hay versiones posteriores para rehacer");
-    return false;
-  }
-  
-  isRestoringRef.current = true;
-  
-  const newIndex = currentIndex + 1;
-  const nextVersion = history[newIndex];
-  
-  console.log("Restaurando versión posterior:", nextVersion);
-  
-  // 1. Actualizar framesResume
-  setFramesResume(nextVersion);
-  
-  // 2. Sincronizar frames desde framesResume
-  const newFrames = syncFramesFromResume(nextVersion);
-  setFrames(newFrames);
-  
-  // 3. Actualizar frameCount
-  setFrameCount(Object.keys(newFrames).length);
-  
-  // 4. Verificar si el currentFrame sigue siendo válido
-  const newFrameNumbers = Object.keys(newFrames).map(Number);
-  if (!newFrameNumbers.includes(currentFrame)) {
-    // Si el frame actual ya no existe, cambiar al primer frame disponible
-    const firstFrame = Math.min(...newFrameNumbers);
-    setActiveFrame(firstFrame);
-  } else {
-    // Si el frame actual sigue existiendo, sincronizar layers y canvas
-    const currentFrameData = newFrames[currentFrame];
-    setLayers(currentFrameData.layers);
-    setPixelGroups(currentFrameData.pixelGroups);
-    layerCanvasesRef.current = { ...currentFrameData.canvases };
-  }
-  
-  // 5. Actualizar índice
-  setCurrentIndex(newIndex);
-  
-  setTimeout(() => {
-    isRestoringRef.current = false;
-  }, 100);
-  
-  return true;
-}, [currentIndex, history, syncFramesFromResume, currentFrame, setActiveFrame]);
-
-
-// ✅ NUEVO: Función combinada para undo (frames + píxeles)
-const undoComplete = useCallback(() => {
-  console.log("undocomplete");
-  // Primero intentar deshacer cambios de píxeles
-  const pixelUndoSuccess = undoPixelChanges();
-  
-  if (!pixelUndoSuccess) {
-    // Si no hay cambios de píxeles, deshacer cambios de frames
-    return undoFrames();
-  }
-  
-  return pixelUndoSuccess;
-}, [undoPixelChanges, undoFrames]);
-
-// ✅ NUEVO: Función combinada para redo (frames + píxeles)
-const redoComplete = useCallback(() => {
-  // Primero intentar rehacer cambios de píxeles
-  const pixelRedoSuccess = redoPixelChanges();
-  
-  if (!pixelRedoSuccess) {
-    // Si no hay cambios de píxeles, rehacer cambios de frames
-    return redoFrames();
-  }
-  
-  return pixelRedoSuccess;
-}, [redoPixelChanges, redoFrames]);
-
+// ---- UNDO ----
 const undo = useCallback(() => {
+  const stack = historyRef.current;
+  const idx = historyIndexRef.current;
 
-  console.log("current index absoluto", currentIndex);
-  if (currentIndex <= 0) {
-    console.warn("No hay cambios para deshacer");
-    return false;
-  }
-  
-  const entryToUndo = history[currentIndex];
-  
-  // Detectar tipo de entrada
-  const isPixelChange = entryToUndo.type === 'pixel_changes' || 
-                       (entryToUndo.changes && entryToUndo.layerId && entryToUndo.frameId);
-  
-  const isFrameState = entryToUndo.type === 'frame_state' || 
-                      (entryToUndo.frames && entryToUndo.layers && entryToUndo.metadata);
-  
-  console.log('Deshaciendo:', isPixelChange ? 'Cambio de píxeles' : 'Cambio de frames', entryToUndo);
-  
-  if (isPixelChange) {
-    // Deshacer cambios de píxeles (esto está bien)
-    const { layerId, frameId, changes } = entryToUndo;
-    const frame = frames[frameId];
-    
-    if (frame && frame.canvases[layerId]) {
-      isRestoringRef.current = true;
-      
-      const canvas = frame.canvases[layerId];
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      
-      // Aplicar cambios en reversa
-      changes.removed.forEach(pixel => {
-        const index = (pixel.y * canvas.width + pixel.x) * 4;
-        data[index] = pixel.color.r;
-        data[index + 1] = pixel.color.g;
-        data[index + 2] = pixel.color.b;
-        data[index + 3] = pixel.color.a;
-      });
-      
-      changes.modified.forEach(pixel => {
-        const index = (pixel.y * canvas.width + pixel.x) * 4;
-        data[index] = pixel.oldColor.r;
-        data[index + 1] = pixel.oldColor.g;
-        data[index + 2] = pixel.oldColor.b;
-        data[index + 3] = pixel.oldColor.a;
-      });
-      
-      changes.added.forEach(pixel => {
-        const index = (pixel.y * canvas.width + pixel.x) * 4;
-        data[index] = 0;
-        data[index + 1] = 0;
-        data[index + 2] = 0;
-        data[index + 3] = 0;
-      });
-      
-      ctx.putImageData(imageData, 0, 0);
-      
-      if (frameId === currentFrame) {
-        requestAnimationFrame(compositeRender);
-      }
-      
-      setTimeout(() => {
-        isRestoringRef.current = false;
-      }, 100);
-    }
-    
-  } else if (isFrameState) {
-    // Buscar el estado de frame anterior
-    let previousFrameState = null;
-    for (let i = currentIndex - 1; i >= 0; i--) {
-      const entry = history[i];
-      const isPreviousFrameState = entry.type === 'frame_state' || 
-                                  (entry.frames && entry.layers && entry.metadata);
-      if (isPreviousFrameState) {
-        previousFrameState = entry;
-        break;
-      }
-    }
-    
-    if (previousFrameState) {
-      isRestoringRef.current = true;
-      
-      console.log('Restaurando estado de frames anterior:', previousFrameState);
-      
-      // Restaurar framesResume
-      setFramesResume(previousFrameState);
-      
-      // ✅ PRESERVAR LOS CANVAS ACTUALES
-      const currentCanvases = {};
-      Object.keys(frames).forEach(frameKey => {
-        const frameNumber = Number(frameKey);
-        currentCanvases[frameNumber] = { ...frames[frameNumber].canvases };
-      });
-      
-      // Sincronizar frames
-      const newFrames = {};
-      Object.keys(previousFrameState.frames).forEach(frameKey => {
-        const frameNumber = Number(frameKey);
-        const resumeFrame = previousFrameState.frames[frameKey];
-        
-        const frameLayers = Object.keys(previousFrameState.layers).map(layerId => {
-          const globalLayer = previousFrameState.layers[layerId];
-          return {
-            id: layerId,
-            name: globalLayer.name,
-            visible: {
-              [frameNumber]: resumeFrame.layerVisibility[layerId] ?? true
-            },
-            opacity: resumeFrame.layerOpacity[layerId] ?? 1.0,
-            zIndex: globalLayer.zIndex,
-            isGroupLayer: globalLayer.type === 'group',
-            parentLayerId: globalLayer.parentLayerId || null
-          };
-        });
-        
-        // ✅ REUTILIZAR CANVAS EXISTENTES EN LUGAR DE CREAR NUEVOS
-        const frameCanvases = {};
-        frameLayers.forEach(layer => {
-          // Si existe un canvas pintado, conservarlo
-          if (currentCanvases[frameNumber] && currentCanvases[frameNumber][layer.id]) {
-            frameCanvases[layer.id] = currentCanvases[frameNumber][layer.id];
-          } else if (resumeFrame.canvases && resumeFrame.canvases[layer.id]) {
-            frameCanvases[layer.id] = resumeFrame.canvases[layer.id];
-          } else {
-            frameCanvases[layer.id] = getOrCreateCanvas(layer.id, frameNumber, true);
-          }
-        });
-        
-        newFrames[frameNumber] = {
-          layers: frameLayers,
-          pixelGroups: resumeFrame.pixelGroups || {},
-          canvases: frameCanvases,
-          frameDuration: resumeFrame.duration || defaultFrameDuration,
-          tags: resumeFrame.tags || []
-        };
-      });
-      
-      setFrames(newFrames);
-      setFrameCount(Object.keys(newFrames).length);
-      
-      // Verificar frame actual
-      const newFrameNumbers = Object.keys(newFrames).map(Number);
-      if (!newFrameNumbers.includes(currentFrame)) {
-        const firstFrame = Math.min(...newFrameNumbers);
-        setActiveFrame(firstFrame);
-      } else {
-        const currentFrameData = newFrames[currentFrame];
-        setLayers(currentFrameData.layers);
-        setPixelGroups(currentFrameData.pixelGroups);
-        layerCanvasesRef.current = { ...currentFrameData.canvases };
-      }
-      
-      setTimeout(() => {
-        isRestoringRef.current = false;
-      }, 100);
-    }
-  }
-  
-  setCurrentIndex(prev => prev - 1);
-  return true;
-}, [currentIndex, history, frames, currentFrame, compositeRender, getOrCreateCanvas, defaultFrameDuration, setActiveFrame]);
+  // idx=0 es el estado inicial — nada que deshacer
+  if (idx < 1) return false;
 
-const redo = useCallback(() => {
-  if (currentIndex >= history.length - 1) {
-    console.warn("No hay cambios para rehacer");
-    return false;
-  }
-  
-  const nextIndex = currentIndex + 1;
-  const entryToRedo = history[nextIndex];
-  
-  // Detectar tipo de entrada
-  const isPixelChange = entryToRedo.type === 'pixel_changes' || 
-                       (entryToRedo.changes && entryToRedo.layerId && entryToRedo.frameId);
-  
-  const isFrameState = entryToRedo.type === 'frame_state' || 
-                      (entryToRedo.frames && entryToRedo.layers && entryToRedo.metadata);
-  
-  console.log('Rehaciendo:', isPixelChange ? 'Cambio de píxeles' : 'Cambio de frames', entryToRedo);
-  
-  if (isPixelChange) {
-    // Rehacer cambios de píxeles
-    const { layerId, frameId, changes } = entryToRedo;
-    const frame = frames[frameId];
-    
-    if (frame && frame.canvases[layerId]) {
-      isRestoringRef.current = true;
-      
-      const canvas = frame.canvases[layerId];
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      
-      // Aplicar cambios normales (como si fuera la primera vez)
-      changes.added.forEach(pixel => {
-        const index = (pixel.y * canvas.width + pixel.x) * 4;
-        data[index] = pixel.color.r;
-        data[index + 1] = pixel.color.g;
-        data[index + 2] = pixel.color.b;
-        data[index + 3] = pixel.color.a;
-      });
-      
-      changes.modified.forEach(pixel => {
-        const index = (pixel.y * canvas.width + pixel.x) * 4;
-        data[index] = pixel.newColor.r;
-        data[index + 1] = pixel.newColor.g;
-        data[index + 2] = pixel.newColor.b;
-        data[index + 3] = pixel.newColor.a;
-      });
-      
-      changes.removed.forEach(pixel => {
-        const index = (pixel.y * canvas.width + pixel.x) * 4;
-        data[index] = 0;
-        data[index + 1] = 0;
-        data[index + 2] = 0;
-        data[index + 3] = 0;
-      });
-      
-      ctx.putImageData(imageData, 0, 0);
-      
-      if (frameId === currentFrame) {
-        requestAnimationFrame(compositeRender);
-      }
-      
-      setTimeout(() => {
-        isRestoringRef.current = false;
-      }, 100);
+  const entry = stack[idx];
+  isRestoringRef.current = true;
+
+  if (entry.type === 'pixel_changes') {
+    // Deshacer trazo: revertir los píxeles en el canvas
+    const frame = framesRef.current[entry.frameId];
+    if (frame?.canvases[entry.layerId]) {
+      applyPixelChangesToCanvas(entry.changes, entry.layerId, entry.frameId, true);
+      if (entry.frameId === currentFrame) requestAnimationFrame(compositeRender);
     }
-    
-  } else if (isFrameState) {
-    // Rehacer cambios de frames
-    isRestoringRef.current = true;
-    
-    console.log('Rehaciendo estado de frames:', entryToRedo);
-    
-    // Restaurar framesResume al estado que queremos rehacer
-    setFramesResume(entryToRedo);
-    
-    // ✅ PRESERVAR LOS CANVAS ACTUALES
-    const currentCanvases = {};
-    Object.keys(frames).forEach(frameKey => {
-      const frameNumber = Number(frameKey);
-      currentCanvases[frameNumber] = { ...frames[frameNumber].canvases };
-    });
-    
-    // Sincronizar frames al estado del redo
-    const newFrames = {};
-    Object.keys(entryToRedo.frames).forEach(frameKey => {
-      const frameNumber = Number(frameKey);
-      const resumeFrame = entryToRedo.frames[frameKey];
-      
-      const frameLayers = Object.keys(entryToRedo.layers).map(layerId => {
-        const globalLayer = entryToRedo.layers[layerId];
-        return {
-          id: layerId,
-          name: globalLayer.name,
-          visible: {
-            [frameNumber]: resumeFrame.layerVisibility[layerId] ?? true
-          },
-          opacity: resumeFrame.layerOpacity[layerId] ?? 1.0,
-          zIndex: globalLayer.zIndex,
-          isGroupLayer: globalLayer.type === 'group',
-          parentLayerId: globalLayer.parentLayerId || null
-        };
-      });
-      
-      // ✅ REUTILIZAR CANVAS EXISTENTES EN LUGAR DE CREAR NUEVOS
-      const frameCanvases = {};
-      frameLayers.forEach(layer => {
-        // Si existe un canvas pintado, conservarlo
-        if (currentCanvases[frameNumber] && currentCanvases[frameNumber][layer.id]) {
-          frameCanvases[layer.id] = currentCanvases[frameNumber][layer.id];
-        } else if (resumeFrame.canvases && resumeFrame.canvases[layer.id]) {
-          frameCanvases[layer.id] = resumeFrame.canvases[layer.id];
-        } else {
-          frameCanvases[layer.id] = getOrCreateCanvas(layer.id, frameNumber, true);
-        }
-      });
-      
-      newFrames[frameNumber] = {
-        layers: frameLayers,
-        pixelGroups: resumeFrame.pixelGroups || {},
-        canvases: frameCanvases,
-        frameDuration: resumeFrame.duration || defaultFrameDuration,
-        tags: resumeFrame.tags || []
-      };
-    });
-    
-    setFrames(newFrames);
-    setFrameCount(Object.keys(newFrames).length);
-    
-    // Verificar frame actual
-    const newFrameNumbers = Object.keys(newFrames).map(Number);
-    if (!newFrameNumbers.includes(currentFrame)) {
-      const firstFrame = Math.min(...newFrameNumbers);
-      setActiveFrame(firstFrame);
+    setTimeout(() => { isRestoringRef.current = false; }, 100);
+
+  } else if (entry.type === 'frame_state') {
+    // Deshacer cambio estructural: restaurar el snapshot anterior al actual.
+    // Los pixel_changes entre dos FS no se tocan — se deshacen uno a uno
+    // cuando el usuario sigue presionando Ctrl+Z.
+    let prevSnapshot = null;
+    for (let i = idx - 1; i >= 0; i--) {
+      if (stack[i].type === 'frame_state') { prevSnapshot = stack[i]; break; }
+    }
+    if (prevSnapshot) {
+      _applyFrameSnapshot(prevSnapshot);
     } else {
-      const currentFrameData = newFrames[currentFrame];
-      setLayers(currentFrameData.layers);
-      setPixelGroups(currentFrameData.pixelGroups);
-      layerCanvasesRef.current = { ...currentFrameData.canvases };
+      setTimeout(() => { isRestoringRef.current = false; }, 100);
     }
-    
-    setTimeout(() => {
-      isRestoringRef.current = false;
-    }, 100);
   }
-  
-  setCurrentIndex(nextIndex);
+
+  historyIndexRef.current = idx - 1;
+  _bumpVersion();
   return true;
-}, [currentIndex, history, frames, currentFrame, compositeRender, getOrCreateCanvas, defaultFrameDuration, setActiveFrame]);
+}, [currentFrame, applyPixelChangesToCanvas, compositeRender, _applyFrameSnapshot, _bumpVersion]);
 
-// ✅ NUEVO: Estados mejorados para botones de undo/redo
-const canUndoPixels = pixelChangesIndex > 0;
-const canRedoPixels = pixelChangesIndex < pixelChangesStack.length - 1;
-const canUndoFrames = currentIndex > 1;
-const canRedoFrames = currentIndex < history.length - 1;
+// ---- REDO ----
+const redo = useCallback(() => {
+  const stack = historyRef.current;
+  const idx = historyIndexRef.current;
+  if (idx >= stack.length - 1) return false;
 
-// Estados combinados para la UI
-const canUndoComplete = canUndoPixels || canUndoFrames;
-const canRedoComplete = canRedoPixels || canRedoFrames;
+  const nextIdx = idx + 1;
+  const entry = stack[nextIdx];
+  isRestoringRef.current = true;
 
-// ✅ NUEVO: Función para limpiar todo el historial
+  if (entry.type === 'pixel_changes') {
+    const frame = framesRef.current[entry.frameId];
+    if (frame?.canvases[entry.layerId]) {
+      applyPixelChangesToCanvas(entry.changes, entry.layerId, entry.frameId, false);
+      if (entry.frameId === currentFrame) requestAnimationFrame(compositeRender);
+    }
+    setTimeout(() => { isRestoringRef.current = false; }, 100);
+
+  } else if (entry.type === 'frame_state') {
+    _applyFrameSnapshot(entry);
+  }
+
+  historyIndexRef.current = nextIdx;
+  _bumpVersion();
+  return true;
+}, [currentFrame, applyPixelChangesToCanvas, compositeRender, _applyFrameSnapshot, _bumpVersion]);
+
+// ---- Alias y compatibilidad con el resto del codebase ----
+const undoFrames = undo;
+const redoFrames = redo;
+const undoPixelChanges = undo;
+const redoPixelChanges = redo;
+const undoComplete = undo;
+const redoComplete = redo;
+
+// canUndo/canRedo — se recalculan cada vez que historyVersion cambia
+const canUndo = historyIndexRef.current > 0;
+const canRedo = historyIndexRef.current < historyRef.current.length - 1;
+const canUndoComplete = canUndo;
+const canRedoComplete = canRedo;
+const canUndoPixels = canUndo;
+const canRedoPixels = canRedo;
+const canUndoFrames = canUndo;
+const canRedoFrames = canRedo;
+
+// history expuesto como vista de solo lectura (sin causar re-renders)
+const history = historyRef.current;
+const currentIndex = historyIndexRef.current;
+
 const clearAllHistory = useCallback(() => {
-  setHistory([]);
-  setCurrentIndex(-1);
-  setPixelChangesStack([]);
-  setPixelChangesIndex(-1);
-  console.log("🧹 Todo el historial limpiado");
+  historyRef.current = [];
+  historyIndexRef.current = -1;
+  _bumpVersion();
+}, [_bumpVersion]);
+
+const getCompleteDebugInfo = useCallback(() => ({
+  historyLength: historyRef.current.length,
+  currentIndex: historyIndexRef.current,
+  canUndo,
+  canRedo,
+}), [canUndo, canRedo]);
+
+const getChangePreview = useCallback(() => {
+  const idx = historyIndexRef.current;
+  const stack = historyRef.current;
+  return {
+    current: stack[idx] ?? null,
+    next: stack[idx + 1] ?? null,
+    previous: stack[idx - 1] ?? null,
+  };
 }, []);
 
-// ✅ NUEVO: Función para obtener información de debug completa
-const getCompleteDebugInfo = useCallback(() => {
-  return {
-    frames: {
-      historyLength: history.length,
-      currentIndex,
-      canUndo: canUndoFrames,
-      canRedo: canRedoFrames
-    },
-    pixels: {
-      stackLength: pixelChangesStack.length,
-      currentIndex: pixelChangesIndex,
-      canUndo: canUndoPixels,
-      canRedo: canRedoPixels
-    },
-    combined: {
-      canUndoComplete,
-      canRedoComplete
-    }
-  };
-}, [
-  history.length, currentIndex, canUndoFrames, canRedoFrames,
-  pixelChangesStack.length, pixelChangesIndex, canUndoPixels, canRedoPixels,
-  canUndoComplete, canRedoComplete
-]);
-
-// ✅ NUEVO: Función para obtener vista previa de cambios
-const getChangePreview = useCallback(() => {
-  const frameChanges = history[currentIndex];
-  const pixelChanges = pixelChangesStack[pixelChangesIndex];
-  
-  return {
-    nextPixelChange: pixelChangesIndex < pixelChangesStack.length - 1 ? 
-      pixelChangesStack[pixelChangesIndex + 1] : null,
-    previousPixelChange: pixelChangesIndex > 0 ? 
-      pixelChangesStack[pixelChangesIndex - 1] : null,
-    nextFrameChange: currentIndex < history.length - 1 ? 
-      history[currentIndex + 1] : null,
-    previousFrameChange: currentIndex > 0 ? 
-      history[currentIndex - 1] : null
-  };
-}, [history, currentIndex, pixelChangesStack, pixelChangesIndex]);
-
-
-// ===================== SISTEMA UNDO/REDO ====================================//
-
+// ===================== FIN SISTEMA UNDO/REDO ====================================//
 
 
 // 3. FUNCIÓN PARA RENDERIZAR UN FRAME COMO CAPA
@@ -2501,8 +2093,8 @@ const getChangePreview = useCallback(() => {
   // Initialize the composite canvas
   useEffect(() => {
     if (compositeCanvasRef.current) {
-      compositeCanvasRef.current.width = viewportWidth * zoom;
-      compositeCanvasRef.current.height = viewportHeight * zoom;
+      compositeCanvasRef.current.width = Math.round(viewportWidth * zoom);
+      compositeCanvasRef.current.height = Math.round(viewportHeight * zoom);
       
       const ctx = compositeCanvasRef.current.getContext('2d');
       if (ctx) {
@@ -2575,17 +2167,32 @@ const addGroupLayer = useCallback((parentLayerId) => {
 
 // ✅ VERSIÓN CORREGIDA de addLayer - Sin duplicación de variables
 
-const addLayer = useCallback(() => {
+const addLayer = useCallback((opts = {}) => {
+  // opts.type: 'paint' (default) o '3d'. Las capas 3D se distinguen por su
+  // type — el canvas 2D existe igual y el resto del sistema (composite,
+  // save, blend, undo) las trata de forma idéntica. Lo único distinto es
+  // QUIÉN escribe ese canvas: en pintura es el usuario via tools; en 3D
+  // es el ThreeDLayerRenderer singleton (Fase 3).
+  const layerType = opts.type === '3d' ? '3d' : 'paint';
   const newLayerId = nanoid();
   const highestZIndex = layers.length > 0
     ? Math.max(...layers.map(layer => layer.zIndex))
     : -1;
 
+  // Las capas 3D heredan un nombre por defecto que el panel sobrescribirá
+  // con el nombre del archivo GLB cuando el usuario lo cargue.
+  const defaultName = layerType === '3d'
+    ? `3D ${layers.filter(l => l.type === '3d').length + 1}`
+    : `Layer ${layers.length + 1}`;
+
   const baseLayer = {
     id: newLayerId,
-    name: `Layer ${layers.length + 1}`,
+    name: defaultName,
+    type: layerType,
     visible: {},
-    zIndex: highestZIndex + 1
+    zIndex: highestZIndex + 1,
+    blendMode: 'normal',
+    blendModeOverride: null,
   };
 
   const updatedFrames = { ...frames };
@@ -2627,41 +2234,54 @@ const addLayer = useCallback(() => {
     }
   });
 
-  setFramesResume(prev => {
-    const updated = { ...prev };
-    
-    updated.layers[newLayerId] = {
+  setFramesResume(prev => produce(prev, draft => {
+    draft.layers[newLayerId] = {
       id: newLayerId,
-      name: `Layer ${Object.keys(prev.layers).length + 1}`,
-      type: 'normal',
+      name: defaultName,
+      // El campo `type` aquí distingue 'normal' (capa raíz), 'group' (sub-capa
+      // dentro de un grupo) y ahora '3d'. Los consumers viejos que esperaban
+      // 'normal' siguen funcionando — el switch trata '3d' como 'normal' en
+      // todo lo que no es renderizado de píxeles (visibilidad, blend, etc.).
+      type: layerType === '3d' ? '3d' : 'normal',
       parentLayerId: null,
       zIndex: highestZIndex + 1,
       blendMode: 'normal',
       locked: false,
     };
 
-    Object.keys(updated.frames).forEach(frameKey => {
-      const frame = updated.frames[frameKey];
+    Object.keys(draft.frames).forEach(frameKey => {
+      const frame = draft.frames[frameKey];
       frame.layerVisibility[newLayerId] = true;
       frame.layerOpacity[newLayerId] = 1.0;
       frame.layerHasContent[newLayerId] = false;
     });
 
-    updated.computed.framesByLayer[newLayerId] = [];
-    updated.computed.keyframes[newLayerId] = [];
-    Object.keys(updated.computed.resolvedFrames).forEach(frameKey => {
-      updated.computed.resolvedFrames[frameKey].layerVisibility[newLayerId] = true;
-      updated.computed.resolvedFrames[frameKey].layerOpacity[newLayerId] = 1.0;
-      updated.computed.resolvedFrames[frameKey].layerHasContent[newLayerId] = false;
+    draft.computed.framesByLayer[newLayerId] = [];
+    draft.computed.keyframes[newLayerId] = [];
+    Object.keys(draft.computed.resolvedFrames).forEach(frameKey => {
+      draft.computed.resolvedFrames[frameKey].layerVisibility[newLayerId] = true;
+      draft.computed.resolvedFrames[frameKey].layerOpacity[newLayerId] = 1.0;
+      draft.computed.resolvedFrames[frameKey].layerHasContent[newLayerId] = false;
     });
 
-    return updated;
-  });
+    // Inicializar entry de capa 3D con defaults razonables. El asset es null
+    // hasta que el usuario cargue un GLB. La metadata vive en extensions
+    // para que proyectos en versiones viejas la ignoren sin crashear.
+    if (layerType === '3d') {
+      if (!draft.extensions) draft.extensions = { threeDLayers: {} };
+      if (!draft.extensions.threeDLayers) draft.extensions.threeDLayers = {};
+      draft.extensions.threeDLayers[newLayerId] = makeDefault3DLayerMetadata();
+    }
+  }));
 
   setFrames(updatedFrames);
-  
+
   if (currentFrameData) {
-    setLayers(currentFrameData.layers);
+    // IMPORTANTE: arriba se hizo `currentFrameData.layers.push(...)` (mutación
+    // in-place). Pasar esa MISMA ref a setLayers haría que React bail-out por
+    // Object.is(prev, next) — y consumers memoizados sobre [layers] no
+    // recomputarían (ej: `orderedLayers` en timeline.jsx). Clonar aquí.
+    setLayers([...currentFrameData.layers]);
     layerCanvasesRef.current[newLayerId] = currentFrameData.canvases[newLayerId];
   }
 
@@ -2670,6 +2290,68 @@ const addLayer = useCallback(() => {
 
   return newLayerId;
 }, [layers, width, height, frames, currentFrame, getOrCreateCanvas]);
+
+// ===== Helpers para capas 3D =====
+//
+// Mutar la metadata de una capa 3D pasa SIEMPRE por estos helpers, no
+// directamente por setFramesResume. Razones:
+//   1. Garantizan que extensions.threeDLayers existe antes de tocarla.
+//   2. Centralizan la suscripción de re-render: el hook use3DLayer (Fase 3)
+//      detecta cambios via deep-equal de la metadata.
+//   3. Permiten validación futura (rangos de sliders, etc.) sin tocar
+//      callsites.
+//
+// Patrón de uso:
+//   setLayerThreeD(layerId, prev => ({ ...prev, base: { ...prev.base, brightness: 1.4 } }))
+//   setLayerThreeD(layerId, { asset: { sha1, filename, relativePath } })
+//
+// El 2do argumento puede ser un objeto patch (merge superficial sobre la
+// raíz) o una función (patch profundo, recibe el prev y devuelve el next).
+
+const setLayerThreeD = useCallback((layerId, patchOrFn) => {
+  setFramesResume(prev => produce(prev, draft => {
+    if (!draft.extensions) draft.extensions = { threeDLayers: {} };
+    if (!draft.extensions.threeDLayers) draft.extensions.threeDLayers = {};
+
+    const current = draft.extensions.threeDLayers[layerId] || makeDefault3DLayerMetadata();
+    const next = typeof patchOrFn === 'function'
+      ? patchOrFn(current)
+      : { ...current, ...patchOrFn };
+    draft.extensions.threeDLayers[layerId] = next;
+  }));
+}, []);
+
+// Override por frame para una capa 3D. Sparse — solo se guardan las claves
+// que difieran del base. Pasar `null` como patch elimina el override entero
+// para ese frame (vuelve a usar el base + autoTimeline).
+const setLayer3DFrameOverride = useCallback((layerId, frameNumber, patchOrNull) => {
+  setFramesResume(prev => produce(prev, draft => {
+    if (!draft.extensions) draft.extensions = { threeDLayers: {} };
+    if (!draft.extensions.threeDLayers) draft.extensions.threeDLayers = {};
+    if (!draft.extensions.threeDLayers[layerId]) {
+      draft.extensions.threeDLayers[layerId] = makeDefault3DLayerMetadata();
+    }
+    const layer3D = draft.extensions.threeDLayers[layerId];
+    if (!layer3D.frameOverrides) layer3D.frameOverrides = {};
+
+    if (patchOrNull == null) {
+      delete layer3D.frameOverrides[frameNumber];
+    } else {
+      layer3D.frameOverrides[frameNumber] = {
+        ...(layer3D.frameOverrides[frameNumber] || {}),
+        ...patchOrNull,
+      };
+    }
+  }));
+}, []);
+
+// Lectura conveniente: devuelve la metadata de una capa 3D, o null si la
+// capa no es 3D o no existe. Útil para components que necesitan render
+// condicional (ej. el panel derecho).
+const getLayerThreeD = useCallback((layerId) => {
+  return framesResume?.extensions?.threeDLayers?.[layerId] || null;
+}, [framesResume]);
+
   /**
    * Delete a layer by ID
    */
@@ -2712,45 +2394,38 @@ const addLayer = useCallback(() => {
       });
     });
   
-    // ✅ AGREGAR: Actualizar framesResume
-    setFramesResume(prev => {
-      const updated = { ...prev };
-      
-      // Remover layer de la definición global
-      delete updated.layers[layerId];
-      
-      // Si es capa principal, remover también capas de grupo
+    setFramesResume(prev => produce(prev, draft => {
+      delete draft.layers[layerId];
       if (!layerToDelete.isGroupLayer) {
-        Object.keys(updated.layers).forEach(id => {
-          const layer = updated.layers[id];
+        Object.keys(draft.layers).forEach(id => {
+          const layer = draft.layers[id];
           if (layer.type === 'group' && layer.parentLayerId === layerId) {
-            delete updated.layers[id];
+            delete draft.layers[id];
           }
         });
       }
-  
-      // Remover de todos los frames
-      Object.keys(updated.frames).forEach(frameKey => {
-        const frame = updated.frames[frameKey];
+      Object.keys(draft.frames).forEach(frameKey => {
+        const frame = draft.frames[frameKey];
         delete frame.layerVisibility[layerId];
         delete frame.layerOpacity[layerId];
         delete frame.layerHasContent[layerId];
         delete frame.canvases[layerId];
         delete frame.pixelGroups[layerId];
       });
-  
-      // Limpiar computed
-      delete updated.computed.framesByLayer[layerId];
-      delete updated.computed.keyframes[layerId];
-      Object.keys(updated.computed.resolvedFrames).forEach(frameKey => {
-        const resolved = updated.computed.resolvedFrames[frameKey];
+      delete draft.computed.framesByLayer[layerId];
+      delete draft.computed.keyframes[layerId];
+      Object.keys(draft.computed.resolvedFrames).forEach(frameKey => {
+        const resolved = draft.computed.resolvedFrames[frameKey];
         delete resolved.layerVisibility[layerId];
         delete resolved.layerOpacity[layerId];
         delete resolved.layerHasContent[layerId];
       });
-  
-      return updated;
-    });
+      // Limpiar metadata 3D si la capa tenía type:'3d'. Si no era 3D el delete
+      // es no-op; cuesta menos que checkear el tipo.
+      if (draft.extensions?.threeDLayers) {
+        delete draft.extensions.threeDLayers[layerId];
+      }
+    }));
   
     setFrames(updatedFrames);
     
@@ -2822,32 +2497,23 @@ const addLayer = useCallback(() => {
       return updatedFrames;
     });
   
-    // ✅ AGREGAR: Actualizar framesResume
     setFramesResume(prev => {
-      const updated = { ...prev };
-      
-      // Actualizar zIndex en la definición global de layers
-      const layer = updated.layers[layerId];
+      const layer = prev.layers[layerId];
       if (!layer) return prev;
-      
-      // Encontrar la capa que está inmediatamente encima
-      const relevantLayers = Object.values(updated.layers)
-        .filter(l => layer.type === 'group' 
+      const relevantLayers = Object.values(prev.layers)
+        .filter(l => layer.type === 'group'
           ? l.type === 'group' && l.parentLayerId === layer.parentLayerId
           : l.type === 'normal'
         )
+        .slice()
         .sort((a, b) => a.zIndex - b.zIndex);
-      
       const currentIndex = relevantLayers.findIndex(l => l.id === layerId);
       if (currentIndex === relevantLayers.length - 1) return prev;
-      
       const layerAbove = relevantLayers[currentIndex + 1];
-      
-      // Intercambiar zIndex
-      updated.layers[layerId] = { ...layer, zIndex: layerAbove.zIndex };
-      updated.layers[layerAbove.id] = { ...layerAbove, zIndex: layer.zIndex };
-      
-      return updated;
+      return produce(prev, draft => {
+        draft.layers[layerId].zIndex = layerAbove.zIndex;
+        draft.layers[layerAbove.id].zIndex = layer.zIndex;
+      });
     });
   }, [currentFrame]);
   
@@ -2871,7 +2537,7 @@ const createFrame = useCallback((mode = "newContent", customDuration = null, sou
           }
         };
       }),
-      pixelGroups: JSON.parse(JSON.stringify(sourceFrame.pixelGroups)),
+      pixelGroups: structuredClone(sourceFrame.pixelGroups),
       canvases: {}, // ✅ Se llenará abajo con canvas duplicados
       frameDuration: sourceFrame.frameDuration,
       tags: [...(sourceFrame.tags || [])]
@@ -2923,78 +2589,75 @@ const createFrame = useCallback((mode = "newContent", customDuration = null, sou
   }
 
   // ✅ AGREGAR: Actualizar framesResume ANTES de setFrames
-  setFramesResume(prev => {
-    const updated = { ...prev };
+  setFramesResume(prev => produce(prev, draft => {
     const sourceFrameResume = prev.frames[sourceFrameNumber ?? currentFrame];
-    
-    // Shiftar frames existentes en framesResume
+
+    // Shiftar frames existentes en framesResume (N ≥ insertAt → N+1).
+    // Con produce, podemos mutar draft directamente — Immer crea estructuras
+    // nuevas para las branches tocadas y conserva refs en las no tocadas.
     const framesToShift = {};
-    Object.keys(updated.frames).forEach(frameKey => {
+    Object.keys(draft.frames).forEach(frameKey => {
       const num = Number(frameKey);
       if (num >= insertAt) {
-        framesToShift[num + 1] = updated.frames[frameKey];
-        delete updated.frames[frameKey];
+        framesToShift[num + 1] = draft.frames[frameKey];
+        delete draft.frames[frameKey];
       }
     });
-    Object.assign(updated.frames, framesToShift);
+    Object.assign(draft.frames, framesToShift);
 
     // Crear nuevo frame en framesResume
     if (mode === "duplicate") {
-      updated.frames[insertAt] = {
+      draft.frames[insertAt] = {
         layerVisibility: { ...sourceFrameResume.layerVisibility },
         layerOpacity: { ...sourceFrameResume.layerOpacity },
         layerHasContent: { ...sourceFrameResume.layerHasContent },
-        canvases: {}, // Se llenará después
-        pixelGroups: JSON.parse(JSON.stringify(sourceFrameResume.pixelGroups)),
+        canvases: {},
+        pixelGroups: structuredClone(sourceFrameResume.pixelGroups),
         duration: sourceFrameResume.duration,
-        tags: [...(sourceFrameResume.tags || [])]
+        tags: [...(sourceFrameResume.tags || [])],
       };
     } else {
-      updated.frames[insertAt] = {
+      draft.frames[insertAt] = {
         layerVisibility: { ...sourceFrameResume.layerVisibility },
         layerOpacity: { ...sourceFrameResume.layerOpacity },
         layerHasContent: Object.fromEntries(
-          Object.keys(updated.layers).map(layerId => [layerId, false])
+          Object.keys(draft.layers).map(layerId => [layerId, false])
         ),
         canvases: {},
         pixelGroups: {},
         duration: customDuration ?? defaultFrameDuration,
-        tags: []
+        tags: [],
       };
     }
 
-    // Actualizar metadata
-    updated.metadata.frameCount += 1;
-    updated.metadata.totalDuration = Object.values(updated.frames)
+    // Metadata
+    draft.metadata.frameCount += 1;
+    draft.metadata.totalDuration = Object.values(draft.frames)
       .reduce((sum, frame) => sum + frame.duration, 0);
 
     // Recalcular computed
-    updated.computed.frameSequence = Object.keys(updated.frames)
+    draft.computed.frameSequence = Object.keys(draft.frames)
       .map(Number).sort((a, b) => a - b);
-    updated.computed.totalFrames = updated.computed.frameSequence.length;
+    draft.computed.totalFrames = draft.computed.frameSequence.length;
 
-    // Actualizar resolvedFrames (shiftar y agregar nuevo)
+    // Shiftar resolvedFrames + crear el nuevo
+    const prevResolved = draft.computed.resolvedFrames;
     const newResolvedFrames = {};
-    Object.keys(updated.computed.resolvedFrames).forEach(frameKey => {
+    Object.keys(prevResolved).forEach(frameKey => {
       const num = Number(frameKey);
       if (num >= insertAt) {
-        newResolvedFrames[num + 1] = updated.computed.resolvedFrames[frameKey];
+        newResolvedFrames[num + 1] = prevResolved[frameKey];
       } else {
-        newResolvedFrames[frameKey] = updated.computed.resolvedFrames[frameKey];
+        newResolvedFrames[frameKey] = prevResolved[frameKey];
       }
     });
-    
-    // Crear resolved frame para el nuevo frame
     newResolvedFrames[insertAt] = {
-      layerVisibility: { ...updated.frames[insertAt].layerVisibility },
-      layerOpacity: { ...updated.frames[insertAt].layerOpacity },
-      layerHasContent: { ...updated.frames[insertAt].layerHasContent }
+      layerVisibility: { ...draft.frames[insertAt].layerVisibility },
+      layerOpacity: { ...draft.frames[insertAt].layerOpacity },
+      layerHasContent: { ...draft.frames[insertAt].layerHasContent },
     };
-    
-    updated.computed.resolvedFrames = newResolvedFrames;
-
-    return updated;
-  });
+    draft.computed.resolvedFrames = newResolvedFrames;
+  }));
 
   // Actualizar numeración de frames existentes
   setFrames(prev => {
@@ -3049,56 +2712,45 @@ const deleteFrame = useCallback((frameNumber) => {
   const validNumbers = numbersToDelete.filter(num => frames[num]);
   if (validNumbers.length === 0) return false;
 
-  // ✅ AGREGAR: Actualizar framesResume PRIMERO
-  setFramesResume(prev => {
-    const updated = { ...prev };
-    
-    // Remover frames del resume
+  setFramesResume(prev => produce(prev, draft => {
     validNumbers.forEach(num => {
-      delete updated.frames[num];
-      delete updated.computed.resolvedFrames[num];
+      delete draft.frames[num];
+      delete draft.computed.resolvedFrames[num];
     });
-    
-    // Renumerar frames restantes
+
+    // Renumerar frames restantes (1-based, secuencial)
     const remainingFrames = {};
     const remainingResolved = {};
-    
-    Object.keys(updated.frames)
+    Object.keys(draft.frames)
       .map(Number)
       .sort((a, b) => a - b)
       .forEach((num, index) => {
         const newFrameNumber = index + 1;
-        remainingFrames[newFrameNumber] = updated.frames[num];
-        remainingResolved[newFrameNumber] = updated.computed.resolvedFrames[num];
+        remainingFrames[newFrameNumber] = draft.frames[num];
+        remainingResolved[newFrameNumber] = draft.computed.resolvedFrames[num];
       });
-    
-    updated.frames = remainingFrames;
-    updated.computed.resolvedFrames = remainingResolved;
-    
-    // Actualizar metadata
-    updated.metadata.frameCount = Object.keys(remainingFrames).length;
-    updated.metadata.totalDuration = Object.values(remainingFrames)
+
+    draft.frames = remainingFrames;
+    draft.computed.resolvedFrames = remainingResolved;
+
+    draft.metadata.frameCount = Object.keys(remainingFrames).length;
+    draft.metadata.totalDuration = Object.values(remainingFrames)
       .reduce((sum, frame) => sum + frame.duration, 0);
-    
-    // Recalcular computed
-    updated.computed.frameSequence = Object.keys(remainingFrames)
+
+    draft.computed.frameSequence = Object.keys(remainingFrames)
       .map(Number).sort((a, b) => a - b);
-    updated.computed.totalFrames = updated.computed.frameSequence.length;
-    
-    // Recalcular framesByLayer y keyframes
-    Object.keys(updated.layers).forEach(layerId => {
-      updated.computed.framesByLayer[layerId] = [];
-      updated.computed.keyframes[layerId] = [];
-      
+    draft.computed.totalFrames = draft.computed.frameSequence.length;
+
+    Object.keys(draft.layers).forEach(layerId => {
+      draft.computed.framesByLayer[layerId] = [];
+      draft.computed.keyframes[layerId] = [];
       Object.keys(remainingFrames).forEach(frameKey => {
         if (remainingFrames[frameKey].layerHasContent[layerId]) {
-          updated.computed.framesByLayer[layerId].push(Number(frameKey));
+          draft.computed.framesByLayer[layerId].push(Number(frameKey));
         }
       });
     });
-    
-    return updated;
-  });
+  }));
 
   // 1. Convertir frames a array y filtrar los que no se eliminarán
   const framesArray = Object.entries(frames)
@@ -3163,7 +2815,9 @@ const duplicateLayer = useCallback((layerId) => {
     id: newLayerId,
     name: newLayerName,
     visible: {}, // Se llenará por frame
-    zIndex: highestZIndex + 1
+    zIndex: highestZIndex + 1,
+    blendMode: originalLayer.blendMode ?? 'normal',
+    blendModeOverride: null, // default; cada frame copia su override del original abajo
   };
 
   const updatedFrames = { ...frames };
@@ -3173,13 +2827,15 @@ const duplicateLayer = useCallback((layerId) => {
     const originalLayerInFrame = frame.layers.find(l => l.id === layerId);
     if (!originalLayerInFrame) return;
 
-    // Capa duplicada solo para este frame
+    // Capa duplicada solo para este frame.
+    // Spec: la copia hereda blendModeOverride por frame del original.
     const duplicatedLayer = {
       ...baseLayer,
       visible: {
         ...baseLayer.visible,
         [frameKey]: true
-      }
+      },
+      blendModeOverride: originalLayerInFrame.blendModeOverride ?? null,
     };
 
     frame.layers.push(duplicatedLayer);
@@ -3201,54 +2857,49 @@ const duplicateLayer = useCallback((layerId) => {
     }
   });
 
-  // ✅ AGREGAR: Actualizar framesResume
-  setFramesResume(prev => {
-    const updated = { ...prev };
-    
-    // Agregar layer duplicado a la definición global
-    updated.layers[newLayerId] = {
+  setFramesResume(prev => produce(prev, draft => {
+    draft.layers[newLayerId] = {
       id: newLayerId,
       name: newLayerName,
       type: originalLayer.isGroupLayer ? 'group' : 'normal',
       parentLayerId: originalLayer.parentLayerId || null,
       zIndex: highestZIndex + 1,
-      blendMode: 'normal',
+      blendMode: originalLayer.blendMode ?? 'normal',
       locked: false,
     };
-
-    // Actualizar todos los frames
-    Object.keys(updated.frames).forEach(frameKey => {
-      const frame = updated.frames[frameKey];
+    Object.keys(draft.frames).forEach(frameKey => {
+      const frame = draft.frames[frameKey];
       const originalHasContent = frame.layerHasContent[layerId] ?? false;
-      
       frame.layerVisibility[newLayerId] = true;
       frame.layerOpacity[newLayerId] = frame.layerOpacity[layerId] ?? 1.0;
       frame.layerHasContent[newLayerId] = originalHasContent;
-      
-      // Duplicar pixelGroups si existen
       if (frame.pixelGroups[layerId]) {
-        frame.pixelGroups[newLayerId] = JSON.parse(JSON.stringify(frame.pixelGroups[layerId]));
+        frame.pixelGroups[newLayerId] = structuredClone(frame.pixelGroups[layerId]);
+      }
+      // Sembrar override de blend mode por frame: sin esto el siguiente
+      // ciclo de undo (syncFramesFromResume) perdería el override duplicado.
+      const originalOverride = frame.layerBlendModeOverride?.[layerId];
+      if (originalOverride != null) {
+        if (!frame.layerBlendModeOverride) frame.layerBlendModeOverride = {};
+        frame.layerBlendModeOverride[newLayerId] = originalOverride;
       }
     });
-
-    // Actualizar computed
-    updated.computed.framesByLayer[newLayerId] = [...(updated.computed.framesByLayer[layerId] || [])];
-    updated.computed.keyframes[newLayerId] = [...(updated.computed.keyframes[layerId] || [])];
-    
-    Object.keys(updated.computed.resolvedFrames).forEach(frameKey => {
-      const resolved = updated.computed.resolvedFrames[frameKey];
+    draft.computed.framesByLayer[newLayerId] = [...(draft.computed.framesByLayer[layerId] || [])];
+    draft.computed.keyframes[newLayerId] = [...(draft.computed.keyframes[layerId] || [])];
+    Object.keys(draft.computed.resolvedFrames).forEach(frameKey => {
+      const resolved = draft.computed.resolvedFrames[frameKey];
       resolved.layerVisibility[newLayerId] = true;
       resolved.layerOpacity[newLayerId] = resolved.layerOpacity[layerId] ?? 1.0;
       resolved.layerHasContent[newLayerId] = resolved.layerHasContent[layerId] ?? false;
     });
-
-    return updated;
-  });
+  }));
 
   setFrames(updatedFrames);
 
   const currentFrameData = updatedFrames[currentFrame];
-  setLayers(currentFrameData.layers);
+  // Clonar (ver comentario en addLayer): `frame.layers.push(...)` arriba
+  // mutó in-place, la misma ref haría bail-out en setLayers.
+  setLayers([...currentFrameData.layers]);
   layerCanvasesRef.current[newLayerId] = currentFrameData.canvases[newLayerId];
 
   return newLayerId;
@@ -3352,19 +3003,14 @@ const setFrameOpacity = useCallback((layerId, frameNumbers, opacity) => {
     return updatedFrames;
   });
 
-  // ✅ AGREGAR: Actualizar framesResume
-  setFramesResume(prev => {
-    const updated = { ...prev };
-    
+  setFramesResume(prev => produce(prev, draft => {
     frameList.forEach(frameKey => {
-      if (updated.frames[frameKey]) {
-        updated.frames[frameKey].layerOpacity[layerId] = opacity;
-        updated.computed.resolvedFrames[frameKey].layerOpacity[layerId] = opacity;
+      if (draft.frames[frameKey]) {
+        draft.frames[frameKey].layerOpacity[layerId] = opacity;
+        draft.computed.resolvedFrames[frameKey].layerOpacity[layerId] = opacity;
       }
     });
-    
-    return updated;
-  });
+  }));
 
   return true;
 }, []);
@@ -3380,6 +3026,81 @@ const getFrameOpacity = useCallback((layerId, frameNumber) => {
 }, [frames]);
 
 
+// (resolveLayerBlendMode movido arriba de renderCurrentFrameOnly por TDZ —
+// los renders lo referencian en sus deps arrays. Ver linea ~700.)
+
+// Escritura — modo de capa global, afecta a TODOS los frames.
+// Snapshot único en el historial gracias al setFrames batch.
+const setLayerBlendMode = useCallback((layerId, mode) => {
+  if (!isValidBlendMode(mode)) {
+    console.warn(`[blendMode] modo invalido: ${mode}`);
+    return false;
+  }
+  setFrames(prevFrames => {
+    const updated = { ...prevFrames };
+    Object.keys(updated).forEach(frameKey => {
+      const frame = updated[frameKey];
+      const newLayers = frame.layers.map(layer => {
+        if (layer.id !== layerId) return layer;
+        return { ...layer, blendMode: mode };
+      });
+      updated[frameKey] = { ...frame, layers: newLayers };
+    });
+    return updated;
+  });
+  // El state `layers` (UI list) es state separado de `frames`; sin actualizarlo
+  // los componentes que leen layer.blendMode (boton del LayerRow, label del
+  // submenu) muestran valores stale. Sync inline.
+  setLayers(prevLayers => prevLayers.map(layer => {
+    if (layer.id !== layerId) return layer;
+    return { ...layer, blendMode: mode };
+  }));
+  setFramesResume(prev => produce(prev, draft => {
+    if (draft.layers[layerId]) {
+      draft.layers[layerId].blendMode = mode;
+    }
+  }));
+  return true;
+}, []);
+
+// Escritura — override solo en un frame. mode === null limpia el override.
+const setFrameBlendModeOverride = useCallback((layerId, frameNumber, mode) => {
+  if (mode !== null && !isValidBlendMode(mode)) {
+    console.warn(`[blendMode] override invalido: ${mode}`);
+    return false;
+  }
+  const frameKey = String(frameNumber);
+  // Si el frame afectado es el actual, sincroniza el state `layers` también.
+  // (El override per-frame solo es relevante visual cuando estás en ese frame;
+  // si no lo sync-eas, los lectores de layer.blendModeOverride se quedan stale.)
+  setLayers(prevLayers => prevLayers.map(layer => {
+    if (layer.id !== layerId) return layer;
+    return { ...layer, blendModeOverride: mode };
+  }));
+  setFrames(prevFrames => {
+    const frame = prevFrames[frameKey];
+    if (!frame) return prevFrames;
+    const newLayers = frame.layers.map(layer => {
+      if (layer.id !== layerId) return layer;
+      return { ...layer, blendModeOverride: mode };
+    });
+    return {
+      ...prevFrames,
+      [frameKey]: { ...frame, layers: newLayers },
+    };
+  });
+  setFramesResume(prev => produce(prev, draft => {
+    const fr = draft.frames[frameKey];
+    if (!fr) return;
+    if (!fr.layerBlendModeOverride) fr.layerBlendModeOverride = {};
+    if (mode === null) {
+      delete fr.layerBlendModeOverride[layerId];
+    } else {
+      fr.layerBlendModeOverride[layerId] = mode;
+    }
+  }));
+  return true;
+}, []);
 
 
 
@@ -3407,23 +3128,16 @@ const setFrameDuration = useCallback((frameNumbers, duration) => {
     return updated;
   });
 
-  // ✅ AGREGAR: Actualizar framesResume
-  setFramesResume(prev => {
-    const updated = { ...prev };
-    
+  setFramesResume(prev => produce(prev, draft => {
     validNumbers.forEach(num => {
-      if (updated.frames[num]) {
-        updated.frames[num].duration = duration;
+      if (draft.frames[num]) {
+        draft.frames[num].duration = duration;
       }
     });
-    
-    // Recalcular metadata
-    updated.metadata.totalDuration = Object.values(updated.frames)
+    draft.metadata.totalDuration = Object.values(draft.frames)
       .reduce((sum, frame) => sum + frame.duration, 0);
-    updated.metadata.frameRate = Math.round(1000 / updated.metadata.defaultFrameDuration);
-    
-    return updated;
-  });
+    draft.metadata.frameRate = Math.round(1000 / draft.metadata.defaultFrameDuration);
+  }));
 
   return true;
 }, [frames]);
@@ -3498,32 +3212,23 @@ const getFrameRate = useCallback((frameNumber) => {
       return updatedFrames;
     });
   
-    // ✅ AGREGAR: Actualizar framesResume
     setFramesResume(prev => {
-      const updated = { ...prev };
-      
-      // Actualizar zIndex en la definición global de layers
-      const layer = updated.layers[layerId];
+      const layer = prev.layers[layerId];
       if (!layer) return prev;
-      
-      // Encontrar la capa que está inmediatamente debajo
-      const relevantLayers = Object.values(updated.layers)
-        .filter(l => layer.type === 'group' 
+      const relevantLayers = Object.values(prev.layers)
+        .filter(l => layer.type === 'group'
           ? l.type === 'group' && l.parentLayerId === layer.parentLayerId
           : l.type === 'normal'
         )
+        .slice()
         .sort((a, b) => a.zIndex - b.zIndex);
-      
       const currentIndex = relevantLayers.findIndex(l => l.id === layerId);
       if (currentIndex === 0) return prev;
-      
       const layerBelow = relevantLayers[currentIndex - 1];
-      
-      // Intercambiar zIndex
-      updated.layers[layerId] = { ...layer, zIndex: layerBelow.zIndex };
-      updated.layers[layerBelow.id] = { ...layerBelow, zIndex: layer.zIndex };
-      
-      return updated;
+      return produce(prev, draft => {
+        draft.layers[layerId].zIndex = layerBelow.zIndex;
+        draft.layers[layerBelow.id].zIndex = layer.zIndex;
+      });
     });
   }, [currentFrame]);
   
@@ -3579,30 +3284,18 @@ const getFrameRate = useCallback((frameNumber) => {
       return updatedFrames;
     });
   
-    // ✅ AGREGAR: Actualizar framesResume
-    setFramesResume(prev => {
-      const updated = { ...prev };
-      
-      // Determinar el nuevo valor de visibilidad
-      let atLeastOneVisible = false;
+    setFramesResume(prev => produce(prev, draft => {
       let allVisible = true;
-      
-      Object.values(updated.frames).forEach(frame => {
+      Object.values(draft.frames).forEach(frame => {
         const isVisible = frame.layerVisibility[layerId] ?? true;
-        if (isVisible) atLeastOneVisible = true;
-        else allVisible = false;
+        if (!isVisible) allVisible = false;
       });
-      
-      const newVisibilityValue = allVisible ? false : true;
-      
-      // Aplicar a todos los frames
-      Object.keys(updated.frames).forEach(frameKey => {
-        updated.frames[frameKey].layerVisibility[layerId] = newVisibilityValue;
-        updated.computed.resolvedFrames[frameKey].layerVisibility[layerId] = newVisibilityValue;
+      const newVisibilityValue = !allVisible;
+      Object.keys(draft.frames).forEach(frameKey => {
+        draft.frames[frameKey].layerVisibility[layerId] = newVisibilityValue;
+        draft.computed.resolvedFrames[frameKey].layerVisibility[layerId] = newVisibilityValue;
       });
-      
-      return updated;
-    });
+    }));
   }, []);
   
 
@@ -3642,19 +3335,13 @@ const getFrameRate = useCallback((frameNumber) => {
       return updatedFrames;
     });
   
-    // ✅ AGREGAR: Actualizar framesResume
     setFramesResume(prev => {
-      const updated = { ...prev };
-      
-      if (updated.frames[frameStr]) {
-        const currentVisibility = updated.frames[frameStr].layerVisibility[layerId] ?? true;
-        const newVisibility = !currentVisibility;
-        
-        updated.frames[frameStr].layerVisibility[layerId] = newVisibility;
-        updated.computed.resolvedFrames[frameStr].layerVisibility[layerId] = newVisibility;
-      }
-      
-      return updated;
+      if (!prev.frames[frameStr]) return prev;
+      const newVisibility = !(prev.frames[frameStr].layerVisibility[layerId] ?? true);
+      return produce(prev, draft => {
+        draft.frames[frameStr].layerVisibility[layerId] = newVisibility;
+        draft.computed.resolvedFrames[frameStr].layerVisibility[layerId] = newVisibility;
+      });
     });
   }, [frames]);
 
@@ -3716,29 +3403,19 @@ const getFrameRate = useCallback((frameNumber) => {
       }
     });
   
-    // ✅ AGREGAR: Actualizar framesResume
-    setFramesResume(prev => {
-      const updated = { ...prev };
-      
+    setFramesResume(prev => produce(prev, draft => {
       frameNumbers.forEach(frameNum => {
-        if (updated.frames[frameNum]) {
-          // Marcar que la capa ya no tiene contenido
-          updated.frames[frameNum].layerHasContent[layerId] = false;
-          updated.computed.resolvedFrames[frameNum].layerHasContent[layerId] = false;
-          
-          // Limpiar pixelGroups
-          updated.frames[frameNum].pixelGroups[layerId] = {};
+        if (draft.frames[frameNum]) {
+          draft.frames[frameNum].layerHasContent[layerId] = false;
+          draft.computed.resolvedFrames[frameNum].layerHasContent[layerId] = false;
+          draft.frames[frameNum].pixelGroups[layerId] = {};
         }
       });
-      
-      // Recalcular framesByLayer
-      updated.computed.framesByLayer[layerId] = Object.keys(updated.frames)
+      draft.computed.framesByLayer[layerId] = Object.keys(draft.frames)
         .map(Number)
-        .filter(frameNum => updated.frames[frameNum].layerHasContent[layerId])
+        .filter(frameNum => draft.frames[frameNum].layerHasContent[layerId])
         .sort((a, b) => a - b);
-      
-      return updated;
-    });
+    }));
   
     // Re-renderizar si el frame actual está incluido
     if (frameNumbers.includes(currentFrame)) {
@@ -3891,7 +3568,97 @@ const getFrameRate = useCallback((frameNumber) => {
   }, [savePixelChangesToStack]);
   // ✅ Ref para guardar el estado anterior del canvas
   const previousCanvasStatesRef = useRef({});
-  
+
+// ---- Captura de trazo para undo/redo ----
+const strokeSnapshotRef = useRef(null);
+
+const computePixelChanges = (beforeData, afterData, width) => {
+  const added = [];
+  const modified = [];
+  const removed = [];
+  const len = beforeData.data.length;
+  for (let i = 0; i < len; i += 4) {
+    const bA = beforeData.data[i + 3];
+    const aA = afterData.data[i + 3];
+    const bR = beforeData.data[i], bG = beforeData.data[i + 1], bB = beforeData.data[i + 2];
+    const aR = afterData.data[i], aG = afterData.data[i + 1], aB = afterData.data[i + 2];
+    const pixelIndex = i / 4;
+    const x = pixelIndex % width;
+    const y = Math.floor(pixelIndex / width);
+    const wasEmpty = bA === 0;
+    const isEmpty = aA === 0;
+    if (wasEmpty && !isEmpty) {
+      added.push({ x, y, color: { r: aR, g: aG, b: aB, a: aA } });
+    } else if (!wasEmpty && isEmpty) {
+      removed.push({ x, y, color: { r: bR, g: bG, b: bB, a: bA } });
+    } else if (!wasEmpty && !isEmpty && (bR !== aR || bG !== aG || bB !== aB || bA !== aA)) {
+      modified.push({ x, y, oldColor: { r: bR, g: bG, b: bB, a: bA }, newColor: { r: aR, g: aG, b: aB, a: aA } });
+    }
+  }
+  return { added, modified, removed };
+};
+
+const captureStrokeStart = useCallback((layerId, frameId) => {
+  const frame = framesRef.current[frameId];
+  if (!frame?.canvases?.[layerId]) return;
+  const canvas = frame.canvases[layerId];
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return;
+  strokeSnapshotRef.current = {
+    layerId,
+    frameId,
+    imageData: ctx.getImageData(0, 0, canvas.width, canvas.height),
+  };
+}, []);
+
+const finalizeStroke = useCallback((layerId, frameId) => {
+  const snapshot = strokeSnapshotRef.current;
+  if (!snapshot || snapshot.layerId !== layerId || snapshot.frameId !== frameId) {
+    strokeSnapshotRef.current = null;
+    return;
+  }
+  const frame = framesRef.current[frameId];
+  if (!frame?.canvases?.[layerId]) { strokeSnapshotRef.current = null; return; }
+  const canvas = frame.canvases[layerId];
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) { strokeSnapshotRef.current = null; return; }
+  const afterData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const changes = computePixelChanges(snapshot.imageData, afterData, canvas.width);
+  strokeSnapshotRef.current = null;
+  if (changes.added.length > 0 || changes.modified.length > 0 || changes.removed.length > 0) {
+    logPixelChanges(changes, layerId, frameId);
+  }
+}, [logPixelChanges]);
+
+// Variante de computePixelChanges que opera sobre un sub-rect y traduce los
+// índices locales a coords absolutas del canvas.
+const computePixelChangesRegion = (beforeData, afterData, bx, by, bw) => {
+  const added = [];
+  const modified = [];
+  const removed = [];
+  const data0 = beforeData.data;
+  const data1 = afterData.data;
+  const len = data0.length;
+  for (let i = 0; i < len; i += 4) {
+    const bA = data0[i + 3];
+    const aA = data1[i + 3];
+    const bR = data0[i], bG = data0[i + 1], bB = data0[i + 2];
+    const aR = data1[i], aG = data1[i + 1], aB = data1[i + 2];
+    const pixelIndex = i / 4;
+    const x = bx + (pixelIndex % bw);
+    const y = by + Math.floor(pixelIndex / bw);
+    const wasEmpty = bA === 0;
+    const isEmpty = aA === 0;
+    if (wasEmpty && !isEmpty) {
+      added.push({ x, y, color: { r: aR, g: aG, b: aB, a: aA } });
+    } else if (!wasEmpty && isEmpty) {
+      removed.push({ x, y, color: { r: bR, g: bG, b: bB, a: bA } });
+    } else if (!wasEmpty && !isEmpty && (bR !== aR || bG !== aG || bB !== aB || bA !== aA)) {
+      modified.push({ x, y, oldColor: { r: bR, g: bG, b: bB, a: bA }, newColor: { r: aR, g: aG, b: aB, a: aA } });
+    }
+  }
+  return { added, modified, removed };
+};
 
 // Ref para trackear la última capa modificada
 const lastModifiedLayer = useRef(null);
@@ -3936,48 +3703,53 @@ const checkIfCanvasIsPaintedViaBlob = async (ctx, layerId, currentFrame, setFram
       hasContent ? 'color: green; font-weight: bold' : 'color: gray; font-style: italic'
     );
 
-    // ✅ Actualizar estado de framesResume
+    // ✅ Actualizar estado de framesResume inmutablemente (Immer).
+    // Antes: `{...prev}` + mutación in-place rompía React.memo downstream
+    // (los sub-objetos compartían referencia y las mutaciones no se
+    // detectaban por identidad). Con produce(), cada branch modificado
+    // tiene nueva referencia, las no tocadas la conservan → LayerRow.memo
+    // puede skippear limpiamente cuando no hay cambios para esa capa.
     setFramesResume(prev => {
       const currentHasContent = prev.frames[currentFrame]?.layerHasContent[layerId];
-
       if (currentHasContent === hasContent) return prev;
 
-      const updated = { ...prev };
-      updated.frames[currentFrame].layerHasContent[layerId] = hasContent;
-      updated.computed.resolvedFrames[currentFrame].layerHasContent[layerId] = hasContent;
+      return produce(prev, draft => {
+        draft.frames[currentFrame].layerHasContent[layerId] = hasContent;
+        draft.computed.resolvedFrames[currentFrame].layerHasContent[layerId] = hasContent;
 
-      const currentFrames = updated.computed.framesByLayer[layerId] || [];
-
-      if (hasContent && !currentFrames.includes(currentFrame)) {
-        updated.computed.framesByLayer[layerId] = [...currentFrames, currentFrame].sort((a, b) => a - b);
-      } else if (!hasContent && currentFrames.includes(currentFrame)) {
-        updated.computed.framesByLayer[layerId] = currentFrames.filter(f => f !== currentFrame);
-      }
-
-      return updated;
+        const currentFrames = draft.computed.framesByLayer[layerId] || [];
+        if (hasContent && !currentFrames.includes(currentFrame)) {
+          draft.computed.framesByLayer[layerId] = [...currentFrames, currentFrame].sort((a, b) => a - b);
+        } else if (!hasContent && currentFrames.includes(currentFrame)) {
+          draft.computed.framesByLayer[layerId] = currentFrames.filter(f => f !== currentFrame);
+        }
+      });
     });
 
   } catch (error) {
     console.error('[BlobCheck] Error:', error);
   }
 };
-// useEffect para actualizar framesResume cuando termine el dibujo
+// useEffect para actualizar framesResume cuando termine el dibujo y capturar trazos para undo/redo
 
 useEffect(() => {
-  if (!isPressed) {
-    const layerId = activeLayerId; // ← Usa tu identificador de layer actual
-    const canvas = layerCanvasesRef.current?.[layerId];
+  if (isPressed) {
+    // Inicio de trazo: capturar estado del canvas antes de pintar
+    captureStrokeStart(activeLayerId, currentFrame);
+  } else {
+    // Fin de trazo: comparar antes/después y registrar en historial
+    finalizeStroke(activeLayerId, currentFrame);
 
+    const layerId = activeLayerId;
+    const canvas = layerCanvasesRef.current?.[layerId];
     if (canvas && layerId != null) {
       const ctx = canvas.getContext('2d');
-
-      // Esperar un poco tras soltar el mouse para asegurar que la pintura terminó
       setTimeout(() => {
         checkIfCanvasIsPaintedViaBlob(ctx, layerId, currentFrame, setFramesResume);
       }, 50);
     }
   }
-}, [isPressed]);
+}, [isPressed]); // captureStrokeStart/finalizeStroke excluidos intencionalmente (refs estables)
 
 /*
 const drawOnLayer = useCallback((layerId, drawFn, shouldBatch = false) => {
@@ -4081,8 +3853,11 @@ const drawOnLayer = useCallback((layerId, drawFn, shouldBatch = false) => {
   // --- Ejecutar función de dibujo ---
   drawFn(targetCanvas._ctx);
 
-  // --- Actualizar estado si es necesario ---
+  // --- Invalidar caché de onion skin para este layer+frame ---
   if (!activeLighter) {
+    const pvKey = `${layerId}_${currentFrame}`;
+    paintVersionRef.current[pvKey] = (paintVersionRef.current[pvKey] ?? 0) + 1;
+
     if (lastModifiedLayer.current !== layerId) {
       lastModifiedLayer.current = layerId;
       setLastModifiedLayerState(layerId);
@@ -4105,6 +3880,62 @@ const drawOnLayer = useCallback((layerId, drawFn, shouldBatch = false) => {
   compositeRender,
   setLastModifiedLayerState
 ]);
+
+// Commit explícito para figuras geométricas (square, circle, line, etc.).
+// Antes las figuras dibujaban con drawOnLayer pero NUNCA registraban en el
+// historial — el mecanismo automático captureStrokeStart/finalizeStroke es
+// dependiente del timing de useEffect [isPressed] y no capturaba los cambios
+// de figuras de forma fiable. Este helper diffea el bbox de la figura y emite
+// la entrada al history, además de cancelar el snapshot automático para evitar
+// doble registro. Usa drawOnLayer internamente, por lo que respeta lighter mode,
+// onion-skin cache invalidation y compositeRender.
+const commitShapeWithHistory = useCallback((layerId, frameId, bbox, drawFn) => {
+  // En modo lighter, el dibujo va a un canvas temporal que se mergea después;
+  // el diff por bbox no aplica directamente. Caemos al drawOnLayer normal sin
+  // registrar en history (fallback seguro, sin ruido).
+  if (activeLighter) {
+    drawOnLayer(layerId, drawFn);
+    return;
+  }
+
+  const canvas = layerCanvasesRef.current[layerId];
+  if (!canvas) {
+    drawOnLayer(layerId, drawFn);
+    return;
+  }
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) {
+    drawOnLayer(layerId, drawFn);
+    return;
+  }
+
+  // Clamp del bbox a los bordes del canvas
+  const bx = Math.max(0, Math.floor(bbox.x));
+  const by = Math.max(0, Math.floor(bbox.y));
+  const bex = Math.min(canvas.width, Math.ceil(bbox.x + bbox.w));
+  const bey = Math.min(canvas.height, Math.ceil(bbox.y + bbox.h));
+  const bw = bex - bx;
+  const bh = bey - by;
+
+  let beforeData = null;
+  if (bw > 0 && bh > 0) {
+    beforeData = ctx.getImageData(bx, by, bw, bh);
+  }
+
+  // drawOnLayer dibuja sincronamente, maneja onion invalidation y programa render.
+  drawOnLayer(layerId, drawFn);
+
+  // Cancelar snapshot automático para que finalizeStroke no duplique el registro.
+  strokeSnapshotRef.current = null;
+
+  if (beforeData) {
+    const afterData = ctx.getImageData(bx, by, bw, bh);
+    const changes = computePixelChangesRegion(beforeData, afterData, bx, by, bw);
+    if (changes.added.length > 0 || changes.modified.length > 0 || changes.removed.length > 0) {
+      logPixelChanges(changes, layerId, frameId);
+    }
+  }
+}, [activeLighter, drawOnLayer, logPixelChanges]);
 
 // ===== FUNCIÓN PARA MANEJAR CAMBIO DE ACTIVELIGHTER =====
 
@@ -4212,43 +4043,63 @@ const processPaintBatch = useCallback(() => {
   paintBatchTimer.current = null;
 }, []);
 
-// 5. NUEVA FUNCIÓN: paintPixelsImmediate - ULTRA-OPTIMIZADA
+// 5. paintPixelsImmediate: dirty-rect para leer/escribir solo la región modificada.
+// Evita getImageData/putImageData de toda la canvas cuando solo cambian pocos píxeles.
 const paintPixelsImmediate = useCallback((layerId, frameNumber, pixels, rgba) => {
   const frame = frames[frameNumber];
   if (!frame?.canvases[layerId]) return false;
-  
-  const canvas = frame.canvases[layerId];
-  const ctx = canvas.getContext('2d', { 
-    willReadFrequently: true,
-    alpha: true
-  });
-  
-  if (!ctx || pixels.length === 0) return false;
 
-  // Crear imageData para toda la operación
-  const imageData = ctx.getImageData(0, 0, width, height);
-  const data = imageData.data;
-  
-  // Optimización: usar TypedArray para mejor rendimiento
+  const canvas = frame.canvases[layerId];
+  if (!canvas._ctx) {
+    canvas._ctx = canvas.getContext('2d', { willReadFrequently: true, alpha: true });
+  }
+  const ctx = canvas._ctx;
+
   const pixelCount = pixels.length;
+  if (!ctx || pixelCount === 0) return false;
+
+  // Calcular bounding rect de los píxeles a modificar
+  let minX = width, minY = height, maxX = 0, maxY = 0;
   for (let i = 0; i < pixelCount; i++) {
-    const pixel = pixels[i];
-    if (pixel.x >= 0 && pixel.x < width && pixel.y >= 0 && pixel.y < height) {
-      const index = (pixel.y * width + pixel.x) << 2; // Bit shift más rápido que * 4
-      data[index] = rgba.r;
+    const { x, y } = pixels[i];
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  }
+  minX = Math.max(0, minX);
+  minY = Math.max(0, minY);
+  maxX = Math.min(width - 1, maxX);
+  maxY = Math.min(height - 1, maxY);
+
+  const dirtyW = maxX - minX + 1;
+  const dirtyH = maxY - minY + 1;
+
+  // Leer solo la región sucia — mucho menos datos que la canvas completa
+  const imageData = ctx.getImageData(minX, minY, dirtyW, dirtyH);
+  const data = imageData.data;
+
+  for (let i = 0; i < pixelCount; i++) {
+    const { x, y } = pixels[i];
+    if (x >= 0 && x < width && y >= 0 && y < height) {
+      const index = ((y - minY) * dirtyW + (x - minX)) << 2;
+      data[index]     = rgba.r;
       data[index + 1] = rgba.g;
       data[index + 2] = rgba.b;
       data[index + 3] = rgba.a;
     }
   }
-  
-  ctx.putImageData(imageData, 0, 0);
-  
-  // Solo re-renderizar si es el frame actual
+
+  ctx.putImageData(imageData, minX, minY);
+
+  // Invalidar caché de onion skin para esta capa+frame
+  const pvKey = `${layerId}_${frameNumber}`;
+  paintVersionRef.current[pvKey] = (paintVersionRef.current[pvKey] ?? 0) + 1;
+
   if (frameNumber === currentFrame) {
     requestAnimationFrame(compositeRender);
   }
-  
+
   return true;
 }, [frames, width, height, currentFrame, compositeRender]);
 
@@ -6559,10 +6410,12 @@ const exportLayersAndFrames = useCallback(() => {
         zIndex: layer.zIndex,
         isGroupLayer: layer.isGroupLayer || false,
         parentLayerId: layer.parentLayerId || null,
-        
+        blendMode: layer.blendMode ?? 'normal',
+        blendModeOverride: layer.blendModeOverride ?? null,
+
         // Contenido pintado
         canvasData: canvasData,
-        
+
         // Grupos de píxeles
         pixelGroups: frame.pixelGroups[layer.id] || {}
       };
@@ -6612,6 +6465,7 @@ const importLayersAndFrames = useCallback((importData) => {
         layerVisibility: {},
         layerOpacity: {},
         layerHasContent: {},
+        layerBlendModeOverride: {},
         canvases: {},
         pixelGroups: {},
         duration: frameData.duration || defaultFrameDuration,
@@ -6632,6 +6486,8 @@ const importLayersAndFrames = useCallback((importData) => {
         const layerData = frameData.layers[layerId];
         
         // Recrear capa
+        const rawBlend = layerData.blendMode;
+        const rawOverride = layerData.blendModeOverride;
         const layer = {
           id: layerId,
           name: layerData.name,
@@ -6641,7 +6497,11 @@ const importLayersAndFrames = useCallback((importData) => {
           opacity: layerData.opacity,
           zIndex: layerData.zIndex,
           isGroupLayer: layerData.isGroupLayer,
-          parentLayerId: layerData.parentLayerId
+          parentLayerId: layerData.parentLayerId,
+          blendMode: isValidBlendMode(rawBlend) ? rawBlend : 'normal',
+          blendModeOverride: (rawOverride != null && isValidBlendMode(rawOverride))
+            ? rawOverride
+            : null,
         };
         
         newFrame.layers.push(layer);
@@ -6679,9 +6539,13 @@ const importLayersAndFrames = useCallback((importData) => {
         // Actualizar framesResume para esta capa
         newFramesResume.frames[frameNumber].layerVisibility[layerId] = layerData.visible;
         newFramesResume.frames[frameNumber].layerOpacity[layerId] = layerData.opacity;
-        newFramesResume.frames[frameNumber].layerHasContent[layerId] = 
+        newFramesResume.frames[frameNumber].layerHasContent[layerId] =
           layerData.canvasData && layerData.canvasData.pixels.length > 0;
         newFramesResume.frames[frameNumber].pixelGroups[layerId] = layerData.pixelGroups || {};
+        // Sembrar override per-frame (sin esto, primer Ctrl+Z post-load borra los overrides importados).
+        if (rawOverride != null && isValidBlendMode(rawOverride)) {
+          newFramesResume.frames[frameNumber].layerBlendModeOverride[layerId] = rawOverride;
+        }
         
         // Actualizar resolved frames
         if (!newFramesResume.computed.resolvedFrames[frameNumber]) {
@@ -7464,12 +7328,112 @@ const createLayerAndPaintDataUrlCentered = useCallback(async (dataUrl, options =
 
 
 
+// ===== RESTAURACIÓN DESDE FORMATO v2 =====
+// Recibe el projectData del nuevo formato .pixcalli y los canvases ya
+// deserializados (objetos canvas DOM), y restaura todo el estado del editor.
+const restoreFromProjectData = useCallback(async (projectData, restoredCanvases) => {
+  try {
+    isRestoringRef.current = true;
+
+    // 1. Restaurar framesResume si viene válido
+    if (projectData.framesResume) {
+      setFramesResume(projectData.framesResume);
+    }
+
+    // 2. Restaurar capas
+    if (Array.isArray(projectData.layers) && projectData.layers.length > 0) {
+      setLayers(projectData.layers);
+    }
+
+    // 3. Reconstruir `frames` desde restoredCanvases + framesResume
+    // restoredCanvases tiene claves "frame_N_layerId"
+    if (projectData.framesResume?.frames && restoredCanvases) {
+      const newFrames = {};
+
+      for (const [frameKey, frameResume] of Object.entries(projectData.framesResume.frames)) {
+        const frameNumber = Number(frameKey);
+        const frameCanvases = {};
+
+        // Buscar todos los canvases que pertenecen a este frame
+        for (const [key, canvas] of Object.entries(restoredCanvases)) {
+          const prefix = `frame_${frameNumber}_`;
+          if (key.startsWith(prefix)) {
+            const layerId = key.slice(prefix.length);
+            frameCanvases[layerId] = canvas;
+          }
+        }
+
+        // Reconstruir capas del frame combinando los datos planos (layers) con
+        // los datos por-frame almacenados en framesResume (opacidad, visibilidad,
+        // blend mode override). Sin este merge, los overrides per-frame se pierden
+        // al recargar el proyecto.
+        const perFrameLayers = (projectData.layers ?? []).map((flat) => ({
+          ...flat,
+          visible: typeof flat.visible === 'object'
+            ? flat.visible
+            : { [frameNumber]: frameResume.layerVisibility?.[flat.id] ?? true },
+          opacity: frameResume.layerOpacity?.[flat.id] ?? flat.opacity ?? 1,
+          blendMode: flat.blendMode ?? 'normal',
+          blendModeOverride: frameResume.layerBlendModeOverride?.[flat.id] ?? null,
+        }));
+
+        newFrames[frameNumber] = {
+          canvases: frameCanvases,
+          layers: perFrameLayers,
+          // pixelGroups: imprescindible aunque venga vacío. Sin este campo,
+          // setActiveFrame y otros hooks llaman setPixelGroups(undefined) y
+          // los components que hacen Object.entries(pixelGroups) crashean.
+          pixelGroups: frameResume.pixelGroups ?? {},
+          frameDuration: frameResume.duration ?? (projectData.animation?.defaultFrameDuration ?? 100),
+          tags: frameResume.tags ?? [],
+        };
+      }
+
+      setFrames(newFrames);
+    }
+
+    // 4. Restaurar frame activo
+    // Nota: comparar con != null en lugar de truthy — frame 0 es valido
+    // (los importers GIF/aseprite usan indices 0-based).
+    if (projectData.viewport?.currentFrame != null) {
+      setCurrentFrame(projectData.viewport.currentFrame);
+    }
+
+    // 5. Restaurar capa activa
+    if (projectData.viewport?.activeLayerId) {
+      setActiveLayerId(projectData.viewport.activeLayerId);
+    }
+
+    // 6. Restaurar onion skin
+    if (projectData.onionSkin?.settings) {
+      setOnionSkinSettings(prev => ({ ...prev, ...projectData.onionSkin.settings }));
+    }
+    if (projectData.onionSkin?.framesConfig) {
+      setOnionFramesConfig(projectData.onionSkin.framesConfig);
+    }
+    if (typeof projectData.onionSkin?.enabled === 'boolean') {
+      setOnionSkinEnabled(projectData.onionSkin.enabled);
+    }
+
+    console.log('Proyecto restaurado correctamente desde formato v2');
+    return true;
+  } catch (err) {
+    console.error('Error restaurando proyecto:', err);
+    return false;
+  } finally {
+    // Pequeño delay para que React procese todos los setState antes de
+    // volver a permitir que el historial registre cambios.
+    setTimeout(() => { isRestoringRef.current = false; }, 100);
+  }
+}, [setLayers, setFramesResume, setFrames, setCurrentFrame, setActiveLayerId,
+    setOnionSkinSettings, setOnionFramesConfig, setOnionSkinEnabled]);
+
 return {
   // State
   layers,
   compositeCanvasRef,
   viewportOffset,
-  activeLayerId, 
+  activeLayerId,
   setActiveLayerId,
   
   // Layer management
@@ -7481,6 +7445,12 @@ return {
   renameLayer,
   clearLayer,
   duplicateLayer,
+
+  // Capas 3D — metadata vive en framesResume.extensions.threeDLayers.
+  // Ver Workspace/threeD/schema.js y la fase de plan correspondiente.
+  setLayerThreeD,
+  setLayer3DFrameOverride,
+  getLayerThreeD,
   
   // Drawing and rendering
   drawOnLayer,
@@ -7601,6 +7571,11 @@ onionFramesConfig, // Recibir la configuración actual del estado principal
 setFrameOpacity,
 getFrameOpacity,
 
+  // === Modos de fusión ===
+  resolveLayerBlendMode,
+  setLayerBlendMode,
+  setFrameBlendModeOverride,
+
     getFramesInfo, // ahora incluye información de duración
 
 
@@ -7618,12 +7593,12 @@ undo,
 redo,
 undoPixelChanges,
 redoPixelChanges,
-undoFrames, // Función específica para deshacer frames
-redoFrames, // Función específica para rehacer frames
+undoFrames,
+redoFrames,
 
 // Estados de disponibilidad
-canUndo: canUndoComplete,
-canRedo: canRedoComplete,
+canUndo,
+canRedo,
 canUndoPixels,
 canRedoPixels,
 canUndoFrames,
@@ -7634,13 +7609,19 @@ clearHistory: clearAllHistory,
 debugInfo: getCompleteDebugInfo,
 getChangePreview,
 
-// Información del stack
-pixelChangesStack,
-pixelChangesIndex,
-
-// Función logPixelChanges modificada (ya incluye guardado en stack)
+// Función logPixelChanges (incluye guardado en stack)
 logPixelChanges,
 history,
+
+// API low-level del historial (requerida por modales que mutan canvas completo —
+// filtros, insertar texto, scripts). Permite registrar frame_state snapshots
+// desde fuera del hook. Ver plan-ambicioso: cableado Sprint 1–6.
+historyPush,
+
+// Captura de trazos para undo/redo
+captureStrokeStart,
+finalizeStroke,
+commitShapeWithHistory,
 
 //exportacion: 
 exportLayersAndFrames,
@@ -7659,7 +7640,9 @@ exportLayersAndFrames,
 //gestion del data url:
 
 createLayerAndPaintDataUrlCentered,
-//gestion de aislamiento de
+
+// Restauración completa desde formato .pixcalli v2
+restoreFromProjectData,
 
 };
 }

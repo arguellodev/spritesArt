@@ -1,152 +1,132 @@
 import { useEffect, useState } from "react";
 import { LuChevronUp, LuChevronDown } from "react-icons/lu";
 
-const BlurFingerTool = ({ setToolParameters, tool, toolParameters }) => {
-  // Estados para las diferentes configuraciones del BlurFinger
-  const [width, setWidth] = useState(5);
-  const [blurIntensity, setBlurIntensity] = useState(0.5);
-  const [blurRadius, setBlurRadius] = useState(1);
-  const [preserveOpacity, setPreserveOpacity] = useState(true);
-  const [blurMode, setBlurMode] = useState('gaussian');
+const W_MIN = 1;
+const W_MAX = 20;
+const W_DEFAULT = 5;
+const I_MIN = 0.1;
+const I_MAX = 1.0;
+const I_DEFAULT = 0.5;
+const R_MIN = 1;
+const R_MAX = 5;
+const R_DEFAULT = 1;
 
-  // Función para manejar cambios en el grosor con botones
-  const handleWidthChange = (increment) => {
-    const currentWidth = typeof width === 'number' ? width : 5;
-    const newWidth = Math.max(1, Math.min(20, currentWidth + increment));
-    setWidth(newWidth);
-  };
+const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+const round1 = (n) => parseFloat(n.toFixed(2));
 
-  // Función para manejar input directo del grosor
-  const handleWidthInput = (e) => {
-    const value = e.target.value;
-    
-    if (value === '') {
-      setWidth('');
-      return;
-    }
-    
-    const numValue = parseInt(value);
-    if (!isNaN(numValue)) {
-      setWidth(Math.max(1, Math.min(20, numValue)));
-    }
-  };
+const BlurFingerTool = ({ setToolParameters }) => {
+  const [width, setWidth] = useState(W_DEFAULT);
+  const [blurIntensity, setBlurIntensity] = useState(I_DEFAULT);
+  const [blurRadius, setBlurRadius] = useState(R_DEFAULT);
 
-  // Función para manejar cuando se pierde el foco en width
-  const handleWidthBlur = (e) => {
-    const value = e.target.value;
-    if (value === '' || isNaN(parseInt(value))) {
-      setWidth(5); // Valor por defecto
-    }
-  };
-
-  // Función para manejar cambios en la intensidad con botones
-  const handleIntensityChange = (increment) => {
-    const currentIntensity = typeof blurIntensity === 'number' ? blurIntensity : 0.5;
-    const newIntensity = Math.max(0.1, Math.min(1.0, parseFloat((currentIntensity + increment).toFixed(2))));
-    setBlurIntensity(newIntensity);
-  };
-
-  // Función para manejar input directo de la intensidad
-  const handleIntensityInput = (e) => {
-    const value = e.target.value;
-    
-    if (value === '') {
-      setBlurIntensity('');
-      return;
-    }
-    
-    const numValue = parseFloat(value);
-    if (!isNaN(numValue)) {
-      setBlurIntensity(Math.max(0.1, Math.min(1.0, numValue)));
-    }
-  };
-
-  // Función para manejar cuando se pierde el foco en intensity
-  const handleIntensityBlur = (e) => {
-    const value = e.target.value;
-    if (value === '' || isNaN(parseFloat(value))) {
-      setBlurIntensity(0.5); // Valor por defecto
-    }
-  };
-
-  // Función para manejar cambios en el radio con botones
-  const handleRadiusChange = (increment) => {
-    const currentRadius = typeof blurRadius === 'number' ? blurRadius : 1;
-    const newRadius = Math.max(1, Math.min(5, currentRadius + increment));
-    setBlurRadius(newRadius);
-  };
-
-  // Función para manejar input directo del radio
-  const handleRadiusInput = (e) => {
-    const value = e.target.value;
-    
-    if (value === '') {
-      setBlurRadius('');
-      return;
-    }
-    
-    const numValue = parseInt(value);
-    if (!isNaN(numValue)) {
-      setBlurRadius(Math.max(1, Math.min(5, numValue)));
-    }
-  };
-
-  // Función para manejar cuando se pierde el foco en radius
-  const handleRadiusBlur = (e) => {
-    const value = e.target.value;
-    if (value === '' || isNaN(parseInt(value))) {
-      setBlurRadius(1); // Valor por defecto
-    }
-  };
-
-  // useEffect para actualizar los parámetros de la herramienta
   useEffect(() => {
-    // Solo actualizar si todos los valores son números válidos
-    if (typeof width === 'number' && 
-        typeof blurIntensity === 'number' && 
-        typeof blurRadius === 'number') {
-     
-      setToolParameters(prev => ({
-        ...prev,
-        width: width,
-        blurIntensity: blurIntensity,
-        blurRadius: blurRadius,
-        preserveOpacity: preserveOpacity,
-        blurMode: blurMode
-      }));
+    if (
+      typeof width !== "number" ||
+      typeof blurIntensity !== "number" ||
+      typeof blurRadius !== "number"
+    ) {
+      return;
     }
-  }, [width, blurIntensity, blurRadius, preserveOpacity, blurMode, setToolParameters]);
+    setToolParameters((prev) => ({
+      ...prev,
+      width,
+      blurIntensity,
+      blurRadius,
+    }));
+  }, [width, blurIntensity, blurRadius, setToolParameters]);
+
+  // --- Width ---
+  const onWidthInput = (e) => {
+    const v = e.target.value;
+    if (v === "") return setWidth("");
+    const n = parseInt(v, 10);
+    if (!Number.isNaN(n)) setWidth(clamp(n, W_MIN, W_MAX));
+  };
+  const onWidthBlur = (e) => {
+    if (e.target.value === "" || Number.isNaN(parseInt(e.target.value, 10))) {
+      setWidth(W_DEFAULT);
+    }
+  };
+  const stepWidth = (delta) => {
+    const cur = typeof width === "number" ? width : W_DEFAULT;
+    setWidth(clamp(cur + delta, W_MIN, W_MAX));
+  };
+
+  // --- Intensity ---
+  const onIntensityInput = (e) => {
+    const v = e.target.value;
+    if (v === "") return setBlurIntensity("");
+    const n = parseFloat(v);
+    if (!Number.isNaN(n)) setBlurIntensity(clamp(n, I_MIN, I_MAX));
+  };
+  const onIntensityBlur = (e) => {
+    if (e.target.value === "" || Number.isNaN(parseFloat(e.target.value))) {
+      setBlurIntensity(I_DEFAULT);
+    }
+  };
+  const stepIntensity = (delta) => {
+    const cur =
+      typeof blurIntensity === "number" ? blurIntensity : I_DEFAULT;
+    setBlurIntensity(clamp(round1(cur + delta), I_MIN, I_MAX));
+  };
+
+  // --- Radius ---
+  const onRadiusInput = (e) => {
+    const v = e.target.value;
+    if (v === "") return setBlurRadius("");
+    const n = parseInt(v, 10);
+    if (!Number.isNaN(n)) setBlurRadius(clamp(n, R_MIN, R_MAX));
+  };
+  const onRadiusBlur = (e) => {
+    if (e.target.value === "" || Number.isNaN(parseInt(e.target.value, 10))) {
+      setBlurRadius(R_DEFAULT);
+    }
+  };
+  const stepRadius = (delta) => {
+    const cur = typeof blurRadius === "number" ? blurRadius : R_DEFAULT;
+    setBlurRadius(clamp(cur + delta, R_MIN, R_MAX));
+  };
+
+  const wValue = typeof width === "number" ? width : W_DEFAULT;
+  const iValue =
+    typeof blurIntensity === "number" ? blurIntensity : I_DEFAULT;
+  const rValue = typeof blurRadius === "number" ? blurRadius : R_DEFAULT;
 
   return (
     <div className="polygon-tool-container">
       <div className="tool-configs">
-        
-        {/* Configuración de grosor del pincel */}
         <div className="config-item">
-          <label className="tool-label">Brush Size</label>
+          <label className="tool-label" htmlFor="blurFingerTool-width">
+            Brush Size
+          </label>
           <div className="input-container">
-            <input 
+            <input
+              id="blurFingerTool-width"
               type="number"
-              min="1"
-              max="20"
+              min={W_MIN}
+              max={W_MAX}
               value={width}
-              onChange={handleWidthInput}
-              onBlur={handleWidthBlur}
-              className="number-input" 
+              onChange={onWidthInput}
+              onBlur={onWidthBlur}
+              className="number-input"
             />
             <span className="tool-value">px</span>
             <div className="increment-buttons-container">
-              <button 
+              <button
+                type="button"
                 className="increment-btn"
-                onClick={() => handleWidthChange(1)}
-                disabled={(typeof width === 'number' ? width : 5) >= 20}
+                onClick={() => stepWidth(1)}
+                disabled={wValue >= W_MAX}
+                aria-label="Aumentar tamaño del pincel"
               >
                 <LuChevronUp />
               </button>
-              <button 
+              <button
+                type="button"
                 className="increment-btn"
-                onClick={() => handleWidthChange(-1)}
-                disabled={(typeof width === 'number' ? width : 5) <= 1}
+                onClick={() => stepWidth(-1)}
+                disabled={wValue <= W_MIN}
+                aria-label="Reducir tamaño del pincel"
               >
                 <LuChevronDown />
               </button>
@@ -154,68 +134,38 @@ const BlurFingerTool = ({ setToolParameters, tool, toolParameters }) => {
           </div>
         </div>
 
-        {/* Configuración de intensidad del blur */}
         <div className="config-item">
-          <label className="tool-label">Blur Intensity</label>
+          <label className="tool-label" htmlFor="blurFingerTool-intensity">
+            Blur Intensity
+          </label>
           <div className="input-container">
-            <input 
-              type="number" 
-              min="0.1" 
-              max="1.0" 
-              step="0.1"
-              value={blurIntensity} 
-              onChange={handleIntensityInput}
-              onBlur={handleIntensityBlur}
-              className="number-input" 
-            />
-            <span className="tool-value">%</span>
-            <div className="increment-buttons-container">
-              <button 
-                type="button"
-                onClick={() => handleIntensityChange(0.1)}
-                className="increment-btn"
-                disabled={blurIntensity >= 1.0}
-              >
-                <LuChevronUp />
-              </button>
-              <button 
-                type="button"
-                onClick={() => handleIntensityChange(-0.1)}
-                className="increment-btn"
-                disabled={blurIntensity <= 0.1}
-              >
-                <LuChevronDown />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Configuración del radio de blur */}
-        <div className="config-item">
-          <label className="tool-label">Blur Radius</label>
-          <div className="input-container">
-            <input 
+            <input
+              id="blurFingerTool-intensity"
               type="number"
-              min="1"
-              max="5"
-              value={blurRadius}
-              onChange={handleRadiusInput}
-              onBlur={handleRadiusBlur}
-              className="number-input" 
+              min={I_MIN}
+              max={I_MAX}
+              step="0.1"
+              value={blurIntensity}
+              onChange={onIntensityInput}
+              onBlur={onIntensityBlur}
+              className="number-input"
             />
-            <span className="tool-value">px</span>
             <div className="increment-buttons-container">
-              <button 
+              <button
+                type="button"
                 className="increment-btn"
-                onClick={() => handleRadiusChange(1)}
-                disabled={(typeof blurRadius === 'number' ? blurRadius : 1) >= 5}
+                onClick={() => stepIntensity(0.1)}
+                disabled={iValue >= I_MAX}
+                aria-label="Aumentar intensidad"
               >
                 <LuChevronUp />
               </button>
-              <button 
+              <button
+                type="button"
                 className="increment-btn"
-                onClick={() => handleRadiusChange(-1)}
-                disabled={(typeof blurRadius === 'number' ? blurRadius : 1) <= 1}
+                onClick={() => stepIntensity(-0.1)}
+                disabled={iValue <= I_MIN}
+                aria-label="Reducir intensidad"
               >
                 <LuChevronDown />
               </button>
@@ -223,44 +173,44 @@ const BlurFingerTool = ({ setToolParameters, tool, toolParameters }) => {
           </div>
         </div>
 
-        {/* Configuración para preservar opacidad */}
         <div className="config-item">
-          <label className="tool-label">Preserve Opacity</label>
+          <label className="tool-label" htmlFor="blurFingerTool-radius">
+            Blur Radius
+          </label>
           <div className="input-container">
-            <label className="checkbox-container">
-              <input
-                type="checkbox"
-                checked={preserveOpacity}
-                onChange={(e) => setPreserveOpacity(e.target.checked)}
-                className="checkbox-input"
-              />
-              <span className="checkbox-checkmark"></span>
-              <span className="checkbox-label">
-                {preserveOpacity ? "Enabled" : "Disabled"}
-              </span>
-            </label>
+            <input
+              id="blurFingerTool-radius"
+              type="number"
+              min={R_MIN}
+              max={R_MAX}
+              value={blurRadius}
+              onChange={onRadiusInput}
+              onBlur={onRadiusBlur}
+              className="number-input"
+            />
+            <span className="tool-value">px</span>
+            <div className="increment-buttons-container">
+              <button
+                type="button"
+                className="increment-btn"
+                onClick={() => stepRadius(1)}
+                disabled={rValue >= R_MAX}
+                aria-label="Aumentar radio"
+              >
+                <LuChevronUp />
+              </button>
+              <button
+                type="button"
+                className="increment-btn"
+                onClick={() => stepRadius(-1)}
+                disabled={rValue <= R_MIN}
+                aria-label="Reducir radio"
+              >
+                <LuChevronDown />
+              </button>
+            </div>
           </div>
         </div>
-
-        {/* Configuración del modo de blur */}
-        <div className="config-item">
-          <label className="tool-label">Blur Mode</label>
-          <div className="input-container">
-            <select
-              value={blurMode}
-              onChange={(e) => setBlurMode(e.target.value)}
-              className="select-input"
-            >
-              <option value="gaussian">🌀 Gaussian Blur</option>
-              <option value="box">⬜ Box Blur</option>
-              <option value="motion">➡️ Motion Blur</option>
-              <option value="radial">🎯 Radial Blur</option>
-            </select>
-          </div>
-        </div>
-
-     
-
       </div>
     </div>
   );

@@ -368,6 +368,25 @@
   border-color: var(--danger);
 }
 
+/* Blend mode button: indica visualmente cuando la capa NO está en Normal,
+   y resalta cuando el popover está abierto. */
+.layer-btn.blend-mode-btn.has-blend {
+  background: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 1px var(--accent-color) inset;
+}
+
+.layer-btn.blend-mode-btn.has-blend:hover:not(:disabled) {
+  background: var(--accent-active, var(--accent-color));
+  color: white;
+}
+
+.layer-btn.blend-mode-btn.open {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
 /* Create Group Section */
 .create-group-section {
   position: absolute;
@@ -941,31 +960,16 @@ margin-right: 20px;
   color: white;
 }
 
-/* ===== TIMELINE LAYERS ===== */
+/* ===== TIMELINE LAYERS =====
+   Ya NO tiene overflow propio: el scroll (horizontal + vertical) lo maneja
+   `.timeline-container` (padre) para que el header-row y las filas de capas
+   scrolleen como una sola unidad. */
 .timeline-layers {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--accent-color) var(--bg-tertiary);
-}
-
-.timeline-layers::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.timeline-layers::-webkit-scrollbar-track {
-  background: var(--bg-tertiary);
-}
-
-.timeline-layers::-webkit-scrollbar-thumb {
-  background: var(--accent-color);
-  border-radius: 3px;
-}
-
-.timeline-layers::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-hover);
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+  min-width: 100%;
 }
 
 /* ===== ANIMATION LAYER ROW ===== */
@@ -1122,7 +1126,17 @@ margin-right: 20px;
   background-color: var(--layer-hover);
 }
 
-.timeline-frame.current {
+/* Frame seleccionado en CUALQUIER capa — tinte tenue para que el usuario
+ * vea el rango sin importar en que fila de capa este el cursor durante
+ * un drag-select. La capa activa ademas tiene el modificador
+ * --active-layer (debajo) que pinta el acento mas saturado. */
+.timeline-frame.selected-frame {
+  background: linear-gradient(135deg, rgba(140, 82, 255, 0.18), rgba(140, 82, 255, 0.06));
+  box-shadow: inset 0 -2px 0 rgba(140, 82, 255, 0.55);
+}
+
+.timeline-frame.current,
+.timeline-frame.selected-frame--active-layer {
   background: linear-gradient(135deg, rgba(140, 82, 255, 0.3), rgba(140, 82, 255, 0.1));
   border-right-color: var(--accent-color);
   box-shadow: inset 0 -2px 0 var(--accent-color);
@@ -1747,3 +1761,1225 @@ margin-right: 20px;
 }
 
 /* Estilo para indicar que se puede hacer selección múltiple */
+
+/* ============================================================================
+   GRID TIMELINE — variable global de anchura de la columna de capas.
+   Compartida por `.layer-info` (cada LayerRow) y `.timeline-header-left-placeholder`
+   (fila de frame-numbers del FramesTimeline). Esta igualdad es lo que hace que
+   la celda #N del header quede EXACTAMENTE encima de la celda #N de cada capa.
+   ============================================================================ */
+:root {
+  --layer-info-width: 220px;
+  --frame-cell-width: 50px;
+}
+
+/* Forzamos el ancho de layer-info para alineación columnar.
+   box-sizing: border-box para que el padding y el border-right queden
+   INCLUIDOS dentro de --layer-info-width. Si no, el ancho total real sería
+   width + padding + border, y desalinearía con el placeholder del header. */
+.animation-layer-row .layer-info {
+  width: var(--layer-info-width) !important;
+  min-width: var(--layer-info-width);
+  max-width: var(--layer-info-width);
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+/* Fila header de FramesTimeline: placeholder de capas + strip de frames.
+ * height: auto + min-height: 28px → el row es 28px sin tags, y crece
+ * cuando TagBand inserta filas (1 row = +18px, 2 rows = +34px).
+ * Antes era height: 28px fijo, lo que aplastaba el strip de numeros
+ * porque la wrapper en column-flex repartia los 28px entre TagBand y
+ * el strip (flex:1 del strip lo dejaba en negativo). */
+.timeline-header-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  height: auto;
+  min-height: 28px;
+  background: var(--bg-tertiary);
+  border-bottom: 2px solid var(--border-color);
+  /* Sticky-top dentro del `.timeline-container` scrollable: al scrollear
+     verticalmente el header queda fijo arriba; al scrollear horizontalmente
+     las celdas se mueven con las capas (mismo scroll parent). */
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  width: max-content;   /* mismo ancho que cada .animation-layer-row abajo */
+  min-width: 100%;
+}
+
+.timeline-header-left-placeholder {
+  width: var(--layer-info-width);
+  min-width: var(--layer-info-width);
+  max-width: var(--layer-info-width);
+  flex-shrink: 0;
+  box-sizing: border-box;               /* mismo modelo que .layer-info */
+  background: var(--bg-tertiary);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  position: relative;
+  padding: 0 6px;
+}
+
+/* Acciones de capa en la esquina top-left (ANTES estaban en la animation-bar):
+   Nueva + mover arriba + mover abajo. */
+.layers-corner-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.corner-add-layer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+  background: var(--accent-color);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
+  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.corner-add-layer-btn:hover {
+  background: var(--accent-active, var(--accent-color));
+}
+
+.corner-add-layer-btn:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+.corner-add-layer-btn > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.corner-move-btn {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--button-bg);
+  border: 1px solid var(--button-border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 11px;
+}
+
+.corner-move-btn:hover:not(:disabled) {
+  background: var(--button-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-color);
+}
+
+.corner-move-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* En columnas estrechas (layer-info-width pequeño), oculta el texto
+   "Nueva" y deja solo el ícono. */
+@container (max-width: 180px) {
+  .corner-add-layer-btn > span {
+    display: none;
+  }
+}
+
+/* --- Resizer de la columna de capas -------------------------------------
+   Grip directo `position: absolute` dentro de `.timeline-container`
+   (position: relative + overflow: auto): el grip se posiciona relativo al
+   padding box del contenedor — efectivamente fijo al viewport del scroll.
+   Así queda siempre en la frontera `--layer-info-width` sin importar cuánto
+   se scrollee. ---------------------------------------------------------- */
+.layers-column-resizer-grip {
+  position: absolute;
+  top: 0;
+  bottom: 0;                                     /* ocupa toda la altura visible */
+  width: 10px;                                   /* área de agarre amplia */
+  left: calc(var(--layer-info-width) - 5px);    /* centrado sobre la frontera */
+  cursor: col-resize;
+  z-index: 15;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+
+/* Línea fina visible en hover / drag — la barra de agarre es transparente
+   para no ser visualmente intrusiva cuando no se usa. */
+.layers-column-resizer-grip::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;                                     /* centrado en el grip de 10px */
+  width: 2px;
+  background: var(--accent-color);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.layers-column-resizer-grip:hover::before,
+.layers-column-resizer-grip.resizing::before {
+  opacity: 0.85;
+}
+
+.layers-column-resizer-grip.resizing::before {
+  width: 3px;                                    /* más grueso durante drag */
+  left: 3.5px;
+}
+
+.timeline-header-frames {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  /* Altura minima para que el strip de numeros no se aplaste cuando
+   * TagBand le suma su altura al wrapper en column-flex. Las celdas
+   * (.frame-number) usan height: 100% asi que necesitan que el padre
+   * tenga una altura definida por algun lado — antes la heredaba del
+   * row de 28px fijo, pero ahora el row es auto. */
+  min-height: 28px;
+  overflow: hidden;
+}
+
+.timeline-header-frames .frame-number {
+  width: var(--frame-cell-width);
+  min-width: var(--frame-cell-width);
+  max-width: var(--frame-cell-width);
+  height: 100%;
+  /* border-box: el border-right entra dentro del width, igual que en
+     .animation-layer-row .timeline-frames .timeline-frame. Sin esto el
+     ancho real es 50 + 1 = 51 px, y las capas quedan 50 px — desfase N px
+     acumulado. */
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-right: 1px solid var(--border-color);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+              color 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.timeline-header-frames .frame-number:hover {
+  background: var(--button-hover);
+  color: var(--text-primary);
+}
+
+.timeline-header-frames .frame-number.current {
+  background: var(--accent-color);
+  color: white;
+  box-shadow: inset 0 -2px 0 var(--accent-active, var(--accent-color));
+}
+
+.timeline-header-frames .frame-number.selected {
+  background: color-mix(in srgb, var(--accent-color) 25%, transparent);
+  color: var(--text-primary);
+}
+
+.timeline-header-frames .frame-number .selection-indicator {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 2px;
+  background: var(--accent-color);
+  border-radius: 1px;
+}
+
+/* Contenedor padre del grid: scroll COMPARTIDO (horizontal + vertical).
+   El header-row y las filas de capas viven DENTRO de este scroll, así
+   cualquier desplazamiento afecta a ambos simultáneamente — frame #5 del
+   header siempre está encima de frame #5 de cada capa, sin importar dónde
+   se scrollee. */
+.timeline-container {
+  display: flex;
+  flex-direction: column;
+  overflow-x: auto;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg-primary);
+  /* Clave: position: relative → es el containing block del resizer absolute,
+     que al estar dentro de overflow:auto se posiciona relativo al PADDING BOX
+     (no al content scrolleado). Así el grip siempre marca la frontera entre
+     capas y frames sin importar el scroll. */
+  position: relative;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-color) var(--bg-tertiary);
+}
+
+.timeline-container::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.timeline-container::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+}
+
+.timeline-container::-webkit-scrollbar-thumb {
+  background: var(--accent-color);
+  border-radius: 4px;
+}
+
+.timeline-container::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-hover, var(--accent-color));
+}
+
+/* Las celdas de frame en cada LayerRow usan el mismo ancho que el header */
+.animation-layer-row {
+  width: max-content;          /* mismo ancho que header-row */
+  min-width: 100%;
+}
+
+.animation-layer-row .timeline-frames {
+  display: flex;
+  flex-direction: row;
+  overflow: visible;            /* el scroll lo maneja .timeline-container */
+}
+
+.animation-layer-row .timeline-frames .timeline-frame {
+  width: var(--frame-cell-width);
+  min-width: var(--frame-cell-width);
+  max-width: var(--frame-cell-width);
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+/* Sticky-left: layer-info de cada LayerRow se queda pegada a la izquierda al
+   scrollear horizontalmente. Igual que el placeholder del header: siempre
+   visible, siempre column-alineada. */
+.animation-layer-row .layer-info {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--bg-secondary);
+  /* Sombra sutil para indicar "acantilado" cuando se scrollea a la derecha */
+  box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.15);
+  /* Preparamos un pseudo-elemento absoluto (barra lateral morada) que solo
+     se revela en estado .selected — ver regla abajo. Transición suave. */
+  transition: background 180ms ease, box-shadow 180ms ease;
+}
+
+/* Hover ampliado (solo cuando NO está seleccionada para evitar "parpadeos"
+   entre estados): sutil relleno con brand tint. */
+.animation-layer-row .layer-info:not(.selected):hover {
+  background: var(--layer-hover);
+}
+
+/* Estado seleccionado — indicador PRIMARIO de capa activa.
+   Specificidad (0,3,0) para ganarle al sticky `.animation-layer-row .layer-info`
+   (0,2,0) que sobrescribía el background y hacía invisible la selección.
+
+   Diseño:
+     - Barra vertical morada de 4px en el borde izquierdo (inset box-shadow):
+       indicador inmediato, independiente del scroll horizontal.
+     - Gradiente morado semi-transparente que fade hacia la derecha (más
+       presencia cerca del bar, se desvanece al unirse con las frames).
+     - Halo sutil a la derecha con tint morado (sustituye al "cliff" oscuro
+       solo cuando está seleccionada, para reforzar continuidad con frames).
+     - Transición con el resto del layer-info (180ms ease).
+   Combinado con `.timeline-frame.active` del lado de frames, el usuario ve
+   de un vistazo qué capa está activa SIN importar en qué frame esté. */
+.animation-layer-row .layer-info.selected {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(140, 82, 255, 0.28) 0%,
+      rgba(140, 82, 255, 0.12) 60%,
+      rgba(140, 82, 255, 0.06) 100%
+    ),
+    var(--bg-secondary);
+  box-shadow:
+    inset 4px 0 0 0 var(--accent-color),             /* barra lateral */
+    2px 0 8px -2px rgba(140, 82, 255, 0.45);         /* halo derecho */
+}
+
+.animation-layer-row .layer-info.selected:hover {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(140, 82, 255, 0.36) 0%,
+      rgba(140, 82, 255, 0.16) 60%,
+      rgba(140, 82, 255, 0.08) 100%
+    ),
+    var(--bg-secondary);
+}
+
+/* Nombre de la capa en estado seleccionado: más blanco + peso, para leerse
+   claramente sobre el tint morado. */
+.animation-layer-row .layer-info.selected .layer-name {
+  color: #ffffff;
+  font-weight: 600;
+  letter-spacing: 0.1px;
+}
+
+/* Acentuar los iconos de acciones (mousePointer, visibility, etc) cuando la
+   capa está activa: currentColor para que hereden del nombre. */
+.animation-layer-row .layer-info.selected .layer-btn {
+  color: #ffffff;
+}
+
+/* Respeto a prefers-reduced-motion: las transiciones de selección son
+   cosméticas, se deshabilitan para usuarios que lo piden explícitamente. */
+@media (prefers-reduced-motion: reduce) {
+  .animation-layer-row .layer-info {
+    transition: none;
+  }
+}
+
+/* Sticky-left del placeholder del header: pegado a la izquierda Y arriba
+   (corner top-left). z-index superior para estar ENCIMA del layer-info
+   cuando se scrollea en ambos ejes. */
+.timeline-header-left-placeholder {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.15);
+}
+
+/* ============================================================================
+   ANIMATION BAR UNIFIED — una sola fila, misma altura, mismo contenedor.
+
+   Layout horizontal en un único elemento:
+     [ STICKY-LEFT: toolbar completa ]  [ SCROLL: frame-numbers ]  [ STICKY-RIGHT: onion ]
+
+   Todos los elementos comparten la misma altura (var --anim-bar-h). Un solo
+   scrollbar horizontal en la raíz. La toolbar de la izquierda se mantiene
+   pegada al borde cuando scrolleas; los frames fluyen por debajo/detrás.
+
+   Mismo patrón que Aseprite / After Effects / Figma timeline.
+   ============================================================================ */
+
+.animation-bar-unified {
+  --anim-bar-h: 44px;             /* altura unificada */
+
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: space-between;  /* toolbar izq + spacer + onion der */
+  height: var(--anim-bar-h);
+  min-height: var(--anim-bar-h);
+  max-height: var(--anim-bar-h);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px 8px 0 0;       /* bordes redondeados solo arriba; pega al grid de abajo */
+  box-shadow: var(--panel-shadow);
+  overflow: visible;                /* el grid maneja su propio scroll */
+  position: relative;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Spacer flexible entre toolbar izq y onion skin der */
+.animation-bar-unified .unified-timeline-spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+.animation-bar-unified::-webkit-scrollbar {
+  height: 8px;
+}
+
+.animation-bar-unified::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.animation-bar-unified::-webkit-scrollbar-thumb {
+  background: var(--accent-color);
+  border-radius: 4px;
+  opacity: 0.8;
+}
+
+.animation-bar-unified::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-active, var(--accent-color));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animation-bar-unified {
+    scroll-behavior: auto;
+  }
+  .animation-bar-unified *,
+  .animation-bar-unified *::before,
+  .animation-bar-unified *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* ---- Toolbar izquierda del animation-bar (ya no sticky: la barra ya no
+       scrollea; los frame-numbers se movieron al header del FramesTimeline). ---- */
+.unified-timeline-left {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  padding: 0 10px;
+  background: var(--bg-tertiary);
+  border-right: 1px solid var(--border-color);
+}
+
+/* Grupos de controles dentro del toolbar */
+.unified-timeline-left .toolbar-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  height: 100%;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--border-color);
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+/* Botones generales dentro del toolbar (28x28, consistente) */
+.unified-timeline-left .control-btn,
+.unified-timeline-left .setting-btn,
+.unified-timeline-left .header-btn,
+.unified-timeline-left .frame-control-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--button-border);
+  background: var(--button-bg);
+  color: var(--text-secondary);
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  transition:
+    background 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.unified-timeline-left .control-btn:hover:not(:disabled),
+.unified-timeline-left .setting-btn:hover:not(:disabled),
+.unified-timeline-left .header-btn:hover:not(:disabled),
+.unified-timeline-left .frame-control-btn:hover:not(:disabled) {
+  background: var(--button-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-color);
+}
+
+.unified-timeline-left .control-btn:disabled,
+.unified-timeline-left .header-btn:disabled,
+.unified-timeline-left .frame-control-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Play/pause button destacado en el centro de los controles */
+.unified-timeline-left .play-btn {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, var(--accent-color), var(--accent-active, var(--accent-color)));
+  color: white;
+  border: none;
+  box-shadow: 0 2px 6px rgba(140, 82, 255, 0.3);
+}
+
+.unified-timeline-left .play-btn:hover {
+  background: linear-gradient(135deg, var(--accent-hover, var(--accent-color)), var(--accent-color));
+  color: white;
+  box-shadow: 0 3px 10px rgba(140, 82, 255, 0.4);
+}
+
+/* Toggle loop activo */
+.unified-timeline-left .setting-btn.active {
+  background: linear-gradient(135deg, var(--accent-color), var(--accent-active, var(--accent-color)));
+  color: white;
+  border-color: var(--accent-color);
+}
+
+/* Speed select */
+.unified-timeline-left .speed-select-overlay {
+  height: 26px;
+  padding: 0 6px;
+  font-size: 11px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Nueva Capa — botón primario compacto */
+.unified-timeline-left .add-layer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.unified-timeline-left .add-layer-btn:hover {
+  background: var(--accent-active, var(--accent-color));
+}
+
+/* Frame badge — indicador del frame actual */
+.unified-timeline-left .frame-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 6px;
+  background: var(--accent-color);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3px;
+}
+
+/* Input de duración del frame: contenedor con spin buttons custom */
+.unified-timeline-left .frame-rate-control {
+  display: inline-flex;
+  align-items: stretch;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.unified-timeline-left .frame-rate-input {
+  width: 42px;
+  height: 22px;
+  padding: 0 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-right: none;
+  border-radius: 4px 0 0 4px;
+  color: var(--text-primary);
+  font-size: 11px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.unified-timeline-left .frame-rate-input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(140, 82, 255, 0.2);
+  position: relative;
+  z-index: 1;
+}
+
+/* Quitar spinners nativos del input numérico */
+.unified-timeline-left .frame-rate-input::-webkit-inner-spin-button,
+.unified-timeline-left .frame-rate-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+.unified-timeline-left .frame-rate-input {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Spinner vertical custom acoplado al input */
+.unified-timeline-left .frame-rate-spin {
+  display: inline-flex;
+  flex-direction: column;
+  height: 22px;
+  width: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 0 4px 4px 0;
+  background: var(--bg-secondary);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.unified-timeline-left .frame-rate-spin-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  line-height: 0;
+  transition:
+    background 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.unified-timeline-left .frame-rate-spin-btn + .frame-rate-spin-btn {
+  border-top: 1px solid var(--border-color);
+}
+
+.unified-timeline-left .frame-rate-spin-btn:hover {
+  background: var(--button-hover);
+  color: var(--text-primary);
+}
+
+.unified-timeline-left .frame-rate-spin-btn:active {
+  background: var(--accent-color);
+  color: #fff;
+}
+
+.unified-timeline-left .frame-rate-spin-btn svg {
+  width: 9px;
+  height: 9px;
+  stroke-width: 2.5;
+}
+
+.unified-timeline-left .frame-rate-unit {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-right: 2px;
+}
+
+/* Grupo de opacidad */
+.unified-timeline-left .opacity-group {
+  gap: 6px;
+}
+
+.unified-timeline-left .opacity-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.unified-timeline-left .opacity-value {
+  min-width: 36px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.unified-timeline-left .zoom-slider {
+  width: 80px;
+  height: 4px;
+  cursor: pointer;
+  accent-color: var(--accent-color);
+}
+
+/* Focus-visible para accesibilidad de teclado */
+.animation-bar-unified button:focus-visible,
+.animation-bar-unified input:focus-visible,
+.animation-bar-unified select:focus-visible,
+.animation-bar-unified [role="switch"]:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+/* ---- CENTRO — frame-numbers strip, scrollea con el contenedor raíz ---- */
+.unified-timeline-frames {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  background: var(--bg-primary);
+}
+
+.unified-timeline-frames .frame-numbers {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  min-width: 100%;
+  /* FrameNumberCell tiene width 50px fijo; se concatenan horizontalmente */
+}
+
+/* La celda de frame ocupa TODA la altura de la barra — coincidencia visual */
+.unified-timeline-frames .frame-number {
+  height: 100%;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid var(--border-color);
+}
+
+/* ---- Parte derecha del animation-bar: onion skin (ya no sticky) ---- */
+.unified-timeline-right {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 10px;
+  background: var(--bg-tertiary);
+  border-left: 1px solid var(--border-color);
+}
+
+.unified-timeline-right .onion-skin-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  flex: 0 0 auto;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition:
+    background 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.unified-timeline-right .onion-skin-toggle:hover {
+  background: var(--button-hover);
+  border-color: var(--accent-color);
+  color: var(--text-primary);
+}
+
+.unified-timeline-right .toggle-switch {
+  position: relative;
+  width: 26px;
+  height: 13px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  transition: background 0.2s, border-color 0.2s;
+  flex-shrink: 0;
+}
+
+.unified-timeline-right .toggle-switch.active {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.unified-timeline-right .toggle-slider {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 9px;
+  height: 9px;
+  background: white;
+  border-radius: 50%;
+  transform: none;
+  transition: left 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.unified-timeline-right .toggle-switch.active .toggle-slider {
+  left: 14px;
+  transform: none;
+}
+
+.unified-timeline-right .config-button {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--button-bg);
+  border: 1px solid var(--button-border);
+  border-radius: 5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.unified-timeline-right .config-button:hover {
+  background: var(--button-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-color);
+}
+
+/* ---- Responsive: en viewports estrechos colapsa el texto "Nueva" ---- */
+@media (max-width: 900px) {
+  .animation-bar-unified .add-layer-btn > span {
+    display: none;
+  }
+  .unified-timeline-left {
+    gap: 6px;
+    padding: 0 8px;
+  }
+  .unified-timeline-left .zoom-slider {
+    width: 60px;
+  }
+  .unified-timeline-left .opacity-label {
+    display: none;  /* solo el slider + % en viewport estrecho */
+  }
+}
+
+/* ============================================================================
+   RESIZE VERTICAL DEL PANEL + MODO COLLAPSED
+   ============================================================================ */
+
+/* Contenedor `.layer-animation` es `position: relative` implícito (usa bottom).
+   Lo forzamos para anclar el resize handle absoluto en el borde superior. */
+.layer-animation {
+  position: relative;
+}
+
+/* Handle de resize: banda de 6px en el borde superior. Invisible por defecto
+   (solo un hit area); se tinta con accent al hover/drag. Cursor ns-resize. */
+.layer-animation-resizer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 10;
+  background: transparent;
+  transition: background-color 160ms ease;
+}
+
+.layer-animation-resizer::before {
+  /* Línea visual fina centrada; aparece al hover/drag para indicar "tomar
+     de aquí". El hit area real sigue siendo los 6px completos. */
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 48px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--border-color);
+  opacity: 0;
+  transition: opacity 160ms ease, background-color 160ms ease;
+}
+
+.layer-animation-resizer:hover::before,
+.layer-animation.resizing .layer-animation-resizer::before {
+  opacity: 1;
+  background: var(--accent-color);
+}
+
+.layer-animation-resizer:hover {
+  background: rgba(140, 82, 255, 0.08);
+}
+
+/* Durante drag: cursor global + bloqueo de selección. El inline style en
+   JSX ya maneja userSelect; esto agrega el cursor global para feedback. */
+.layer-animation.resizing,
+.layer-animation.resizing * {
+  cursor: ns-resize !important;
+}
+
+/* Modo colapsado: mantiene la toolbar + el header-row de FramesTimeline
+   (para que el strip de frame-numbers ilumine qué frame está reproduciendo),
+   y oculta TODO lo demás del grid:
+     - `.timeline-layers` (filas con layer-info + timeline-frames)
+     - `.layers-column-resizer-grip` (no tiene sentido con 0 filas)
+     - El corner de "Nueva capa + ↑↓" dentro del header se mantiene, pero
+       podemos ocultarlo si se ve ruidoso.
+   Nota: el panel sigue teniendo un grid debajo de la bar, así que el
+   border-radius de la bar se queda solo-arriba (no se cambia a 4 lados). */
+.layer-animation.collapsed {
+  overflow: hidden;
+}
+
+.layer-animation.collapsed .timeline-layers {
+  display: none;
+}
+
+.layer-animation.collapsed .layers-column-resizer-grip {
+  display: none;
+}
+
+/* El corner top-left (Nueva capa + flechas) sigue siendo funcional en
+   collapsed — addLayer + moveLayerUp/Down trabajan sobre activeLayerId
+   sin necesidad de que las filas se vean. */
+
+/* ============================================================================
+   LAYER NAV GROUP — prev/[nombre capa]/next en la toolbar
+   Visible siempre; vital en modo collapsed (no hay lista de filas).
+   ============================================================================ */
+
+.layer-nav-group {
+  min-width: 0;  /* permite al label hacer ellipsis */
+  max-width: 220px;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.layer-nav-btn {
+  flex: 0 0 auto;
+  min-width: 26px;
+  min-height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.layer-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.layer-nav-label {
+  flex: 1 1 auto;
+  min-width: 60px;
+  max-width: 140px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Tint morado para destacar — es el "identificador de capa" en collapsed */
+  background: linear-gradient(
+    135deg,
+    rgba(140, 82, 255, 0.28),
+    rgba(140, 82, 255, 0.14)
+  );
+  border: 1px solid rgba(140, 82, 255, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  user-select: none;
+  cursor: text;  /* sugiere editabilidad (doble clic activa rename inline) */
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.layer-nav-label:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(140, 82, 255, 0.36),
+    rgba(140, 82, 255, 0.18)
+  );
+  border-color: var(--accent-color);
+}
+
+/* Input inline de rename: mantiene el mismo footprint que el badge para que
+   el layout no salte al entrar/salir de edición. Border morado sólido para
+   indicar "estás editando"; caret blanco. */
+.layer-nav-input {
+  flex: 1 1 auto;
+  min-width: 60px;
+  max-width: 140px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  text-align: center;
+  background: rgba(140, 82, 255, 0.14);
+  border: 1px solid var(--accent-color);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(140, 82, 255, 0.20);
+  font-family: inherit;
+  caret-color: #ffffff;
+}
+
+.layer-nav-input:focus {
+  box-shadow: 0 0 0 2px rgba(140, 82, 255, 0.35);
+}
+
+/* ============================================================================
+   COLLAPSE TOGGLE BUTTON (en unified-timeline-right)
+   ============================================================================ */
+
+.collapse-toggle-btn {
+  /* Usa .config-button como base; solo marca el estado pressed con tint */
+}
+
+.collapse-toggle-btn[aria-pressed="true"] {
+  background: rgba(140, 82, 255, 0.20);
+  color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layer-animation-resizer,
+  .layer-animation-resizer::before {
+    transition: none;
+  }
+}
+
+/* ── Chip "Bucle: A–B" ─────────────────────────────────────────────────────── */
+/* Refinado tras pasada con ui-ux-pro-max:
+ *  - Gradiente sutil + borde violeta para coherencia con --accent-color del editor.
+ *  - Hover sin layout shift (solo background/border).
+ *  - Focus-visible ring del close button accesible por teclado.
+ *  - Reduced-motion respetado. */
+.loop-range-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 4px 0 9px;
+  border-radius: 11px;
+  background:
+    linear-gradient(180deg, rgba(140, 82, 255, 0.22), rgba(140, 82, 255, 0.14));
+  border: 1px solid rgba(157, 109, 255, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.25);
+  color: #e6d8ff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  user-select: none;
+  white-space: nowrap;
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.loop-range-chip:hover {
+  background:
+    linear-gradient(180deg, rgba(140, 82, 255, 0.30), rgba(140, 82, 255, 0.18));
+  border-color: rgba(180, 140, 255, 0.7);
+}
+
+.loop-range-chip__label {
+  opacity: 0.78;
+  text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.6px;
+}
+
+.loop-range-chip__value {
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.loop-range-chip__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 2px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.08);
+  color: #d8c8ff;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  padding: 0;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.loop-range-chip__close:hover {
+  background: rgba(255, 80, 80, 0.30);
+  color: #fff;
+  border-color: rgba(255, 120, 120, 0.55);
+}
+
+.loop-range-chip__close:focus-visible {
+  outline: none;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  border-color: rgba(157, 109, 255, 0.95);
+  box-shadow: 0 0 0 2px rgba(157, 109, 255, 0.45);
+}
+
+.loop-range-chip__close:active {
+  transform: translateY(1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loop-range-chip,
+  .loop-range-chip__close {
+    transition: none;
+  }
+  .loop-range-chip__close:active {
+    transform: none;
+  }
+}
+
+
+/* ============================================================
+ * MOBILE / TABLET (<= 767px) — touch-friendly animation bar
+ *
+ * Las celdas del timeline (.timeline-frame, .frame-number) se quedan en
+ * su tamano original porque expandirlas a 44px deformaria la grilla y
+ * obligaria a un scroll horizontal masivo. En su lugar el usuario puede
+ * tocar la celda directamente — un tap sigue siendo viable a 28px y
+ * pinch-zoom queda disponible si necesita precision.
+ *
+ * Lo que SI escalamos a 44x44: los botones discretos del toolbar
+ * (playback, settings, frame controls). Tienen identidad propia y no
+ * forman parte de una grilla densa; la regla touch-target de 44px se
+ * aplica con coste cero porque la animation-bar no es densa.
+ * ============================================================ */
+
+@media (max-width: 767px) {
+  .control-btn,
+  .play-btn,
+  .setting-btn,
+  .frame-control-btn {
+    min-width: 44px;
+    min-height: 44px;
+    width: auto;
+    height: auto;
+    /* Quita el delay de 300ms que iOS/Android aplican por default. */
+    touch-action: manipulation;
+  }
+
+  /* Spacing entre botones touch-friendly: 8px minimo segun guidelines. */
+  .toolbar-group {
+    gap: 8px;
+  }
+
+  /* Selects necesitan altura suficiente para que el OS-native picker
+   * no quede comprimido al desplegarse. */
+  .speed-select-overlay,
+  .frame-rate-select {
+    min-height: 44px;
+    font-size: 14px;
+  }
+
+  /* Loop-range-chip: el boton X tiene 18px en desktop. En mobile
+   * lo subimos a 28px para tap comodo sin agrandar el chip entero. */
+  .loop-range-chip__close {
+    width: 28px;
+    height: 28px;
+    font-size: 13px;
+  }
+}
+

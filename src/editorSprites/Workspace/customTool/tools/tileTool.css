@@ -1,0 +1,67 @@
+.tile-tool {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: #1e1e24;
+  color: #e7e7ea;
+  font-size: 12px;
+}
+
+.tile-tool__header {
+  font-weight: 600;
+  color: #bbb;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #2c2c34;
+}
+
+.tile-tool__row {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.tile-tool__btn-group {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.tile-tool__mode,
+.tile-tool__toggle {
+  background: #2a2a33;
+  color: #e7e7ea;
+  border: 1px solid #3a3a45;
+  border-radius: 3px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tile-tool__mode:hover,
+.tile-tool__toggle:hover {
+  background: #33333e;
+}
+
+.tile-tool__mode.is-active,
+.tile-tool__toggle.is-active {
+  background: #ffd84a;
+  border-color: #ffd84a;
+  color: #1a1a22;
+  font-weight: 600;
+}
+
+.tile-tool__hint {
+  font-size: 10px;
+  color: #8a8a95;
+  font-style: italic;
+  padding-top: 6px;
+  border-top: 1px solid #2c2c34;
+}

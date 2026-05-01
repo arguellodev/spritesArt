@@ -1,7 +1,21 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+'use no memo';
+// React Compiler (vite compilationMode:'all') tiene problemas con el patron
+// useLayoutEffect+setState sincrono que usa SubmenuPanel; se opta-out el
+// archivo entero para evitar interferencia (mismo motivo que blendModes.js).
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import './customContextMenu.css';
 
-const CustomContextMenu = ({ 
+// Paleta de colores para tags estilo Aseprite. Se usa cuando una accion del
+// menu declara `type: 'color'`. Las swatches se complementan con un
+// <input type="color"> nativo para permitir colores arbitrarios.
+const ASEPRITE_TAG_COLORS = [
+  '#FF1F1F', '#FF851B', '#FBA919', '#FFD700',
+  '#2ECC40', '#1FE5E5', '#1F8AFF', '#9D38FF',
+  '#FF6B9D', '#A0522D', '#7F8C8D', '#FFFFFF',
+];
+
+const CustomContextMenu = ({
   isVisible, 
   position, 
   onClose, 
@@ -16,9 +30,36 @@ const CustomContextMenu = ({
   const [inputValue, setInputValue] = useState('');
   const [originalValue, setOriginalValue] = useState('');
 
-  console.log("se renderizo");
+  // Estado del submenú
+  const [openSubmenu, setOpenSubmenu] = useState(null); // null o action.id/index del item con submenu abierto
+  const submenuCloseTimeoutRef = useRef(null);
+
+  // Map de refs a buttons del menu que tienen submenu, indexed por key.
+  // Lo usa SubmenuPanel (renderizado via portal) para conocer el anchor element
+  // del item padre y calcular su posicion. Sin esto, el portal no tiene forma
+  // de saber donde esta el button (no es DOM ancestor).
+  const submenuAnchorsRef = useRef({});
+
+  const openSubmenuFor = useCallback((key) => {
+    if (submenuCloseTimeoutRef.current) {
+      clearTimeout(submenuCloseTimeoutRef.current);
+      submenuCloseTimeoutRef.current = null;
+    }
+    setOpenSubmenu(key);
+  }, []);
+
+  const scheduleSubmenuClose = useCallback(() => {
+    if (submenuCloseTimeoutRef.current) clearTimeout(submenuCloseTimeoutRef.current);
+    submenuCloseTimeoutRef.current = setTimeout(() => setOpenSubmenu(null), 200);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (submenuCloseTimeoutRef.current) clearTimeout(submenuCloseTimeoutRef.current);
+    };
+  }, []);
+
   // Calcular posición del menú para evitar que se salga de la pantalla
-// Calcular posición del menú para evitar que se salga de la pantalla
 const calculateMenuPosition = useCallback(() => {
   
   if (!isVisible || !menuRef.current || !position) return;
@@ -69,11 +110,12 @@ const calculateMenuPosition = useCallback(() => {
     }
   }, [activeInput, calculateMenuPosition]);
 
-  // Enfocar input cuando se activa
+  // Enfocar input cuando se activa. select() solo en text/number; en slider y
+  // color es no-op o lanza segun el navegador, asi que lo evitamos.
   useEffect(() => {
     if (activeInput && inputRef.current) {
       inputRef.current.focus();
-      if (activeInput.type !== 'slider') {
+      if (activeInput.type !== 'slider' && activeInput.type !== 'color') {
         inputRef.current.select();
       }
     }
@@ -104,6 +146,11 @@ const calculateMenuPosition = useCallback(() => {
       }
     } else if (activeInput.type === 'text') {
       if (finalValue.trim() === '') {
+        finalValue = originalValue;
+      }
+    } else if (activeInput.type === 'color') {
+      // Color: aceptar tal cual si parece hex valido, sino restaurar.
+      if (!/^#[0-9a-fA-F]{6}$/.test(String(finalValue).trim())) {
         finalValue = originalValue;
       }
     }
@@ -145,7 +192,14 @@ const calculateMenuPosition = useCallback(() => {
     if (isInsideMenu || isInsideMenuElement) {
       return; // No cerrar si el clic es dentro del menú
     }
-    
+
+    // El submenu se renderiza via portal a document.body, fuera de menuRef.
+    // Si el click cae dentro de cualquier .context-menu-submenu, no cerrar
+    // — el handler del item ya se encarga de commit + cerrar todo.
+    if (event.target?.closest && event.target.closest('.context-menu-submenu')) {
+      return;
+    }
+
     // CAMBIO IMPORTANTE: Solo cerrar si NO hay input activo
     if (!activeInput) {
       onClose();
@@ -153,17 +207,19 @@ const calculateMenuPosition = useCallback(() => {
     // Si hay input activo, no hacer nada - el menú permanece abierto
   }, [isVisible, activeInput, onClose]);
 
-  // Manejar tecla Escape
+  // Manejar tecla Escape: input activo > submenú abierto > cerrar todo
   const handleKeyDown = useCallback((event) => {
     if (event.key === 'Escape' && isVisible) {
       event.preventDefault();
       if (activeInput) {
         cancelInput();
+      } else if (openSubmenu !== null) {
+        setOpenSubmenu(null);
       } else {
         onClose();
       }
     }
-  }, [isVisible, activeInput, onClose, cancelInput]);
+  }, [isVisible, activeInput, onClose, cancelInput, openSubmenu]);
 
   // Event listeners
   useEffect(() => {
@@ -211,11 +267,18 @@ const calculateMenuPosition = useCallback(() => {
   };
 
   // Manejar clic en item del menú
-  const handleItemClick = (action) => {
+  const handleItemClick = (action, key) => {
     if (action.disabled) return;
 
+    // Si es un submenú, toggle por click (además del hover) — fallback robusto
+    // si el hover no se dispara (touch devices, electron, focus restaurado, etc).
+    if (action.type === 'submenu') {
+      setOpenSubmenu(prev => prev === key ? null : key);
+      return;
+    }
+
     // Si es un input, activarlo
-    if (action.type && ['text', 'number', 'slider'].includes(action.type)) {
+    if (action.type && ['text', 'number', 'slider', 'color'].includes(action.type)) {
       activateInput(action);
       return;
     }
@@ -258,7 +321,7 @@ const calculateMenuPosition = useCallback(() => {
       {/* Menú contextual */}
       <div
         ref={menuRef}
-        className="context-menu"
+        className={`context-menu ${activeInput ? 'has-active-input' : ''}`}
         style={{
           left: `${menuPosition.x}px`,
           top: `${menuPosition.y}px`,
@@ -292,23 +355,42 @@ const calculateMenuPosition = useCallback(() => {
             </>
           )}
           
-          {/* Items del menú */}
+          {/* Items del menú — cuando un input esta activo, ocultamos el resto
+              de items para que el menu no tape la timeline mientras el usuario
+              escribe (modo compacto). Solo se muestra el item activo + su
+              caja de input. */}
           {actions.map((action, index) => {
-            const isInputType = action.type && ['text', 'number', 'slider'].includes(action.type);
+            const isInputType = action.type && ['text', 'number', 'slider', 'color'].includes(action.type);
             const isActiveInput = activeInput && activeInput === action;
-            
+            // Compact mode: ocultar items que NO son el input activo.
+            if (activeInput && !isActiveInput) return null;
+
             return (
               <div key={action.id || index}>
                 {/* Item del menú */}
                 <button
+                  ref={action.type === 'submenu'
+                    ? (el) => {
+                        const k = action.id || index;
+                        if (el) submenuAnchorsRef.current[k] = el;
+                        else delete submenuAnchorsRef.current[k];
+                      }
+                    : undefined}
                   className={`context-menu-item ${action.disabled ? 'disabled' : ''} ${action.danger ? 'danger' : ''} ${isActiveInput ? 'active-input' : ''}`}
-                  onClick={() => handleItemClick(action)}
+                  onClick={() => handleItemClick(action, action.id || index)}
                   disabled={action.disabled}
+                  onMouseEnter={action.type === 'submenu' ? () => openSubmenuFor(action.id || index) : undefined}
+                  onMouseLeave={action.type === 'submenu' ? scheduleSubmenuClose : undefined}
+                  aria-haspopup={action.type === 'submenu' ? 'menu' : undefined}
+                  aria-expanded={action.type === 'submenu' ? (openSubmenu === (action.id || index)) : undefined}
                 >
                   <span className="context-menu-icon">
                     {action.icon || action.label.charAt(0).toUpperCase()}
                   </span>
                   <span className="context-menu-label">{action.label}</span>
+                  {action.type === 'submenu' && (
+                    <span className="context-menu-submenu-arrow" aria-hidden>▶</span>
+                  )}
                   {action.shortcut && !isInputType && (
                     <span className="context-menu-shortcut">{action.shortcut}</span>
                   )}
@@ -319,12 +401,33 @@ const calculateMenuPosition = useCallback(() => {
                   )}
                 </button>
 
+                {/* Submenú anidado: renderizado via portal a document.body
+                    para escapar el containing block creado por transform de
+                    .context-menu (que atrapaba al position:fixed). Recibe el
+                    button como anchor para calcular su posicion. */}
+                {action.type === 'submenu' && action.items && openSubmenu === (action.id || index) && (
+                  <SubmenuPanel
+                    anchorEl={submenuAnchorsRef.current[action.id || index]}
+                    items={action.items}
+                    onClose={() => { setOpenSubmenu(null); onClose(); }}
+                    onMouseEnter={() => openSubmenuFor(action.id || index)}
+                    onMouseLeave={scheduleSubmenuClose}
+                    snapshotOnMount={action.snapshotOnMount}
+                    restoreOnCancel={action.restoreOnCancel}
+                  />
+                )}
+
                 {/* Contenedor de input activo */}
                 {isActiveInput && (
-                  <div 
+                  <div
                     className="context-menu-input-container"
                     onPointerDown={handleInputContainerPointerDown}
                   >
+                    {activeInput.helperText && (
+                      <div className="context-menu-input-helper">
+                        {activeInput.helperText}
+                      </div>
+                    )}
                     <div className="context-menu-input-wrapper">
                       {activeInput.type === 'slider' ? (
                         <div className="context-menu-slider-container">
@@ -347,6 +450,37 @@ const calculateMenuPosition = useCallback(() => {
                               className="context-menu-slider-input"
                             />
                           </div>
+                        </div>
+                      ) : activeInput.type === 'color' ? (
+                        // Picker de color: 12 swatches Aseprite + input nativo para
+                        // colores arbitrarios. Click en swatch actualiza el input
+                        // value sin confirmar; el usuario presiona ✓ o Enter.
+                        <div className="context-menu-color-container">
+                          <div className="context-menu-color-swatches">
+                            {ASEPRITE_TAG_COLORS.map(c => (
+                              <button
+                                key={c}
+                                type="button"
+                                className={`context-menu-color-swatch ${
+                                  String(inputValue).toLowerCase() === c.toLowerCase()
+                                    ? 'selected'
+                                    : ''
+                                }`}
+                                style={{ background: c }}
+                                onClick={() => setInputValue(c)}
+                                title={c}
+                                aria-label={`Color ${c}`}
+                              />
+                            ))}
+                          </div>
+                          <input
+                            ref={inputRef}
+                            type="color"
+                            value={/^#[0-9a-fA-F]{6}$/.test(String(inputValue)) ? inputValue : '#4a90e2'}
+                            onChange={handleInputChange}
+                            className="context-menu-color-picker"
+                            title="Color personalizado"
+                          />
                         </div>
                       ) : (
                         <input
@@ -387,5 +521,116 @@ const calculateMenuPosition = useCallback(() => {
     </>
   );
 };
+
+// Componente de panel de submenú anidado.
+//
+// IMPORTANTE — usa createPortal a document.body para escapar el containing
+// block de .context-menu (que tiene transform en su animacion contextMenuAppear).
+// Cualquier ancestor con `transform` se vuelve containing block para
+// position:fixed descendientes — sin el portal, el "fixed" del submenu se
+// posicionaba relativo a .context-menu en vez del viewport, quedando atrapado
+// dentro del menu padre.
+//
+// `anchorEl` es el button del item padre (capturado via ref-callback en el
+// map de actions). useLayoutEffect mide su rect + el panel rect, calcula
+// posicion (derecha por default, izquierda como fallback si overflow), y
+// hace setPos sincrono antes del paint para evitar flash.
+function SubmenuPanel({ anchorEl, items, onClose, onMouseEnter, onMouseLeave, snapshotOnMount, restoreOnCancel }) {
+  const panelRef = useRef(null);
+  const [pos, setPos] = useState({ left: 0, top: 0, measured: false });
+
+  // Preview-only en hover: captura snapshot al montar (antes de cualquier
+  // mutacion por hover). Si el submenu se cierra SIN un click en un item
+  // (mouse-out, esc, click-outside, otro submenu se abre), restoreOnCancel
+  // revierte la mutacion. Click en item marca wasCommittedRef → cleanup
+  // skip-ea el restore.
+  const wasCommittedRef = useRef(false);
+  const snapshotRef = useRef(null);
+  // Refs always-latest para evitar stale-closure issues entre renders.
+  const restoreRef = useRef(restoreOnCancel);
+  restoreRef.current = restoreOnCancel;
+
+  useEffect(() => {
+    snapshotRef.current = snapshotOnMount?.();
+    return () => {
+      if (!wasCommittedRef.current && restoreRef.current) {
+        restoreRef.current(snapshotRef.current);
+      }
+    };
+  // Solo on mount/unmount — cancel-on-close del submenu lifecycle.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!panel || !anchorEl) return;
+    const btnRect = anchorEl.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    const margin = 6;
+    const safe = 4;
+
+    // Default: a la derecha del item.
+    let left = btnRect.right + margin;
+    if (left + panelRect.width > window.innerWidth - safe) {
+      // Fallback: a la izquierda.
+      left = Math.max(safe, btnRect.left - panelRect.width - margin);
+    }
+
+    // Vertical alineado al top del item; si overflow inferior, subir.
+    let top = btnRect.top;
+    if (top + panelRect.height > window.innerHeight - safe) {
+      top = Math.max(safe, window.innerHeight - panelRect.height - safe);
+    }
+
+    setPos({ left: Math.round(left), top: Math.round(top), measured: true });
+  }, [anchorEl]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      ref={panelRef}
+      className="context-menu-submenu"
+      role="menu"
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      onContextMenu={(e) => e.preventDefault()}
+      style={{
+        position: 'fixed',
+        left: pos.left,
+        top: pos.top,
+        visibility: pos.measured ? 'visible' : 'hidden',
+      }}
+    >
+      {items.map((item, idx) => {
+        if (item.divider) {
+          return <div key={`d-${idx}`} className="context-menu-submenu-divider">{item.label}</div>;
+        }
+        return (
+          <button
+            key={item.id || idx}
+            className={`context-menu-submenu-item ${item.disabled ? 'disabled' : ''} ${item.checked ? 'checked' : ''}`}
+            onMouseEnter={item.disabled ? undefined : item.onHover}
+            onClick={() => {
+              if (item.disabled) return;
+              // Marcar commit ANTES de onClose para que el cleanup del
+              // useEffect en SubmenuPanel skip-ee el restoreOnCancel.
+              wasCommittedRef.current = true;
+              item.onClick?.();
+              onClose();
+            }}
+            disabled={item.disabled}
+            role="menuitemradio"
+            aria-checked={!!item.checked}
+          >
+            <span className="context-menu-submenu-check" aria-hidden>{item.checked ? '✓' : ''}</span>
+            <span className="context-menu-submenu-label">{item.label}</span>
+          </button>
+        );
+      })}
+    </div>,
+    document.body
+  );
+}
 
 export default CustomContextMenu;

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState, Activity } from "react";
 import './customTool2.css';
 import PencilTool from "./tools/pencilTool";
 import EraserTool from "./tools/eraserTool";
@@ -15,14 +15,30 @@ import LightTool from "./tools/lightTool";
 import BlurFingerTool from "./tools/blurFingerTool";
 import SmudgeTool from "./tools/smudgeTool";
 import SelectTool from "./tools/selectTool";
-import { BsChevronCompactDown, BsChevronCompactUp  } from "react-icons/bs";
 
-const CustomTool = ({ 
-  setToolParameters, 
-  tool, 
-  toolParameters, 
+const TOOL_INFO = {
+    pencil: { name: "Pincel", icon: "P", component: PencilTool },
+    eraser: { name: "Borrador", icon: "B", component: EraserTool },
+    fill: { name: "Rellenar", icon: "R", component: FillTool },
+    line: { name: "Línea", icon: "L", component: LineTool },
+    square: { name: "Cuadrado", icon: "L", component: SquareTool },
+    triangle: { name: "Triángulo", icon: "L", component: TriangleTool },
+    circle: { name: "Círculo", icon: "L", component: CircleTool },
+    ellipse: { name: "Elipse", icon: "L", component: EllipseTool },
+    polygon: { name: "Polígono", icon: "L", component: PolygonTool },
+    curve: { name: "Linea Curva", icon: "C", component: CurveTool },
+    dark: { name: "Oscurecedor", icon: "C", component: DarkTool },
+    light: { name: "Iluminador", icon: "C", component: LightTool },
+    blurFinger: { name: "Difuminador", icon: "C", component: BlurFingerTool },
+    smudge: { name: "Mezclador", icon: "C", component: SmudgeTool },
+    select: { name: "Selección", icon: "S", component: SelectTool }
+};
+
+const CustomTool = ({
+  setToolParameters,
+  tool,
+  toolParameters,
   myBrushes,
-  // Props específicas para las acciones de selección
   copySelection,
   cutSelection,
   pastePixels,
@@ -34,115 +50,59 @@ const CustomTool = ({
   ungroupSelection,
   deleteSelection
 }) => {
-    const [minimized, setMinimized] = useState(false);
-    
-    // Estados independientes para cada herramienta
+    const [minimized] = useState(false);
+
+    // `toolConfigs` sigue existiendo como caché global entre herramientas (lo
+    // leen/escriben los paneles al montar). Con <Activity> cada panel ya
+    // conserva su propio useState entre cambios de herramienta sin remontar,
+    // así que este diccionario es redundante para persistencia — lo dejamos
+    // para no romper ningún consumer que aún lo observe.
     const [toolConfigs, setToolConfigs] = useState({
-        pencil: null,
-        eraser: null,
-        fill: null,
-        line: null,
-        square: null,
-        triangle: null,
-        circle: null,
-        ellipse: null,
-        polygon: null,
-        curve: null,
-        dark: null,
-        light: null,
-        blurFinger: null,
-        smudge: null,
-        select: null
+        pencil: null, eraser: null, fill: null, line: null, square: null,
+        triangle: null, circle: null, ellipse: null, polygon: null, curve: null,
+        dark: null, light: null, blurFinger: null, smudge: null, select: null
     });
 
     useEffect(() => {
-        if(tool != 'fill'){
-            setToolParameters(prev => ({
-                ...prev,
-                isGradientMode: false,
-            }));
+        if (tool !== 'fill') {
+            setToolParameters(prev => ({ ...prev, isGradientMode: false }));
         }
-    }, [tool]);
+    }, [tool, setToolParameters]);
 
-    const toggleMinimize = () => setMinimized(prev => !prev);
+    const currentTool = TOOL_INFO[tool];
 
-    const toolInfo = {
-        pencil: { name: "Pincel", icon: "P", component: PencilTool },
-        eraser: { name: "Borrador", icon: "B", component: EraserTool },
-        fill: { name: "Rellenar", icon: "R", component: FillTool },
-        line: { name: "Línea", icon: "L", component: LineTool },
-        square: { name: "Cuadrado", icon: "L", component: SquareTool },
-        triangle: { name: "Triángulo", icon: "L", component: TriangleTool },
-        circle: { name: "Círculo", icon: "L", component: CircleTool },
-        ellipse: { name: "Elipse", icon: "L", component: EllipseTool },
-        polygon: { name: "Polígono", icon: "L", component: PolygonTool },
-        curve: { name: "Linea Curva", icon: "C", component: CurveTool },
-        dark: { name: "Oscurecedor", icon: "C", component: DarkTool },
-        light: { name: "Iluminador", icon: "C", component: LightTool },
-        blurFinger: { name: "Difuminador", icon: "C", component: BlurFingerTool },
-        smudge: { name: "Mezclador", icon: "C", component: SmudgeTool },
-        select: { name: "Selección", icon: "S", component: SelectTool }
+    const baseProps = { toolParameters, setToolParameters, toolConfigs, setToolConfigs };
+    const pencilProps = { ...baseProps, myBrushes };
+    const selectProps = {
+        ...baseProps,
+        copySelection, cutSelection, pastePixels, duplicateSelection,
+        handleRotation, fillSelection, isolateSelection, groupSelection,
+        ungroupSelection, deleteSelection
     };
 
-    const currentTool = toolInfo[tool];
-
-    if (!currentTool) return null;
-
-    const ToolComponent = currentTool.component;
-
-    // Función para crear las props específicas de cada herramienta
-    const getToolSpecificProps = () => {
-        const baseProps = {
-            toolParameters,
-            setToolParameters,
-            toolConfigs,
-            setToolConfigs
-        };
-
-        // Props específicas para PencilTool
-        if (tool === 'pencil') {
-            return {
-                ...baseProps,
-                myBrushes
-            };
-        }
-
-        // Props específicas para SelectTool
-        if (tool === 'select') {
-            return {
-                ...baseProps,
-                copySelection,
-                cutSelection,
-                pastePixels,
-                duplicateSelection,
-                handleRotation,
-                fillSelection,
-                isolateSelection,
-                groupSelection,
-                ungroupSelection,
-                deleteSelection
-            };
-        }
-
-        // Para el resto de herramientas, solo props base
+    const propsForTool = (key) => {
+        if (key === 'pencil') return pencilProps;
+        if (key === 'select') return selectProps;
         return baseProps;
     };
 
     return (
         <div className="customTool-section">
-            {/*<div className="tool-header" onClick={toggleMinimize} style={{ cursor: "pointer" }}>
-            <span className="tool-icon">{currentTool.icon}</span>
-                <p className="tool-name">{currentTool.name}</p>
-                                 
-                <span className="minimize-toggle">{minimized ? <BsChevronCompactDown/> : <BsChevronCompactUp/>}</span>
-            </div>*/}
-            <div className="current-tool">
-               {currentTool.icon}
-                                
-                <p>{currentTool.name}</p>
-            </div>
+            {currentTool && (
+                <div className="current-tool">
+                    {currentTool.icon}
+                    <p>{currentTool.name}</p>
+                </div>
+            )}
             <div className={`tool-content ${minimized ? 'hidden' : ''}`}>
-                <ToolComponent {...getToolSpecificProps()} />
+                {Object.entries(TOOL_INFO).map(([key, info]) => {
+                    const Component = info.component;
+                    return (
+                        <Activity key={key} mode={tool === key ? 'visible' : 'hidden'}>
+                            <Component {...propsForTool(key)} />
+                        </Activity>
+                    );
+                })}
             </div>
         </div>
     );

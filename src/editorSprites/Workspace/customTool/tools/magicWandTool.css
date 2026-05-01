@@ -1,0 +1,76 @@
+/* magicWandTool.css — estilos del panel de Magic Wand */
+
+.magic-wand-tool {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: #1e1e24;
+  color: #e7e7ea;
+  font-size: 12px;
+}
+
+.magic-wand-tool__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: #bbb;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #2c2c34;
+}
+
+.magic-wand-tool__row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.magic-wand-tool__row--check {
+  grid-template-columns: auto 1fr;
+}
+
+.magic-wand-tool__row--col {
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.magic-wand-tool__row input[type="range"] {
+  width: 100%;
+}
+
+.magic-wand-tool__ops {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.magic-wand-tool__op {
+  background: #2a2a33;
+  color: #e7e7ea;
+  border: 1px solid #3a3a45;
+  border-radius: 3px;
+  padding: 4px 6px;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.magic-wand-tool__op:hover {
+  background: #33333e;
+}
+
+.magic-wand-tool__op.is-active {
+  background: #4a90e2;
+  border-color: #4a90e2;
+  color: #fff;
+}
+
+.magic-wand-tool__hint {
+  font-size: 10px;
+  color: #8a8a95;
+  font-style: italic;
+  padding-top: 4px;
+  border-top: 1px solid #2c2c34;
+}

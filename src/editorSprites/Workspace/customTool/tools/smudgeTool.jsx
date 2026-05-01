@@ -1,153 +1,147 @@
 import { useEffect, useState } from "react";
 import { LuChevronUp, LuChevronDown } from "react-icons/lu";
 
-const SmudgeTool = ({ setToolParameters, tool, toolParameters }) => {
-  // Estados para las diferentes configuraciones del Smudge
-  const [width, setWidth] = useState(5);
-  const [smudgeStrength, setSmudgeStrength] = useState(0.8);
-  const [smudgeFlow, setSmudgeFlow] = useState(0.5);
-  const [smudgeMode, setSmudgeMode] = useState('normal');
-  const [smudgeQuality, setSmudgeQuality] = useState('medium');
+const W_MIN = 1;
+const W_MAX = 20;
+const W_DEFAULT = 5;
+const F_MIN = 0.1;
+const F_MAX = 1.0;
+const STRENGTH_DEFAULT = 0.8;
+const FLOW_DEFAULT = 0.5;
 
-  // Función para manejar cambios en el grosor con botones
-  const handleWidthChange = (increment) => {
-    const currentWidth = typeof width === 'number' ? width : 5;
-    const newWidth = Math.max(1, Math.min(20, currentWidth + increment));
-    setWidth(newWidth);
-  };
+const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+const round1 = (n) => parseFloat(n.toFixed(2));
 
-  // Función para manejar input directo del grosor
-  const handleWidthInput = (e) => {
-    const value = e.target.value;
-    
-    if (value === '') {
-      setWidth('');
-      return;
-    }
-    
-    const numValue = parseInt(value);
-    if (!isNaN(numValue)) {
-      setWidth(Math.max(1, Math.min(20, numValue)));
-    }
-  };
+const SMUDGE_MODES = [
+  { value: "normal", label: "Normal" },
+  { value: "lighten", label: "Lighten" },
+  { value: "darken", label: "Darken" },
+  { value: "multiply", label: "Multiply" },
+  { value: "screen", label: "Screen" },
+  { value: "overlay", label: "Overlay" },
+];
 
-  // Función para manejar cuando se pierde el foco en width
-  const handleWidthBlur = (e) => {
-    const value = e.target.value;
-    if (value === '' || isNaN(parseInt(value))) {
-      setWidth(5); // Valor por defecto
-    }
-  };
+const PRESETS = [
+  { name: "Soft", title: "Suave y fluido", strength: 0.3, flow: 0.8 },
+  { name: "Standard", title: "Configuración estándar", strength: 0.8, flow: 0.5 },
+  { name: "Intense", title: "Efecto dramático", strength: 1.0, flow: 0.2 },
+];
 
-  // Función para manejar cambios en la fuerza con botones
-  const handleStrengthChange = (increment) => {
-    const currentStrength = typeof smudgeStrength === 'number' ? smudgeStrength : 0.8;
-    const newStrength = Math.max(0.1, Math.min(1.0, parseFloat((currentStrength + increment).toFixed(2))));
-    setSmudgeStrength(newStrength);
-  };
+const SmudgeTool = ({ setToolParameters }) => {
+  const [width, setWidth] = useState(W_DEFAULT);
+  const [smudgeStrength, setSmudgeStrength] = useState(STRENGTH_DEFAULT);
+  const [smudgeFlow, setSmudgeFlow] = useState(FLOW_DEFAULT);
+  const [smudgeMode, setSmudgeMode] = useState("normal");
 
-  // Función para manejar input directo de la fuerza
-  const handleStrengthInput = (e) => {
-    const value = e.target.value;
-    
-    if (value === '') {
-      setSmudgeStrength('');
-      return;
-    }
-    
-    const numValue = parseFloat(value);
-    if (!isNaN(numValue)) {
-      setSmudgeStrength(Math.max(0.1, Math.min(1.0, numValue)));
-    }
-  };
-
-  // Función para manejar cuando se pierde el foco en strength
-  const handleStrengthBlur = (e) => {
-    const value = e.target.value;
-    if (value === '' || isNaN(parseFloat(value))) {
-      setSmudgeStrength(0.8); // Valor por defecto
-    }
-  };
-
-  // Función para manejar cambios en el flow con botones
-  const handleFlowChange = (increment) => {
-    const currentFlow = typeof smudgeFlow === 'number' ? smudgeFlow : 0.5;
-    const newFlow = Math.max(0.1, Math.min(1.0, parseFloat((currentFlow + increment).toFixed(2))));
-    setSmudgeFlow(newFlow);
-  };
-
-  // Función para manejar input directo del flow
-  const handleFlowInput = (e) => {
-    const value = e.target.value;
-    
-    if (value === '') {
-      setSmudgeFlow('');
-      return;
-    }
-    
-    const numValue = parseFloat(value);
-    if (!isNaN(numValue)) {
-      setSmudgeFlow(Math.max(0.1, Math.min(1.0, numValue)));
-    }
-  };
-
-  // Función para manejar cuando se pierde el foco en flow
-  const handleFlowBlur = (e) => {
-    const value = e.target.value;
-    if (value === '' || isNaN(parseFloat(value))) {
-      setSmudgeFlow(0.5); // Valor por defecto
-    }
-  };
-
-  // useEffect para actualizar los parámetros de la herramienta
   useEffect(() => {
-    // Solo actualizar si todos los valores son números válidos
-    if (typeof width === 'number' && 
-        typeof smudgeStrength === 'number' && 
-        typeof smudgeFlow === 'number') {
-     
-      setToolParameters(prev => ({
-        ...prev,
-        width: width,
-        smudgeStrength: smudgeStrength,
-        smudgeFlow: smudgeFlow,
-        smudgeMode: smudgeMode,
-        smudgeQuality: smudgeQuality,
-        preserveOpacity: false // Siempre false para esta versión
-      }));
+    if (
+      typeof width !== "number" ||
+      typeof smudgeStrength !== "number" ||
+      typeof smudgeFlow !== "number"
+    ) {
+      return;
     }
-  }, [width, smudgeStrength, smudgeFlow, smudgeMode, smudgeQuality, setToolParameters]);
+    setToolParameters((prev) => ({
+      ...prev,
+      width,
+      smudgeStrength,
+      smudgeFlow,
+      smudgeMode,
+    }));
+  }, [width, smudgeStrength, smudgeFlow, smudgeMode, setToolParameters]);
+
+  // --- Width ---
+  const onWidthInput = (e) => {
+    const v = e.target.value;
+    if (v === "") return setWidth("");
+    const n = parseInt(v, 10);
+    if (!Number.isNaN(n)) setWidth(clamp(n, W_MIN, W_MAX));
+  };
+  const onWidthBlur = (e) => {
+    if (e.target.value === "" || Number.isNaN(parseInt(e.target.value, 10))) {
+      setWidth(W_DEFAULT);
+    }
+  };
+  const stepWidth = (delta) => {
+    const cur = typeof width === "number" ? width : W_DEFAULT;
+    setWidth(clamp(cur + delta, W_MIN, W_MAX));
+  };
+
+  // --- Strength ---
+  const onStrengthInput = (e) => {
+    const v = e.target.value;
+    if (v === "") return setSmudgeStrength("");
+    const n = parseFloat(v);
+    if (!Number.isNaN(n)) setSmudgeStrength(clamp(n, F_MIN, F_MAX));
+  };
+  const onStrengthBlur = (e) => {
+    if (e.target.value === "" || Number.isNaN(parseFloat(e.target.value))) {
+      setSmudgeStrength(STRENGTH_DEFAULT);
+    }
+  };
+  const stepStrength = (delta) => {
+    const cur =
+      typeof smudgeStrength === "number" ? smudgeStrength : STRENGTH_DEFAULT;
+    setSmudgeStrength(clamp(round1(cur + delta), F_MIN, F_MAX));
+  };
+
+  // --- Flow ---
+  const onFlowInput = (e) => {
+    const v = e.target.value;
+    if (v === "") return setSmudgeFlow("");
+    const n = parseFloat(v);
+    if (!Number.isNaN(n)) setSmudgeFlow(clamp(n, F_MIN, F_MAX));
+  };
+  const onFlowBlur = (e) => {
+    if (e.target.value === "" || Number.isNaN(parseFloat(e.target.value))) {
+      setSmudgeFlow(FLOW_DEFAULT);
+    }
+  };
+  const stepFlow = (delta) => {
+    const cur = typeof smudgeFlow === "number" ? smudgeFlow : FLOW_DEFAULT;
+    setSmudgeFlow(clamp(round1(cur + delta), F_MIN, F_MAX));
+  };
+
+  const wValue = typeof width === "number" ? width : W_DEFAULT;
+  const sValue =
+    typeof smudgeStrength === "number" ? smudgeStrength : STRENGTH_DEFAULT;
+  const fValue = typeof smudgeFlow === "number" ? smudgeFlow : FLOW_DEFAULT;
 
   return (
     <div className="polygon-tool-container">
       <div className="tool-configs">
-        
-        {/* Configuración de grosor del pincel */}
         <div className="config-item">
-          <label className="tool-label">Brush Size</label>
+          <label className="tool-label" htmlFor="smudgeTool-width">
+            Brush Size
+          </label>
           <div className="input-container">
-            <input 
+            <input
+              id="smudgeTool-width"
               type="number"
-              min="1"
-              max="20"
+              min={W_MIN}
+              max={W_MAX}
               value={width}
-              onChange={handleWidthInput}
-              onBlur={handleWidthBlur}
-              className="number-input" 
+              onChange={onWidthInput}
+              onBlur={onWidthBlur}
+              className="number-input"
             />
             <span className="tool-value">px</span>
             <div className="increment-buttons-container">
-              <button 
+              <button
+                type="button"
                 className="increment-btn"
-                onClick={() => handleWidthChange(1)}
-                disabled={(typeof width === 'number' ? width : 5) >= 20}
+                onClick={() => stepWidth(1)}
+                disabled={wValue >= W_MAX}
+                aria-label="Aumentar tamaño del pincel"
               >
                 <LuChevronUp />
               </button>
-              <button 
+              <button
+                type="button"
                 className="increment-btn"
-                onClick={() => handleWidthChange(-1)}
-                disabled={(typeof width === 'number' ? width : 5) <= 1}
+                onClick={() => stepWidth(-1)}
+                disabled={wValue <= W_MIN}
+                aria-label="Reducir tamaño del pincel"
               >
                 <LuChevronDown />
               </button>
@@ -155,35 +149,38 @@ const SmudgeTool = ({ setToolParameters, tool, toolParameters }) => {
           </div>
         </div>
 
-        {/* Configuración de fuerza del smudge */}
         <div className="config-item">
-          <label className="tool-label">Smudge Strength</label>
+          <label className="tool-label" htmlFor="smudgeTool-strength">
+            Smudge Strength
+          </label>
           <div className="input-container">
-            <input 
-              type="number" 
-              min="0.1" 
-              max="1.0" 
+            <input
+              id="smudgeTool-strength"
+              type="number"
+              min={F_MIN}
+              max={F_MAX}
               step="0.1"
-              value={smudgeStrength} 
-              onChange={handleStrengthInput}
-              onBlur={handleStrengthBlur}
-              className="number-input" 
+              value={smudgeStrength}
+              onChange={onStrengthInput}
+              onBlur={onStrengthBlur}
+              className="number-input"
             />
-            <span className="tool-value">%</span>
             <div className="increment-buttons-container">
-              <button 
+              <button
                 type="button"
-                onClick={() => handleStrengthChange(0.1)}
                 className="increment-btn"
-                disabled={smudgeStrength >= 1.0}
+                onClick={() => stepStrength(0.1)}
+                disabled={sValue >= F_MAX}
+                aria-label="Aumentar fuerza"
               >
                 <LuChevronUp />
               </button>
-              <button 
+              <button
                 type="button"
-                onClick={() => handleStrengthChange(-0.1)}
                 className="increment-btn"
-                disabled={smudgeStrength <= 0.1}
+                onClick={() => stepStrength(-0.1)}
+                disabled={sValue <= F_MIN}
+                aria-label="Reducir fuerza"
               >
                 <LuChevronDown />
               </button>
@@ -191,35 +188,38 @@ const SmudgeTool = ({ setToolParameters, tool, toolParameters }) => {
           </div>
         </div>
 
-        {/* Configuración del flow del smudge */}
         <div className="config-item">
-          <label className="tool-label">Smudge Flow</label>
+          <label className="tool-label" htmlFor="smudgeTool-flow">
+            Smudge Flow
+          </label>
           <div className="input-container">
-            <input 
-              type="number" 
-              min="0.1" 
-              max="1.0" 
+            <input
+              id="smudgeTool-flow"
+              type="number"
+              min={F_MIN}
+              max={F_MAX}
               step="0.1"
-              value={smudgeFlow} 
-              onChange={handleFlowInput}
-              onBlur={handleFlowBlur}
-              className="number-input" 
+              value={smudgeFlow}
+              onChange={onFlowInput}
+              onBlur={onFlowBlur}
+              className="number-input"
             />
-            <span className="tool-value">%</span>
             <div className="increment-buttons-container">
-              <button 
+              <button
                 type="button"
-                onClick={() => handleFlowChange(0.1)}
                 className="increment-btn"
-                disabled={smudgeFlow >= 1.0}
+                onClick={() => stepFlow(0.1)}
+                disabled={fValue >= F_MAX}
+                aria-label="Aumentar flow"
               >
                 <LuChevronUp />
               </button>
-              <button 
+              <button
                 type="button"
-                onClick={() => handleFlowChange(-0.1)}
                 className="increment-btn"
-                disabled={smudgeFlow <= 0.1}
+                onClick={() => stepFlow(-0.1)}
+                disabled={fValue <= F_MIN}
+                aria-label="Reducir flow"
               >
                 <LuChevronDown />
               </button>
@@ -227,92 +227,45 @@ const SmudgeTool = ({ setToolParameters, tool, toolParameters }) => {
           </div>
         </div>
 
-        {/* Configuración del modo de smudge */}
         <div className="config-item">
-          <label className="tool-label">Smudge Mode</label>
+          <label className="tool-label" htmlFor="smudgeTool-mode">
+            Smudge Mode
+          </label>
           <div className="input-container">
             <select
+              id="smudgeTool-mode"
               value={smudgeMode}
               onChange={(e) => setSmudgeMode(e.target.value)}
               className="select-input"
             >
-              <option value="normal">🎨 Normal</option>
-              <option value="lighten">☀️ Lighten</option>
-              <option value="darken">🌙 Darken</option>
-              <option value="multiply">✖️ Multiply</option>
-              <option value="screen">📺 Screen</option>
-              <option value="overlay">🌈 Overlay</option>
+              {SMUDGE_MODES.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
             </select>
           </div>
         </div>
 
-        {/* Configuración de calidad */}
         <div className="config-item">
-          <label className="tool-label">Quality</label>
-          <div className="input-container">
-            <select
-              value={smudgeQuality}
-              onChange={(e) => setSmudgeQuality(e.target.value)}
-              className="select-input"
-            >
-              <option value="low">⚡ Fast (Low Quality)</option>
-              <option value="medium">⚖️ Balanced (Medium)</option>
-              <option value="high">🎯 Smooth (High Quality)</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Información de ayuda */}
-        <div className="config-item">
-          <div className="help-info">
-            <p><strong>🎨 Smudge Tips:</strong></p>
-            <ul>
-              <li><strong>Strength:</strong> Qué tan fuerte arrastra los colores</li>
-              <li><strong>Flow:</strong> Qué tanto recoge color nuevo mientras arrastra</li>
-              <li><strong>Normal Mode:</strong> Mezcla colores naturalmente</li>
-              <li><strong>Low Flow:</strong> Mantiene el color inicial más tiempo</li>
-              <li><strong>High Flow:</strong> Cambia rápidamente de color</li>
-            </ul>
-          </div>
-        </div>
-
-        {/* Configuración presets rápidos */}
-        <div className="config-item">
-          <label className="tool-label">Quick Presets</label>
+          <span className="tool-label">Quick Presets</span>
           <div className="preset-buttons">
-            <button 
-              className="preset-btn"
-              onClick={() => {
-                setSmudgeStrength(0.3);
-                setSmudgeFlow(0.8);
-              }}
-              title="Suave y fluido"
-            >
-              🌊 Soft
-            </button>
-            <button 
-              className="preset-btn"
-              onClick={() => {
-                setSmudgeStrength(0.8);
-                setSmudgeFlow(0.5);
-              }}
-              title="Configuración estándar"
-            >
-              🎯 Standard
-            </button>
-            <button 
-              className="preset-btn"
-              onClick={() => {
-                setSmudgeStrength(1.0);
-                setSmudgeFlow(0.2);
-              }}
-              title="Efecto dramático"
-            >
-              🔥 Intense
-            </button>
+            {PRESETS.map((p) => (
+              <button
+                key={p.name}
+                type="button"
+                className="preset-btn"
+                onClick={() => {
+                  setSmudgeStrength(p.strength);
+                  setSmudgeFlow(p.flow);
+                }}
+                title={p.title}
+              >
+                {p.name}
+              </button>
+            ))}
           </div>
         </div>
-
       </div>
     </div>
   );

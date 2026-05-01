@@ -125,19 +125,15 @@ const useWebGLPaintBuffer = (canvasRef, canvasWidth, canvasHeight, zoom, viewpor
 
       textureRef.current = texture;
 
-      // Initialize buffer data
-      const bufferSize = width * height * 4; // RGBA
-      const buffer = new Uint8Array(bufferSize);
-      // Initialize as transparent
-      for (let i = 0; i < bufferSize; i += 4) {
-        buffer[i] = 0;     // R
-        buffer[i + 1] = 0; // G
-        buffer[i + 2] = 0; // B
-        buffer[i + 3] = 0; // A (transparent)
-      }
+      // Initialize buffer data.
+      // Nota: `new Uint8Array(n)` ya garantiza ceros, así que el loop manual era
+      // redundante y hacía 17M de iteraciones JS en un canvas 4096² al arrancar.
+      const buffer = new Uint8Array(width * height * 4); // RGBA, inicializado a 0
       bufferDataRef.current = buffer;
 
-      // Upload initial texture data
+      // Upload initial texture data. Pasando `null` evitamos subir los ~67MB de
+      // ceros a la GPU en la inicialización; WebGL deja la textura zero-filled
+      // por seguridad (spec), que es exactamente lo que queremos (transparente).
       gl.texImage2D(
         gl.TEXTURE_2D,
         0,
@@ -147,7 +143,7 @@ const useWebGLPaintBuffer = (canvasRef, canvasWidth, canvasHeight, zoom, viewpor
         0,
         gl.RGBA,
         gl.UNSIGNED_BYTE,
-        buffer
+        null
       );
 
       // Set up GL state

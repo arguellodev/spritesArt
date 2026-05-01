@@ -1,70 +1,57 @@
-/* ============ VARIABLES ESPECÍFICAS PARA ONION CONFIG ============ */
-:root {
-  --onion-config-bg-primary: #1a1a1a;
-  --onion-config-bg-secondary: #2a2a2a;
-  --onion-config-bg-tertiary: #333333; 
-  --onion-config-bg-workspace: #222222;
-  --onion-config-text-primary: #f0f0f0;
-  --onion-config-text-secondary: #b8b8b8;
-  --onion-config-text-muted: #808080;
-  --onion-config-accent-color: #8c52ff;
-  --onion-config-accent-hover: #9d6dff;
-  --onion-config-accent-active: #7538e8;
-  --onion-config-border-color: #444444;
-  --onion-config-border-light: #555555;
-  --onion-config-canvas-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-  --onion-config-panel-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  --onion-config-button-bg: #3a3a3a;
-  --onion-config-button-hover: #4a4a4a;
-  --onion-config-button-border: #555555;
-  --onion-config-layer-hover: #3f3f3f;
-  --onion-config-layer-selected: #4b3c7a;
-  --onion-config-danger: #ff5252;
-  --onion-config-success: #4caf50;
-  --onion-config-warning: #ff9800;
-  --onion-config-info: #2196f3;
-  --onion-config-grid-color: rgba(121, 121, 121, 0.164);
-  --onion-config-transition-fast: 0.15s ease;
-  --onion-config-transition-normal: 0.2s ease;
-  --onion-config-transition-slow: 0.3s ease;
-  --onion-config-border-radius: 8px;
-  --onion-config-border-radius-small: 4px;
-}
+/* Onion Skin Popover — alineado al lenguaje visual del topToolbar.
+ * ────────────────────────────────────────────────────────────
+ *  - Glass studio dark con backdrop-filter (frosted glass).
+ *  - Acento púrpura PixCalli (#8c52ff) en hover/focus.
+ *  - Tipografía Inter, items 12px, section headers mini-uppercase.
+ *  - Scanlines decorativas casi invisibles (marca pixel-art sutil).
+ *  - Hover púrpura traslúcido (rgba(140,82,255,0.16)) — no gris.
+ *  - Variables globales del tema (var(--bg-*)/var(--accent-*)) — sin duplicar.
+ * ──────────────────────────────────────────────────────────── */
 
-/* ============ OVERLAY Y MODAL ============ */
+/* ============ OVERLAY (portal a body, coords desde JS) ============ */
 .onion-config__overlay {
-  position: absolute;
-  transform: translateY(calc(-100% - 10px));
-  right: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: fixed;
   z-index: 1000;
-  backdrop-filter: blur(4px);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', system-ui, sans-serif;
 }
 
+/* ============ MODAL — glass panel ============ */
 .onion-config__modal {
-  background: linear-gradient(145deg, rgba(26, 26, 26, 0.95), rgba(42, 42, 42, 0.95));
-  border: 1px solid var(--onion-config-border-color);
-  border-radius: 16px;
-  box-shadow: var(--onion-config-canvas-shadow), 0 0 40px rgba(140, 82, 255, 0.1);
-  width: 420px;
+  background-color: rgba(28, 28, 32, 0.92);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid rgba(140, 82, 255, 0.14);
+  border-radius: 8px;
+  box-shadow:
+    0 12px 36px rgba(0, 0, 0, 0.55),
+    0 2px 8px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  width: 380px;
   max-height: 600px;
   display: flex;
   flex-direction: column;
-  animation: onionConfigModalSlideIn var(--onion-config-transition-slow);
-  backdrop-filter: blur(10px);
+  isolation: isolate;
+  animation: onionConfigDropIn 0.14s cubic-bezier(0.18, 0.89, 0.32, 1.15);
 }
 
-@keyframes onionConfigModalSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-30px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+/* Scanline ultra-sutil — marca pixel-art editor decorativa */
+.onion-config__modal::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.012) 0 1px,
+    transparent 1px 3px
+  );
+  pointer-events: none;
+  z-index: -1;
+}
+
+@keyframes onionConfigDropIn {
+  from { opacity: 0; transform: translateY(6px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* ============ HEADER ============ */
@@ -72,61 +59,64 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--onion-config-border-color);
-  background: linear-gradient(135deg, var(--onion-config-bg-tertiary), var(--onion-config-bg-secondary));
-  border-radius: 16px 16px 0 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   flex-shrink: 0;
 }
 
 .onion-config__header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .onion-config__header-icon {
-  color: var(--onion-config-accent-color);
-  width: 24px;
-  height: 24px;
+  color: var(--accent-hover);
+  width: 16px;
+  height: 16px;
+  opacity: 0.92;
 }
 
 .onion-config__title {
-  color: var(--onion-config-text-primary);
+  color: var(--text-primary);
   margin: 0;
-  font-size: 1.4rem;
-  font-weight: 700;
-  letter-spacing: -0.025em;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .onion-config__status-indicator {
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  display: flex;
+  align-items: center;
+  margin-left: 4px;
+}
+
+.onion-config__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 .onion-config__status--enabled {
-  background: rgba(76, 175, 80, 0.2);
-  color: var(--onion-config-success);
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  background: rgba(76, 175, 80, 0.14);
+  color: #4caf50;
 }
 
 .onion-config__status--disabled {
-  background: rgba(128, 128, 128, 0.2);
-  color: var(--onion-config-text-muted);
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  opacity: 0.7;
 }
 
 .onion-config__status-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: currentColor;
   animation: onionConfigPulse 2s infinite;
@@ -140,45 +130,47 @@
 .onion-config__close-btn {
   background: none;
   border: none;
-  color: var(--onion-config-text-secondary);
-  font-size: 1.5rem;
+  color: var(--text-secondary);
+  font-size: 18px;
   cursor: pointer;
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--onion-config-border-radius-small);
-  transition: all var(--onion-config-transition-fast);
+  border-radius: 5px;
+  transition: background-color 0.12s ease, color 0.12s ease;
+  line-height: 1;
 }
 
 .onion-config__close-btn:hover {
-  background: var(--onion-config-button-hover);
-  color: var(--onion-config-text-primary);
-  transform: scale(1.05);
+  background-color: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
 }
 
-/* ============ QUICK CONTROLS ============ */
+/* ============ QUICK CONTROLS (master toggle + stats) ============ */
 .onion-config__quick-controls {
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--onion-config-border-color);
-  background: var(--onion-config-bg-secondary);
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
 }
 
 .onion-config__master-toggle {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
 }
 
 .onion-config__toggle-switch {
   position: relative;
   display: inline-block;
-  width: 48px;
-  height: 24px;
+  width: 32px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 .onion-config__toggle-input {
@@ -190,727 +182,412 @@
 .onion-config__toggle-slider {
   position: absolute;
   cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--onion-config-bg-tertiary);
-  transition: var(--onion-config-transition-normal);
-  border-radius: 12px;
-  border: 1px solid var(--onion-config-border-color);
+  inset: 0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  border-radius: 10px;
 }
 
 .onion-config__toggle-slider:before {
   position: absolute;
   content: "";
-  height: 18px;
-  width: 18px;
+  height: 12px;
+  width: 12px;
   left: 2px;
   top: 2px;
-  background: var(--onion-config-text-secondary);
-  transition: var(--onion-config-transition-normal);
+  background: var(--text-secondary);
   border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s ease, background-color 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .onion-config__toggle-input:checked + .onion-config__toggle-slider {
-  background: var(--onion-config-accent-color);
-  border-color: var(--onion-config-accent-color);
+  background: var(--accent-color);
+  border-color: var(--accent-color);
 }
 
 .onion-config__toggle-input:checked + .onion-config__toggle-slider:before {
-  transform: translateX(24px);
+  transform: translateX(14px);
   background: white;
 }
 
 .onion-config__toggle-text {
-  color: var(--onion-config-text-primary);
+  color: var(--text-primary);
+  font-size: 12px;
   font-weight: 500;
-  font-size: 0.9rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.onion-config__frame-stats {
-  display: flex;
-  gap: 20px;
-}
-
-.onion-config__stat {
-  text-align: center;
-}
-
-.onion-config__stat-number {
-  display: block;
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: var(--onion-config-accent-color);
-  line-height: 1;
-}
-
-.onion-config__stat-label {
-  font-size: 0.75rem;
-  color: var(--onion-config-text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-/* ============ TABS ============ */
-.onion-config__tabs {
-  display: flex;
-  background: var(--onion-config-bg-secondary);
-  border-bottom: 1px solid var(--onion-config-border-color);
-}
-
-.onion-config__tab-btn {
-  flex: 1;
-  padding: 16px 20px;
-  background: transparent;
-  border: none;
-  color: var(--onion-config-text-secondary);
-  cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 600;
-  transition: all var(--onion-config-transition-fast);
+/* Stats inline — estilo "section label mini" */
+.onion-config__stats-inline {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  position: relative;
+  gap: 5px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
 }
 
-.onion-config__tab-btn:hover {
-  background: var(--onion-config-button-hover);
-  color: var(--onion-config-text-primary);
+.onion-config__stats-divider {
+  opacity: 0.4;
 }
 
-.onion-config__tab-btn--active {
-  background: var(--onion-config-accent-color);
-  color: white;
-}
-
-.onion-config__tab-btn--active::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: white;
-}
-
-/* ============ CONTENT ============ */
-.onion-config__content {
-  flex: 1;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.onion-config__frames-tab,
-.onion-config__presets-tab {
+/* ============ BODY ============ */
+.onion-config__body {
   flex: 1;
   overflow-y: auto;
-  padding: 20px 24px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
-.onion-config__frames-tab::-webkit-scrollbar,
-.onion-config__presets-tab::-webkit-scrollbar {
+.onion-config__body::-webkit-scrollbar {
   width: 6px;
 }
 
-.onion-config__frames-tab::-webkit-scrollbar-track,
-.onion-config__presets-tab::-webkit-scrollbar-track {
+.onion-config__body::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.onion-config__frames-tab::-webkit-scrollbar-thumb,
-.onion-config__presets-tab::-webkit-scrollbar-thumb {
-  background: var(--onion-config-border-color);
+.onion-config__body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 3px;
 }
 
-/* ============ FRAME TYPE SELECTOR ============ */
-.onion-config__frame-type-selector {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 24px;
+.onion-config__body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.14);
 }
 
-.onion-config__type-btn {
-  flex: 1;
-  background: var(--onion-config-button-bg);
-  border: 1px solid var(--onion-config-button-border);
-  border-radius: var(--onion-config-border-radius);
-  padding: 16px;
-  cursor: pointer;
-  transition: all var(--onion-config-transition-fast);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--onion-config-text-secondary);
-}
-
-.onion-config__type-btn:hover {
-  background: var(--onion-config-button-hover);
-  border-color: var(--onion-config-border-light);
-  color: var(--onion-config-text-primary);
-}
-
-.onion-config__type-btn--active {
-  background: rgba(140, 82, 255, 0.1);
-  border-color: var(--onion-config-accent-color);
-  color: var(--onion-config-accent-color);
-}
-
-.onion-config__type-arrow {
-  font-size: 1.2rem;
-  font-weight: bold;
-}
-
-.onion-config__type-info {
+/* ============ SECTIONS ============ */
+.onion-config__section {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  gap: 8px;
 }
 
-.onion-config__type-label {
-  font-weight: 600;
-  font-size: 0.9rem;
-}
-
-.onion-config__type-count {
-  font-size: 0.75rem;
-  opacity: 0.7;
-}
-
-/* ============ SECTION HEADERS ============ */
 .onion-config__section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
-}
-
-.onion-config__section-title {
-  color: var(--onion-config-text-primary);
   margin: 0;
-  font-size: 1.1rem;
-  font-weight: 600;
 }
 
-.onion-config__section-subtitle {
-  color: var(--onion-config-text-secondary);
-  font-size: 0.85rem;
-  margin-top: 4px;
-  display: block;
+/* Section title — estilo "section header" del dropdown menubar */
+.onion-config__section-title {
+  margin: 0;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  opacity: 0.55;
+  user-select: none;
 }
 
+/* Add Añadir — botón ligero, no llamativo */
 .onion-config__add-frame-btn {
-  background: var(--onion-config-accent-color);
-  border: none;
-  border-radius: var(--onion-config-border-radius-small);
-  padding: 8px 12px;
-  color: white;
-  cursor: pointer;
-  font-size: 0.85rem;
-  font-weight: 600;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 4px;
-  transition: all var(--onion-config-transition-fast);
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
 .onion-config__add-frame-btn:hover {
-  background: var(--onion-config-accent-hover);
-  transform: translateY(-1px);
+  background-color: rgba(140, 82, 255, 0.16);
+  border-color: rgba(140, 82, 255, 0.35);
+  color: var(--accent-hover);
 }
 
-/* ============ FRAME LIST ============ */
-.onion-config__frame-list-container {
-  flex: 1;
-}
-
-.onion-config__frame-list {
+/* ============ PRESET CHIPS (kbd-like) ============ */
+.onion-config__preset-chips {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.onion-config__empty-state {
-  text-align: center;
-  padding: 40px 20px;
-  color: var(--onion-config-text-secondary);
-}
-
-.onion-config__empty-icon {
-  font-size: 2rem;
-  margin-bottom: 12px;
-}
-
-.onion-config__empty-text {
-  margin: 0 0 16px 0;
-  font-size: 0.9rem;
-}
-
-.onion-config__empty-add-btn {
-  background: var(--onion-config-accent-color);
-  border: none;
-  border-radius: var(--onion-config-border-radius);
-  padding: 12px 20px;
-  color: white;
-  cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 600;
+.onion-config__preset-chip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  transition: all var(--onion-config-transition-fast);
-}
-
-.onion-config__empty-add-btn:hover {
-  background: var(--onion-config-accent-hover);
-  transform: translateY(-2px);
-}
-
-/* ============ FRAME ITEMS ============ */
-.onion-config__frame-item {
-  background: var(--onion-config-button-bg);
-  border: 1px solid var(--onion-config-button-border);
-  border-radius: var(--onion-config-border-radius);
-  transition: all var(--onion-config-transition-fast);
+  gap: 6px;
+  padding: 6px 10px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom-color: rgba(0, 0, 0, 0.4);
+  border-radius: 5px;
+  color: var(--text-primary);
   cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.onion-config__preset-chip:hover {
+  background: linear-gradient(180deg, rgba(140, 82, 255, 0.16), rgba(140, 82, 255, 0.06));
+  border-color: rgba(140, 82, 255, 0.4);
+  color: var(--accent-hover);
+}
+
+.onion-config__preset-chip:active {
+  background: rgba(140, 82, 255, 0.24);
+  border-color: var(--accent-color);
+  color: white;
+}
+
+.onion-config__preset-chip svg {
+  color: var(--accent-hover);
+  opacity: 0.92;
+}
+
+/* ============ FRAME CHIPS ============ */
+.onion-config__empty-line {
+  margin: 4px 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.5;
+  font-style: italic;
+}
+
+.onion-config__frame-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.onion-config__frame-chip {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
   overflow: hidden;
+  transition: background-color 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
 }
 
-.onion-config__frame-item:hover {
-  background: var(--onion-config-button-hover);
-  border-color: var(--onion-config-border-light);
+.onion-config__frame-chip:hover {
+  background-color: rgba(140, 82, 255, 0.08);
+  border-color: rgba(140, 82, 255, 0.24);
 }
 
-.onion-config__frame-item--selected {
-  background: rgba(140, 82, 255, 0.1);
-  border-color: var(--onion-config-accent-color);
+.onion-config__frame-chip[data-disabled="true"] {
+  opacity: 0.5;
 }
 
-.onion-config__frame-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px;
-}
-
-.onion-config__frame-info {
+.onion-config__frame-chip-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  padding: 6px 10px;
+  min-height: 36px;
 }
 
 .onion-config__frame-offset {
-  font-weight: 700;
-  font-size: 1rem;
-  color: var(--onion-config-text-primary);
-  min-width: 32px;
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, monospace;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text-primary);
+  min-width: 24px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
 }
 
 .onion-config__frame-color-preview {
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  border: 2px solid var(--onion-config-border-color);
-  transition: all var(--onion-config-transition-fast);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
 }
 
-.onion-config__frame-actions {
-  display: flex;
-  gap: 8px;
+.onion-config__frame-opacity-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+  min-width: 32px;
+  letter-spacing: 0.02em;
 }
 
-.onion-config__frame-toggle,
-.onion-config__frame-remove {
-  background: none;
-  border: 1px solid var(--onion-config-button-border);
-  border-radius: var(--onion-config-border-radius-small);
-  width: 32px;
-  height: 32px;
+.onion-config__frame-chip-actions {
+  margin-left: auto;
   display: flex;
+  gap: 2px;
+}
+
+.onion-config__frame-chip-btn {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-secondary);
   cursor: pointer;
-  transition: all var(--onion-config-transition-fast);
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
-.onion-config__frame-toggle--enabled {
-  background: rgba(76, 175, 80, 0.2);
-  border-color: var(--onion-config-success);
-  color: var(--onion-config-success);
+.onion-config__frame-chip-btn:hover {
+  background-color: rgba(140, 82, 255, 0.16);
+  color: var(--accent-hover);
 }
 
-.onion-config__frame-toggle--disabled {
-  background: rgba(128, 128, 128, 0.2);
-  border-color: var(--onion-config-text-muted);
-  color: var(--onion-config-text-muted);
+.onion-config__frame-chip-btn.is-on {
+  color: #4caf50;
 }
 
-.onion-config__frame-remove {
-  color: var(--onion-config-text-secondary);
+.onion-config__frame-chip-btn.is-off {
+  color: var(--text-secondary);
+  opacity: 0.5;
 }
 
-.onion-config__frame-remove:hover {
-  background: rgba(255, 82, 82, 0.2);
-  border-color: var(--onion-config-danger);
-  color: var(--onion-config-danger);
+.onion-config__frame-chip-btn.is-active {
+  background-color: rgba(140, 82, 255, 0.18);
+  border-color: rgba(140, 82, 255, 0.4);
+  color: var(--accent-hover);
 }
 
-/* ============ FRAME CONTROLS ============ */
-.onion-config__frame-controls {
-  padding: 0 16px 16px;
-  border-top: 1px solid var(--onion-config-border-color);
-  margin-top: 16px;
-  animation: onionConfigExpandIn 0.2s ease-out;
+.onion-config__frame-chip-btn--remove:hover {
+  background-color: rgba(255, 122, 122, 0.14);
+  border-color: rgba(255, 122, 122, 0.35);
+  color: #ff7a7a;
+}
+
+/* ============ ADVANCED (disclosure inline) ============ */
+.onion-config__advanced {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: onionConfigExpandIn 0.18s ease-out;
 }
 
 @keyframes onionConfigExpandIn {
-  from {
-    opacity: 0;
-    max-height: 0;
-  }
-  to {
-    opacity: 1;
-    max-height: 300px;
-  }
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 320px; }
 }
 
 .onion-config__control-group {
-  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .onion-config__control-label {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 0.85rem;
-  color: var(--onion-config-text-primary);
+  font-size: 10.5px;
   font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 .onion-config__control-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 10px;
 }
 
-.onion-config__color-controls {
-  margin-bottom: 16px;
+.onion-config__advanced .onion-config__control-group {
+  margin-bottom: 0;
 }
 
 /* ============ SLIDERS ============ */
 .onion-config__slider {
   width: 100%;
-  height: 6px;
-  background: var(--onion-config-bg-tertiary);
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
   outline: none;
-  border-radius: 3px;
+  border-radius: 2px;
   cursor: pointer;
   -webkit-appearance: none;
-  transition: all var(--onion-config-transition-fast);
+  transition: background 0.12s ease;
 }
 
 .onion-config__slider:hover {
-  background: var(--onion-config-border-color);
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .onion-config__slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 20px;
-  height: 20px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: var(--onion-config-accent-color);
+  background: var(--accent-color);
   cursor: pointer;
-  border: 3px solid white;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-  transition: all var(--onion-config-transition-fast);
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  transition: transform 0.12s ease, background-color 0.12s ease;
 }
 
 .onion-config__slider::-webkit-slider-thumb:hover {
-  background: var(--onion-config-accent-hover);
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(140, 82, 255, 0.3);
+  background: var(--accent-hover);
+  transform: scale(1.12);
 }
 
 .onion-config__slider::-moz-range-thumb {
-  width: 20px;
-  height: 20px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: var(--onion-config-accent-color);
+  background: var(--accent-color);
   cursor: pointer;
-  border: 3px solid white;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-  transition: all var(--onion-config-transition-fast);
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  transition: transform 0.12s ease, background-color 0.12s ease;
 }
 
 .onion-config__slider--opacity::-webkit-slider-thumb {
-  background: linear-gradient(45deg, var(--onion-config-accent-color), var(--onion-config-accent-hover));
+  background: linear-gradient(45deg, var(--accent-color), var(--accent-hover));
 }
 
 .onion-config__slider--hue {
-  background: linear-gradient(to right, 
-    hsl(0, 70%, 50%), hsl(30, 70%, 50%), hsl(60, 70%, 50%), 
+  background: linear-gradient(to right,
+    hsl(0, 70%, 50%), hsl(30, 70%, 50%), hsl(60, 70%, 50%),
     hsl(90, 70%, 50%), hsl(120, 70%, 50%), hsl(150, 70%, 50%),
     hsl(180, 70%, 50%), hsl(210, 70%, 50%), hsl(240, 70%, 50%),
     hsl(270, 70%, 50%), hsl(300, 70%, 50%), hsl(330, 70%, 50%), hsl(360, 70%, 50%)) !important;
-  height: 8px;
-  border-radius: 4px;
+  height: 6px;
+  border-radius: 3px;
 }
 
 .onion-config__slider--hue::-webkit-slider-thumb {
   border: 2px solid white;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2), 0 2px 6px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3), 0 1px 4px rgba(0, 0, 0, 0.4);
   background: white;
 }
 
-/* ============ FRAME PREVIEW ============ */
-.onion-config__frame-preview {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: var(--onion-config-bg-secondary);
-  border-radius: var(--onion-config-border-radius-small);
-  border: 1px solid var(--onion-config-border-color);
+/* ============ FOCUS STATES (a11y) ============ */
+.onion-config__preset-chip:focus-visible,
+.onion-config__frame-chip-btn:focus-visible,
+.onion-config__add-frame-btn:focus-visible,
+.onion-config__close-btn:focus-visible {
+  outline: 2px solid rgba(140, 82, 255, 0.55);
+  outline-offset: 1px;
 }
 
-.onion-config__preview-swatch {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--onion-config-border-radius-small);
-  border: 2px solid var(--onion-config-border-color);
-  transition: all var(--onion-config-transition-fast);
-}
-
-.onion-config__preview-text {
-  color: var(--onion-config-text-secondary);
-  font-size: 0.85rem;
-  font-weight: 500;
-}
-
-/* ============ PRESETS ============ */
-.onion-config__presets-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 16px;
-  margin-bottom: 32px;
-}
-
-.onion-config__preset-card {
-  background: var(--onion-config-button-bg);
-  border: 1px solid var(--onion-config-button-border);
-  border-radius: var(--onion-config-border-radius);
-  padding: 20px 16px;
-  cursor: pointer;
-  transition: all var(--onion-config-transition-fast);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  text-align: center;
-}
-
-.onion-config__preset-card:hover {
-  background: var(--onion-config-button-hover);
-  border-color: var(--onion-config-border-light);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
-.onion-config__preset-card:active {
-  transform: translateY(0);
-  background: var(--onion-config-accent-color);
-  border-color: var(--onion-config-accent-color);
-  color: white;
-}
-
-.onion-config__preset-icon {
-  font-size: 2rem;
-  line-height: 1;
-}
-
-.onion-config__preset-label {
-  color: var(--onion-config-text-primary);
-  font-weight: 600;
-  font-size: 0.9rem;
-}
-
-/* ============ CURRENT CONFIG ============ */
-.onion-config__current-config {
-  background: var(--onion-config-bg-secondary);
-  border: 1px solid var(--onion-config-border-color);
-  border-radius: var(--onion-config-border-radius);
-  padding: 20px;
-}
-
-.onion-config__current-config-title {
-  color: var(--onion-config-text-primary);
-  margin: 0 0 16px 0;
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.onion-config__config-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.onion-config__summary-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.onion-config__summary-title {
-  color: var(--onion-config-text-secondary);
-  font-weight: 600;
-  font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.onion-config__summary-frames {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.onion-config__summary-frame {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--onion-config-button-bg);
-  border: 1px solid var(--onion-config-button-border);
-  border-radius: var(--onion-config-border-radius-small);
-  padding: 8px 12px;
-  font-size: 0.8rem;
-}
-
-.onion-config__summary-offset {
-  font-weight: 600;
-  color: var(--onion-config-text-primary);
-  min-width: 24px;
-}
-
-.onion-config__summary-color {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 1px solid var(--onion-config-border-color);
-}
-
-.onion-config__summary-status--enabled {
-  color: var(--onion-config-success);
-}
-
-.onion-config__summary-status--disabled {
-  color: var(--onion-config-text-muted);
-}
-
-/* ============ RESPONSIVE ============ */
-@media (max-width: 768px) {
-  .onion-config__modal {
-    width: 95vw;
-    max-width: 400px;
-    max-height: 90vh;
-  }
-  
-  .onion-config__header,
-  .onion-config__quick-controls,
-  .onion-config__frames-tab,
-  .onion-config__presets-tab {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-  
-  .onion-config__frame-type-selector {
-    flex-direction: column;
-  }
-  
-  .onion-config__control-row {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  
-  .onion-config__presets-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .onion-config__frame-stats {
-    gap: 12px;
-  }
-  
-  .onion-config__stat-number {
-    font-size: 1rem;
-  }
-  
-  .onion-config__stat-label {
-    font-size: 0.7rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .onion-config__modal {
-    width: 100vw;
-    height: 100vh;
-    border-radius: 0;
-    max-height: none;
-  }
-  
-  .onion-config__header {
-    border-radius: 0;
-  }
-  
-  .onion-config__frame-header {
-    padding: 12px;
-  }
-  
-  .onion-config__frame-controls {
-    padding: 0 12px 12px;
-  }
-  
-  .onion-config__quick-controls {
-    flex-direction: column;
-    gap: 12px;
-    align-items: stretch;
-  }
-  
-  .onion-config__frame-stats {
-    justify-content: space-around;
-  }
-}
-
-/* ============ ANIMATIONS ============ */
-@keyframes onionConfigFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes onionConfigSlideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.onion-config__frame-item {
-  animation: onionConfigSlideUp 0.2s ease-out;
-}
-
-.onion-config__preset-card {
-  animation: onionConfigFadeIn 0.3s ease-out;
-}
-
-/* ============ ACCESSIBILITY ============ */
 .onion-config__toggle-switch:focus-within .onion-config__toggle-slider {
   box-shadow: 0 0 0 3px rgba(140, 82, 255, 0.3);
 }
@@ -919,25 +596,31 @@
   box-shadow: 0 0 0 3px rgba(140, 82, 255, 0.3);
 }
 
-.onion-config__frame-toggle:focus,
-.onion-config__frame-remove:focus,
-.onion-config__add-frame-btn:focus,
-.onion-config__preset-card:focus {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(140, 82, 255, 0.3);
+/* ============ RESPONSIVE ============ */
+@media (max-width: 768px) {
+  .onion-config__modal {
+    width: 95vw;
+    max-width: 380px;
+    max-height: 90vh;
+  }
+
+  .onion-config__control-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
 }
 
-/* ============ DARK MODE ENHANCEMENTS ============ */
-@media (prefers-color-scheme: dark) {
+@media (max-width: 480px) {
+  /* coords del overlay vienen de JS — solo limitamos el modal interno */
   .onion-config__modal {
-    box-shadow: var(--onion-config-canvas-shadow), 0 0 60px rgba(140, 82, 255, 0.15);
+    width: calc(100vw - 20px);
+    max-width: calc(100vw - 20px);
+    max-height: 80vh;
   }
-  
-  .onion-config__frame-color-preview {
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
-  }
-  
-  .onion-config__slider::-webkit-slider-thumb {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+
+  .onion-config__quick-controls {
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
   }
 }

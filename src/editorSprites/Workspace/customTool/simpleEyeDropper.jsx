@@ -19,8 +19,7 @@ const SimpleEyedropper = ({ onColorSelect, isShapeTool, setBorderColor, setForeg
   // Eyedropper dentro de la ventana solamente
   const startWindowEyedropper = () => {
     setIsActive(true);
-    console.log('🎯 Iniciando eyedropper interno (solo ventana)...');
-    
+
     // Crear overlay
     const overlay = document.createElement('div');
     overlay.style.cssText = `
@@ -167,9 +166,7 @@ const SimpleEyedropper = ({ onColorSelect, isShapeTool, setBorderColor, setForeg
       
       if (elementUnder) {
         const color = getElementColor(elementUnder);
-        
-        console.log('🎨 Color seleccionado:', color);
-        
+
         const cleanColor = { r: color.r, g: color.g, b: color.b, a: color.a };
         
         if (isShapeTool) {

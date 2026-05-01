@@ -46,3 +46,39 @@ table {
 	border-collapse: collapse;
 	border-spacing: 0;
 }
+
+/* ============================================================
+ * Mobile-friendly defaults — globales
+ *
+ *  - touch-action:manipulation en TODOS los botones/inputs evita el
+ *    delay de 300ms que iOS/Android aplican por default antes de
+ *    disparar el click (preservan el doble-tap-zoom). No queremos ese
+ *    zoom en un editor; el pinch-zoom sigue funcionando porque solo
+ *    desactivamos el doble-tap.
+ *
+ *  - tap-highlight transparente: el flash gris que muestra Mobile
+ *    Safari/Chrome al tocar un boton se ve mal en una UI oscura.
+ *
+ *  - overscroll-behavior contain en html/body para evitar el
+ *    "rubber band" que arrastra todo el editor cuando el usuario
+ *    hace scroll dentro de un panel.
+ *
+ *  - text-size-adjust 100% para que iOS no agrande el texto al rotar
+ *    el dispositivo a landscape.
+ * ============================================================ */
+html {
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
+}
+
+html, body {
+	overscroll-behavior: contain;
+}
+
+button, input, select, textarea, a {
+	-webkit-tap-highlight-color: transparent;
+}
+
+button, [role="button"], input[type="button"], input[type="submit"], input[type="reset"] {
+	touch-action: manipulation;
+}

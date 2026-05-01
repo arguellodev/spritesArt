@@ -2,7 +2,19 @@ import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import './threejs.css';
+
+// Módulos compartidos con el renderer de capas 3D — una sola fuente de verdad.
+import {
+  IconBox, IconSliders, IconGrid, IconShapes, IconPalette, IconFilm,
+  IconDownload, IconUpload, IconPlay, IconPause, IconSend, IconImage,
+  IconInfo, Section,
+} from "../threeD/icons";
+import { VERTEX_SHADER, FRAGMENT_SHADER } from "../threeD/shaders";
+import { makeMainRT, makeNormalRT } from "../threeD/renderTargets";
+import { flattenGeometry, resetGeometry } from "../threeD/geometry";
+import { fitCamerasToObject as fitCamerasToObjectModule } from "../threeD/cameraFit";
 
 export default function Enhanced3DFlattener({paintPixelsRGBA, activeLayerId, onPixelDataReady}) {
   const containerRef = useRef(null);
@@ -12,8 +24,6 @@ export default function Enhanced3DFlattener({paintPixelsRGBA, activeLayerId, onP
 //Controles para el control del background:
 const [backgroundColor, setBackgroundColor] = useState('#00ff00'); // Verde pantalla verde
 const backgroundColorRef = useRef(backgroundColor);
-  
-const pixelCanvasRef = useRef(null);
 
 
   // ✅ NUEVAS REFERENCIAS PARA ANIMACIONES
@@ -24,8 +34,9 @@ const pixelCanvasRef = useRef(null);
   const [brightness, setBrightness] = useState(1.0);
   const brightnessRef = useRef(brightness);
 
-  const [pixelMode, setPixelMode] = useState(false);
-  const pixelModeRef = useRef(pixelMode);
+  // (Removido: pixelMode toggle. El render scale ya da el look pixelado en
+  // el viewport — un mode que snapeaba UVs en el shader era redundante. Para
+  // exportPixelData, los uniforms uPixelMode/uPixelSize se setean ahí mismo.)
 
   const [resolution, setResolution] = useState(128);
   const resolutionRef = useRef(resolution);
@@ -48,11 +59,49 @@ const orthoControlsRef = useRef(null);
   const [antiAlias, setAntiAlias] = useState(false);
   const antiAliasRef = useRef(antiAlias);
 
-  const [edgeDetection, setEdgeDetection] = useState(false);
-  const edgeDetectionRef = useRef(edgeDetection);
+  // Contornos basados en depth + normales (técnica de hello-threejs por
+  // KodyJKing): renderiza la escena dos veces — RGBA+depth y normales —
+  // y compara cada píxel con sus 4 vecinos en ambos buffers. Esto da
+  // siluetas externas limpias (depth) y bordes internos entre caras
+  // (normal) que el detector anterior basado en alpha no veía.
+  const [outlineEnabled, setOutlineEnabled] = useState(true);
+  const outlineEnabledRef = useRef(outlineEnabled);
 
-  const [edgeThickness, setEdgeThickness] = useState(1.0);
-  const edgeThicknessRef = useRef(edgeThickness);
+  const [depthEdgeStrength, setDepthEdgeStrength] = useState(0.7);
+  const depthEdgeStrengthRef = useRef(depthEdgeStrength);
+
+  const [normalEdgeStrength, setNormalEdgeStrength] = useState(0.5);
+  const normalEdgeStrengthRef = useRef(normalEdgeStrength);
+
+  // Color del borde — antes era hardcoded (silueta hacia negro, normal
+  // hacia blanco). Ahora ambos usan mix(color, uColor, strength*indicator):
+  // negro = oscurece (look "outlined"), blanco = highlight, otros = tinte.
+  const [depthEdgeColor, setDepthEdgeColor] = useState("#000000");
+  const depthEdgeColorRef = useRef(depthEdgeColor);
+
+  const [normalEdgeColor, setNormalEdgeColor] = useState("#000000");
+  const normalEdgeColorRef = useRef(normalEdgeColor);
+
+  // Umbral angular para considerar dos normales como "borde". 0.02 ≈ 7°,
+  // 0.15 ≈ 31°, 0.5 ≈ 60°. Valores bajos detectan curvas suaves; altos
+  // sólo pliegues pronunciados. Reemplaza el smoothstep hardcoded del demo.
+  const [normalEdgeThreshold, setNormalEdgeThreshold] = useState(0.15);
+  const normalEdgeThresholdRef = useRef(normalEdgeThreshold);
+
+  // Cuando ON, el detector de normal edges ignora el depth gate. Resuelve
+  // el caso de un brazo "delante" del cuerpo (depth casi idéntica) cuyo
+  // contorno interior queremos ver. Trade-off: bordes 2px (ambos lados
+  // marcan en vez de uno solo, como hacía hello-threejs).
+  const [detectOccluded, setDetectOccluded] = useState(true);
+  const detectOccludedRef = useRef(detectOccluded);
+
+  // Render scale: divide la resolución del render target en modo no-pixel
+  // (1 = nativa, 2 = mitad, etc). En el repo de KodyJKing usan /6 fijo.
+  const [renderScale, setRenderScale] = useState(1);
+  const renderScaleRef = useRef(renderScale);
+
+  // (Removidos: edgeDetection / edgeThickness — el shader nuevo no los usa.
+  // El antiguo detector por alpha era reemplazado por depth+normal edges.)
 
   // ✅ NUEVOS ESTADOS PARA ANIMACIONES
   const [hasAnimations, setHasAnimations] = useState(false);
@@ -62,35 +111,55 @@ const orthoControlsRef = useRef(null);
   const [availableAnimations, setAvailableAnimations] = useState([]);
 
   const rtRef = useRef(null);
+  const normalRtRef = useRef(null);
+  const normalMaterialRef = useRef(null);
   const materialScreenRef = useRef(null);
   const rendererRef = useRef(null);
   const updateRTRef = useRef(null);
   const sceneRef = useRef(null);
   const cameraRef = useRef(null);
   const orthoCameraRef = useRef(null);
+  const fitCamerasToObjectRef = useRef(null);
+  const pmremRef = useRef(null);
+  const envTextureRef = useRef(null);
+  // Lifteados a refs para que las funciones de export puedan reutilizar el
+  // mismo pipeline de post-process que la pantalla — sin duplicar tempScene,
+  // tempCamera, quad, ni el material. Garantiza pixel-perfect match.
+  const dummySceneRef = useRef(null);
+  const dummyCameraRef = useRef(null);
+  const dummyQuadRef = useRef(null);
 
-  const [showPixelGrid, setShowPixelGrid] = useState(true);
-  const showPixelGridRef = useRef(showPixelGrid);
+  // Preserva el gltf cargado entre cierre/reapertura del panel. <Activity>
+  // tira los effects al ocultar; al reabrir el useEffect crea una scene
+  // nueva, pero modelRef.current sigue apuntando al modelo. gltfRef permite
+  // re-ejecutar setupAnimations contra el mismo gltf para reconectar el
+  // mixer al modelo recién insertado.
+  const gltfRef = useRef(null);
+  // Id del requestAnimationFrame para cancelarlo en cleanup. Sin esto el
+  // loop sigue corriendo tras renderer.dispose() y rompe el WebGL context.
+  const rafIdRef = useRef(0);
 
-  const [pixelSizeValue, setPixelSizeValue] = useState(32);
-  const pixelSizeValueRef = useRef(pixelSizeValue);
+  // (Removidos: showPixelGrid y pixelSizeValue — eran sólo del modo pixel UI.)
 
   const [showExportArea, setShowExportArea] = useState(true);
   const showExportAreaRef = useRef(showExportArea);
 
   useEffect(() => { showExportAreaRef.current = showExportArea; }, [showExportArea]);
   useEffect(() => { brightnessRef.current = brightness; }, [brightness]);
-  useEffect(() => { pixelModeRef.current = pixelMode; }, [pixelMode]);
   useEffect(() => { resolutionRef.current = resolution; }, [resolution]);
   useEffect(() => { flattenModeRef.current = flattenMode; }, [flattenMode]);
   useEffect(() => { colorModeRef.current = colorMode; }, [colorMode]);
   useEffect(() => { flattenAmountRef.current = flattenAmount; }, [flattenAmount]);
   useEffect(() => { orthographicRef.current = orthographic; }, [orthographic]);
   useEffect(() => { antiAliasRef.current = antiAlias; }, [antiAlias]);
-  useEffect(() => { edgeDetectionRef.current = edgeDetection; }, [edgeDetection]);
-  useEffect(() => { edgeThicknessRef.current = edgeThickness; }, [edgeThickness]);
-  useEffect(() => { showPixelGridRef.current = showPixelGrid; }, [showPixelGrid]);
-  useEffect(() => { pixelSizeValueRef.current = pixelSizeValue; }, [pixelSizeValue]);
+  useEffect(() => { outlineEnabledRef.current = outlineEnabled; }, [outlineEnabled]);
+  useEffect(() => { depthEdgeStrengthRef.current = depthEdgeStrength; }, [depthEdgeStrength]);
+  useEffect(() => { normalEdgeStrengthRef.current = normalEdgeStrength; }, [normalEdgeStrength]);
+  useEffect(() => { depthEdgeColorRef.current = depthEdgeColor; }, [depthEdgeColor]);
+  useEffect(() => { normalEdgeColorRef.current = normalEdgeColor; }, [normalEdgeColor]);
+  useEffect(() => { normalEdgeThresholdRef.current = normalEdgeThreshold; }, [normalEdgeThreshold]);
+  useEffect(() => { detectOccludedRef.current = detectOccluded; }, [detectOccluded]);
+  useEffect(() => { renderScaleRef.current = renderScale; }, [renderScale]);
   useEffect(() => { backgroundColorRef.current = backgroundColor; }, [backgroundColor]);
 
   // FUNCIÓN PARA MANEJAR ANIMACIONES - CON MÁS DEBUGGING
@@ -225,223 +294,60 @@ const orthoControlsRef = useRef(null);
     const dummyScene = new THREE.Scene();
   
     // --- RENDER TARGET RESPONSIVE ---
+    // El RT se renderiza a CANVAS / renderScale. renderScale=1 → nativo,
+    // 6 → estilo hello-threejs (divideScalar(6)). Luego se upscalea con
+    // NearestFilter para look pixelado, o Linear para suavizado.
     const computeRTSize = () => {
-      if (pixelModeRef.current) {
-        const w = Math.max(1, Math.round(resolutionRef.current));
-        const aspect = CANVAS_HEIGHT / CANVAS_WIDTH;
-        const h = Math.max(1, Math.round(w * aspect));
-        return { w, h };
-      } else {
-        return { w: CANVAS_WIDTH, h: CANVAS_HEIGHT };
-      }
+      const div = Math.max(1, renderScaleRef.current || 1);
+      const w = Math.max(1, Math.round(CANVAS_WIDTH / div));
+      const h = Math.max(1, Math.round(CANVAS_HEIGHT / div));
+      return { w, h };
     };
     let { w: rtW, h: rtH } = computeRTSize();
-  
-    let rtTexture = new THREE.WebGLRenderTarget(rtW, rtH, {
-      minFilter: pixelModeRef.current ? THREE.NearestFilter : THREE.LinearFilter,
-      magFilter: pixelModeRef.current ? THREE.NearestFilter : THREE.LinearFilter,
-      format: THREE.RGBAFormat,
-    });
-    rtTexture.texture.colorSpace = THREE.SRGBColorSpace;
+
+    // makeMainRT/makeNormalRT importados de ../threeD/renderTargets.
+
+    let rtTexture = makeMainRT(rtW, rtH);
     rtRef.current = rtTexture;
+    let normalRT = makeNormalRT(rtW, rtH);
+    normalRtRef.current = normalRT;
+    const normalMaterial = new THREE.MeshNormalMaterial();
+    normalMaterialRef.current = normalMaterial;
   
-    // --- SHADERS (MISMO QUE ANTES) ---
-    const vertexShader = `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `;
-    
-    const fragmentShader = `
-    uniform sampler2D tDiffuse;
-    uniform float uBrightness;
-    uniform int uFlattenMode;
-    uniform float uFlattenAmount;
-    uniform bool uAntiAlias;
-    uniform bool uEdgeDetection;
-    uniform float uEdgeThickness;
-    uniform vec2 uResolution;
-    uniform bool uPixelMode;
-    uniform float uPixelSize;
-    uniform bool uShowGrid;
-    uniform bool uShowExportArea;
-    uniform float uExportResolution;
-    uniform vec3 uBackgroundColor;  
-    varying vec2 vUv;
-
-      vec3 posterize(vec3 color, float levels) {
-        return floor(color * levels) / levels;
-      }
-
-      vec3 flattenColors(vec3 color) {
-        color = smoothstep(0.0, 1.0, color);
-        return posterize(color, 8.0);
-      }
-
-      vec2 pixelate(vec2 uv, float pixelSize) {
-        if (!uPixelMode || pixelSize <= 1.0) return uv;
-        
-        vec2 screenCoords = uv * uResolution;
-        vec2 pixelCoords = floor(screenCoords / pixelSize) * pixelSize;
-        pixelCoords += pixelSize * 0.5;
-        return pixelCoords / uResolution;
-      }
-
-      float getPixelGrid(vec2 uv, float pixelSize) {
-        if (!uPixelMode || !uShowGrid || pixelSize <= 1.0) return 1.0;
-        
-        vec2 screenCoords = uv * uResolution;
-        vec2 cellPos = mod(screenCoords, pixelSize);
-        float lineWidth = 1.0;
-        
-        if (cellPos.x < lineWidth || cellPos.y < lineWidth) {
-          return 0.7;
-        }
-        
-        return 1.0;
-      }
-
-      vec3 getExportAreaOverlay(vec2 uv, vec3 color) {
-        if (!uShowExportArea || !uPixelMode) return color;
-        
-        float canvasSize = min(uResolution.x, uResolution.y);
-        vec2 center = vec2(0.5, 0.5);
-        
-        vec2 screenCoords = uv * uResolution;
-        vec2 centerScreen = center * uResolution;
-        
-        float halfSize = canvasSize * 0.5;
-        vec2 areaMin = centerScreen - halfSize;
-        vec2 areaMax = centerScreen + halfSize;
-        
-        bool insideArea = screenCoords.x >= areaMin.x && screenCoords.x <= areaMax.x &&
-                          screenCoords.y >= areaMin.y && screenCoords.y <= areaMax.y;
-        
-        float borderWidth = 4.0;
-        bool onBorder = false;
-        
-        if (insideArea) {
-          bool nearLeftEdge = screenCoords.x <= areaMin.x + borderWidth;
-          bool nearRightEdge = screenCoords.x >= areaMax.x - borderWidth;
-          bool nearTopEdge = screenCoords.y >= areaMax.y - borderWidth;
-          bool nearBottomEdge = screenCoords.y <= areaMin.y + borderWidth;
-          
-          onBorder = nearLeftEdge || nearRightEdge || nearTopEdge || nearBottomEdge;
-        }
-        
-        if (onBorder) {
-          return mix(color, vec3(0.0, 1.0, 0.2), 0.8);
-        } else if (!insideArea) {
-          return color * 0.4;
-        } else {
-          return mix(color, vec3(1.0, 1.0, 1.0), 0.03);
-        }
-      }
-
-      vec4 antiAliasFilter(sampler2D tex, vec2 uv, vec2 texelSize) {
-        vec4 color = texture2D(tex, uv);
-        vec4 sharp = color * 5.0;
-        sharp -= texture2D(tex, uv + vec2(texelSize.x, 0.0));
-        sharp -= texture2D(tex, uv - vec2(texelSize.x, 0.0));
-        sharp -= texture2D(tex, uv + vec2(0.0, texelSize.y));
-        sharp -= texture2D(tex, uv - vec2(0.0, texelSize.y));
-        return mix(color, sharp, 0.3);
-      }
-
-      void main() {
-        vec2 texelSize = 1.0 / uResolution;
-        vec2 pixelatedUV = pixelate(vUv, uPixelSize);
-        
-        vec4 texel;
-        
-        if (uAntiAlias) {
-          texel = antiAliasFilter(tDiffuse, pixelatedUV, texelSize);
-        } else {
-          texel = texture2D(tDiffuse, pixelatedUV);
-        }
-        
-        vec3 color = texel.rgb * uBrightness;
-        
-        if (uFlattenMode == 1) {
-          color = flattenColors(color);
-        } else if (uFlattenMode == 2) {
-          color = posterize(color, 4.0);
-          float luminance = dot(color, vec3(0.299, 0.587, 0.114));
-          color = mix(color, vec3(luminance), 0.5);
-        } else if (uFlattenMode == 3) {
-          color = step(0.5, color);
-        }
-        
-        if (uEdgeDetection) {
-          vec2 offset = texelSize * uEdgeThickness;
-          float centerLuminance = dot(color, vec3(0.299, 0.587, 0.114));
-          
-          if (texel.a > 0.1 && centerLuminance > 0.05) {
-            float edgeStrength = 0.0;
-            
-            vec4 samples[8];
-            samples[0] = texture2D(tDiffuse, pixelatedUV + vec2(-offset.x, -offset.y));
-            samples[1] = texture2D(tDiffuse, pixelatedUV + vec2(0.0, -offset.y));
-            samples[2] = texture2D(tDiffuse, pixelatedUV + vec2(offset.x, -offset.y));
-            samples[3] = texture2D(tDiffuse, pixelatedUV + vec2(offset.x, 0.0));
-            samples[4] = texture2D(tDiffuse, pixelatedUV + vec2(offset.x, offset.y));
-            samples[5] = texture2D(tDiffuse, pixelatedUV + vec2(0.0, offset.y));
-            samples[6] = texture2D(tDiffuse, pixelatedUV + vec2(-offset.x, offset.y));
-            samples[7] = texture2D(tDiffuse, pixelatedUV + vec2(-offset.x, 0.0));
-            
-            for (int i = 0; i < 8; i++) {
-              vec3 sampleColor = samples[i].rgb * uBrightness;
-              float sampleLuminance = dot(sampleColor, vec3(0.299, 0.587, 0.114));
-              bool sampleIsBackground = samples[i].a < 0.1 || sampleLuminance < 0.05;
-              
-              if (sampleIsBackground) {
-                edgeStrength += 1.0;
-              }
-            }
-            
-            edgeStrength /= 8.0;
-            float edge = smoothstep(0.1, 0.5, edgeStrength);
-            color = mix(color, vec3(0.0), edge);
-          }
-        }
-        
-        float gridMask = getPixelGrid(vUv, uPixelSize);
-        color *= gridMask;
-        
-        color = getExportAreaOverlay(vUv, color);
-        
- if (texel.a < 0.1) {
-  vec3 bgColor = uBackgroundColor;  // USAR EL UNIFORM
-  bgColor = getExportAreaOverlay(vUv, bgColor);
-  gl_FragColor = vec4(bgColor, 1.0);
-}
- else {
-          gl_FragColor = vec4(color, texel.a);
-        }
-      }
-    `;
+    // SHADERS — importados de ../threeD/shaders. Una sola fuente de verdad
+    // compartida con el ThreeDLayerRenderer (capas 3D del editor).
 
     const materialScreen = new THREE.ShaderMaterial({
       uniforms: {
         tDiffuse: { value: rtTexture.texture },
+        tDepth: { value: rtTexture.depthTexture },
+        tNormal: { value: normalRT.texture },
         uBrightness: { value: brightnessRef.current },
         uFlattenMode: { value: 0 },
         uFlattenAmount: { value: flattenAmountRef.current },
         uAntiAlias: { value: antiAliasRef.current },
-        uEdgeDetection: { value: edgeDetectionRef.current },
-        uEdgeThickness: { value: edgeThicknessRef.current },
+        uOutlineEnabled: { value: outlineEnabledRef.current },
+        uDepthEdgeStrength: { value: depthEdgeStrengthRef.current },
+        uNormalEdgeStrength: { value: normalEdgeStrengthRef.current },
+        uDepthEdgeColor: { value: new THREE.Color(depthEdgeColorRef.current) },
+        uNormalEdgeColor: { value: new THREE.Color(normalEdgeColorRef.current) },
+        uNormalEdgeThreshold: { value: normalEdgeThresholdRef.current },
+        uDetectOccluded: { value: detectOccludedRef.current },
         uResolution: { value: new THREE.Vector2(CANVAS_WIDTH, CANVAS_HEIGHT) },
-        uPixelMode: { value: pixelModeRef.current },
-        uPixelSize: { value: 32.0 },
-        uShowGrid: { value: true },
+        uRtResolution: { value: new THREE.Vector2(rtW, rtH) },
+        uPixelMode: { value: false },
+        uPixelSize: { value: 1.0 },
+        uShowGrid: { value: false },
         uShowExportArea: { value: showExportAreaRef.current },
         uExportResolution: { value: resolutionRef.current },
-        uBackgroundColor: { value: new THREE.Color(0x00ff00) }, // Verde inicial
+        uBackgroundColor: { value: new THREE.Color(0x00ff00) },
+        // El visor modal siempre rellena el fondo con color sólido. Las capas
+        // 3D del editor pasan 0.0 aquí para integrarse transparente con otras
+        // capas (esto vive en el shader compartido en ../threeD/shaders).
+        uBackgroundAlpha: { value: 1.0 },
       },
-      vertexShader,
-      fragmentShader,
+      vertexShader: VERTEX_SHADER,
+      fragmentShader: FRAGMENT_SHADER,
       depthWrite: false,
     });
     materialScreenRef.current = materialScreen;
@@ -451,25 +357,32 @@ const orthoControlsRef = useRef(null);
     const quad = new THREE.Mesh(quadGeo, materialScreen);
     quad.position.z = -100;
     dummyScene.add(quad);
+
+    // Refs para que exportPixelData/downloadImage reutilicen este mismo
+    // post-process en vez de instanciar tempMaterial/tempScene paralelos
+    // (que divergían visualmente con la pantalla).
+    dummySceneRef.current = dummyScene;
+    dummyCameraRef.current = dummyCamera;
+    dummyQuadRef.current = quad;
   
     // --- LUCES ---
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
     scene.add(ambientLight);
-    
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
     dirLight.position.set(5, 10, 7.5);
     scene.add(dirLight);
-    
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.7);
     fillLight.position.set(-5, -3, 2);
     scene.add(fillLight);
-    
-    const backLight = new THREE.DirectionalLight(0xffffff, 0.2);
+
+    const backLight = new THREE.DirectionalLight(0xffffff, 0.4);
     backLight.position.set(0, 3, -5);
     scene.add(backLight);
-  
+
     // --- RENDERER RESPONSIVE ---
-    const renderer = new THREE.WebGLRenderer({ 
+    const renderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: true
     });
@@ -480,6 +393,20 @@ const orthoControlsRef = useRef(null);
     renderer.toneMapping = THREE.NoToneMapping;
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
+
+    // --- ENVIRONMENT (IBL) — debe ir DESPUÉS del renderer porque
+    // PMREMGenerator necesita una instancia válida de WebGLRenderer ---
+    // Los GLB modernos suelen usar materiales PBR (MeshStandardMaterial /
+    // MeshPhysicalMaterial), que necesitan un environment map para reflejar
+    // luz indirecta. Sin él los modelos se ven planos y oscuros aunque haya
+    // direcionales. Patrón estándar del visor oficial threejs.org/examples:
+    // PMREMGenerator + RoomEnvironment da iluminación neutra de estudio.
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    pmrem.compileEquirectangularShader();
+    const envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environment = envTexture;
+    pmremRef.current = pmrem;
+    envTextureRef.current = envTexture;
   
     // --- CONTROLS ---
 // --- CONTROLS ---
@@ -502,79 +429,54 @@ orthoControls.screenSpacePanning = true;
 orthoControls.enableZoom = true;
 orthoControls.target.set(0, 0, 0);
 orthoControlsRef.current = orthoControls;
-  // Nuevas referencias para controles dinámicos
+
+    // Auto-fit de cámara via ../threeD/cameraFit. Wrapper que conecta los
+    // refs vivos a la función pura.
+    const fitCamerasToObject = (object) => {
+      fitCamerasToObjectModule(object, {
+        perspective: cameraRef.current,
+        ortho: orthoCameraRef.current,
+        viewportSize: { width: CANVAS_WIDTH, height: CANVAS_HEIGHT },
+        controls: controlsRef.current,
+        orthoControls: orthoControlsRef.current,
+        margin: 1.5,
+      });
+    };
+    fitCamerasToObjectRef.current = fitCamerasToObject;
 
     // --- FUNCIONES ---
     const updateRenderTarget = () => {
-      if (rtRef.current) rtRef.current.dispose();
       const { w, h } = computeRTSize();
-      const newRT = new THREE.WebGLRenderTarget(w, h, {
-        minFilter: pixelModeRef.current ? THREE.NearestFilter : THREE.LinearFilter,
-        magFilter: pixelModeRef.current ? THREE.NearestFilter : THREE.LinearFilter,
-        format: THREE.RGBAFormat,
-      });
-      newRT.texture.colorSpace = THREE.SRGBColorSpace;
+      if (rtRef.current) {
+        // dispose() también libera depthTexture asociada.
+        rtRef.current.dispose();
+      }
+      if (normalRtRef.current) {
+        normalRtRef.current.dispose();
+      }
+      const newRT = makeMainRT(w, h);
+      const newNormalRT = makeNormalRT(w, h);
       rtRef.current = newRT;
-      materialScreenRef.current.uniforms.tDiffuse.value = newRT.texture;
+      normalRtRef.current = newNormalRT;
+      const m = materialScreenRef.current;
+      if (m) {
+        m.uniforms.tDiffuse.value = newRT.texture;
+        m.uniforms.tDepth.value = newRT.depthTexture;
+        m.uniforms.tNormal.value = newNormalRT.texture;
+        m.uniforms.uRtResolution.value.set(w, h);
+      }
     };
     updateRTRef.current = updateRenderTarget;
   
-    // Función para aplanar geometría (MISMA QUE ANTES)
-    const flattenGeometry = (object, mode, amount) => {
-      object.traverse((child) => {
-        if (child.isMesh && child.geometry) {
-          const positions = child.geometry.attributes.position;
-          if (positions && !child.geometry.userData.originalPositions) {
-            child.geometry.userData.originalPositions = positions.array.slice();
-          }
-          
-          if (child.geometry.userData.originalPositions) {
-            const original = child.geometry.userData.originalPositions;
-            const current = positions.array;
-            
-            for (let i = 0; i < original.length; i += 3) {
-              current[i] = original[i];
-              current[i + 1] = original[i + 1];
-              current[i + 2] = original[i + 2];
-              
-              if (mode === 'flatten-z') {
-                current[i + 2] *= (1 - amount);
-              } else if (mode === 'flatten-y') {
-                current[i + 1] *= (1 - amount);
-              } else if (mode === 'flatten-x') {
-                current[i] *= (1 - amount);
-              }
-            }
-            
-            positions.needsUpdate = true;
-            child.geometry.computeVertexNormals();
-          }
-        }
-      });
-    };
-  
-    // Función para resetear geometría (MISMA QUE ANTES)
-    const resetGeometry = (object) => {
-      object.traverse((child) => {
-        if (child.isMesh && child.geometry && child.geometry.userData.originalPositions) {
-          const positions = child.geometry.attributes.position;
-          const original = child.geometry.userData.originalPositions;
-          const current = positions.array;
-          
-          for (let i = 0; i < original.length; i++) {
-            current[i] = original[i];
-          }
-          
-          positions.needsUpdate = true;
-          child.geometry.computeVertexNormals();
-        }
-      });
-    };
+    // flattenGeometry/resetGeometry importados de ../threeD/geometry.
   
     // Función onWindowResize RESPONSIVE COMPLETA
     const onWindowResize = () => {
       const { width, height } = getContainerSize();
-      
+      // Mantener CANVAS_WIDTH/HEIGHT vivos para computeRTSize tras un resize.
+      CANVAS_WIDTH = width;
+      CANVAS_HEIGHT = height;
+
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       
@@ -610,7 +512,7 @@ orthoControlsRef.current = orthoControls;
     // ✅ FUNCIÓN ANIMATE MODIFICADA PARA INCLUIR ANIMACIONES
     // Función animate completa
     const animate = () => {
-      requestAnimationFrame(animate);
+      rafIdRef.current = requestAnimationFrame(animate);
       
       // Actualizar animaciones
       const delta = clockRef.current.getDelta();
@@ -621,8 +523,13 @@ orthoControlsRef.current = orthoControls;
       // Actualizar uniforms básicos
       materialScreenRef.current.uniforms.uBrightness.value = brightnessRef.current;
       materialScreenRef.current.uniforms.uAntiAlias.value = antiAliasRef.current;
-      materialScreenRef.current.uniforms.uEdgeDetection.value = edgeDetectionRef.current;
-      materialScreenRef.current.uniforms.uEdgeThickness.value = edgeThicknessRef.current;
+      materialScreenRef.current.uniforms.uOutlineEnabled.value = outlineEnabledRef.current;
+      materialScreenRef.current.uniforms.uDepthEdgeStrength.value = depthEdgeStrengthRef.current;
+      materialScreenRef.current.uniforms.uNormalEdgeStrength.value = normalEdgeStrengthRef.current;
+      materialScreenRef.current.uniforms.uDepthEdgeColor.value.set(depthEdgeColorRef.current);
+      materialScreenRef.current.uniforms.uNormalEdgeColor.value.set(normalEdgeColorRef.current);
+      materialScreenRef.current.uniforms.uNormalEdgeThreshold.value = normalEdgeThresholdRef.current;
+      materialScreenRef.current.uniforms.uDetectOccluded.value = detectOccludedRef.current;
       materialScreenRef.current.uniforms.uBackgroundColor.value.setHex(
         parseInt(backgroundColorRef.current.replace('#', '0x'))
       );
@@ -636,21 +543,14 @@ orthoControlsRef.current = orthoControls;
       materialScreenRef.current.uniforms.uFlattenMode.value = colorModeValue;
       materialScreenRef.current.uniforms.uFlattenAmount.value = flattenAmountRef.current;
     
-      materialScreenRef.current.uniforms.uPixelMode.value = pixelModeRef.current;
-      materialScreenRef.current.uniforms.uShowGrid.value = showPixelGridRef.current;
+      // Display: nunca pixelado a nivel shader (renderScale ya da ese efecto).
+      // uShowExportArea sigue activo independiente — sirve como guía visual
+      // antes de exportar al editor con la resolución elegida.
+      materialScreenRef.current.uniforms.uPixelMode.value = false;
+      materialScreenRef.current.uniforms.uPixelSize.value = 1.0;
+      materialScreenRef.current.uniforms.uShowGrid.value = false;
       materialScreenRef.current.uniforms.uShowExportArea.value = showExportAreaRef.current;
       materialScreenRef.current.uniforms.uExportResolution.value = resolutionRef.current;
-      
-      if (pixelModeRef.current) {
-        const currentSize = rendererRef.current.getSize(new THREE.Vector2());
-        const canvasSize = Math.min(currentSize.x, currentSize.y);
-        const workingResolution = resolutionRef.current;
-        const calculatedPixelSize = canvasSize / workingResolution;
-        
-        materialScreenRef.current.uniforms.uPixelSize.value = calculatedPixelSize;
-      } else {
-        materialScreenRef.current.uniforms.uPixelSize.value = 1.0;
-      }
       
       // Aplicar aplanamiento geométrico si hay modelo
       if (modelRef.current) {
@@ -660,10 +560,15 @@ orthoControlsRef.current = orthoControls;
           resetGeometry(modelRef.current);
         }
       }
-      
-      // Actualizar canvas en tiempo real
-      updateCanvasWithPixelData();
-      
+
+      // (Antes aquí se llamaba updateCanvasWithPixelData() cada frame: creaba 2
+      // RenderTargets, un ShaderMaterial nuevo, y hacía readRenderTargetPixels
+      // — readback síncrono GPU→CPU — para alimentar un canvas HTML duplicado.
+      // El shader materialScreen ya pixela en GPU vía uPixelMode, así que el
+      // canvas extra y todo ese trabajo por frame eran redundantes. La función
+      // exportPixelData() sigue haciendo readback bajo demanda al pulsar el
+      // botón "Exportar al Editor".)
+
       // Usar cámara apropiada
 // Usar cámara apropiada
 const activeCamera = orthographicRef.current ? orthoCamera : camera;
@@ -673,26 +578,82 @@ if (activeControls) {
   activeControls.update();
 }
       
-      // Renderizar escena 3D al render target
+      // Pase 1: escena con materiales reales → RT principal (RGBA + depth).
       renderer.setRenderTarget(rtRef.current);
       renderer.clear();
       renderer.render(scene, activeCamera);
-      
-      // Renderizar post-processing a la pantalla
+
+      // Pase 2: escena con MeshNormalMaterial como override → RT de normales.
+      // Sólo necesario cuando contornos están activos; si no, se salta para
+      // evitar el coste del segundo pase de geometría.
+      if (outlineEnabledRef.current && normalRtRef.current && normalMaterialRef.current) {
+        const prevOverride = scene.overrideMaterial;
+        scene.overrideMaterial = normalMaterialRef.current;
+        renderer.setRenderTarget(normalRtRef.current);
+        renderer.clear();
+        renderer.render(scene, activeCamera);
+        scene.overrideMaterial = prevOverride;
+      }
+
+      // Pase 3: post-processing a la pantalla.
       renderer.setRenderTarget(null);
       renderer.clear();
       renderer.render(dummyScene, dummyCamera);
     };
     
     animate();
-  
+
+    // Re-anexión tras remount: si el usuario cargó un modelo, cerró el
+    // panel y lo reabrió, modelRef.current sobrevive (no lo dispusimos en
+    // cleanup). Lo metemos en la nueva escena y reconectamos el mixer.
+    // En el primer mount (sin modelo) este bloque no hace nada.
+    if (modelRef.current) {
+      scene.add(modelRef.current);
+      if (gltfRef.current) {
+        // Reusa la lógica existente: crea un mixer fresco y resincroniza
+        // el state de animaciones.
+        setupAnimations(gltfRef.current);
+      }
+      if (fitCamerasToObjectRef.current) {
+        // Re-encuadra para que el modelo siga visible (la cámara se
+        // recreó en este mount, su posición es la inicial).
+        fitCamerasToObjectRef.current(modelRef.current);
+      }
+    }
+
     return () => {
+      // 1) Cancelar el rAF loop ANTES de disponer recursos. Si no se cancela
+      //    el loop sigue corriendo, llama renderer.render() sobre un renderer
+      //    disposed y rompe el contexto WebGL — al reabrir el panel <Activity>
+      //    crea un nuevo contexto pero hereda el estado corrupto.
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = 0;
+      }
+
       window.removeEventListener("resize", onWindowResize);
       resizeObserver.disconnect();
+
+      // 2) Quitar el canvas del DOM. Sin esto al remontar se acumulan
+      //    canvases muertos en el container; el usuario veía el viejo
+      //    (con el contexto roto) en vez del nuevo.
+      if (renderer.domElement.parentNode) {
+        renderer.domElement.parentNode.removeChild(renderer.domElement);
+      }
+
       if (controlsRef.current) controlsRef.current.dispose();
       if (orthoControlsRef.current) orthoControlsRef.current.dispose();
+      if (rtRef.current) rtRef.current.dispose();
+      if (normalRtRef.current) normalRtRef.current.dispose();
+      if (normalMaterialRef.current) normalMaterialRef.current.dispose();
+      if (envTextureRef.current) envTextureRef.current.dispose();
+      if (pmremRef.current) pmremRef.current.dispose();
       renderer.dispose();
-      
+
+      // 3) Detener animaciones pero NO disponer modelRef/gltfRef ni sus
+      //    geometries/materiales — al remontar, scene.add(modelRef.current)
+      //    los reanexa a la nueva escena. setupAnimations recrea el mixer
+      //    desde gltfRef.animations.
       if (mixerRef.current) {
         mixerRef.current.stopAllAction();
         mixerRef.current = null;
@@ -703,82 +664,14 @@ if (activeControls) {
 
   useEffect(() => {
     if (typeof updateRTRef.current === "function") updateRTRef.current();
-  }, [pixelMode, resolution]);
+  }, [resolution, renderScale]);
 
-
-  // Efecto para cambiar controles dinámicamente según el modo pixel
-useEffect(() => {
-  const canvas = pixelCanvasRef.current;
-  const container = containerRef.current;
-  
-  if (canvas && container && rendererRef.current) {
-    if (pixelMode) {
-      // Cambiar controles al canvas pixel
-      const canvas3D = rendererRef.current.domElement;
-      if (controlsRef.current && orthoControlsRef.current) {
-        const currentTarget = controlsRef.current.target.clone();
-        const currentPosition = cameraRef.current.position.clone();
-        const currentOrthoPosition = orthoCameraRef.current.position.clone();
-        
-        controlsRef.current.dispose();
-        orthoControlsRef.current.dispose();
-        
-        const newControls = new OrbitControls(cameraRef.current, canvas);
-        newControls.enableDamping = true;
-        newControls.dampingFactor = 0.08;
-        newControls.enablePan = true;
-        newControls.screenSpacePanning = true;
-        newControls.enableZoom = true;
-        newControls.target.copy(currentTarget);
-        controlsRef.current = newControls;
-        
-        const newOrthoControls = new OrbitControls(orthoCameraRef.current, canvas);
-        newOrthoControls.enableDamping = true;
-        newOrthoControls.dampingFactor = 0.08;
-        newOrthoControls.enablePan = true;
-        newOrthoControls.screenSpacePanning = true;
-        newOrthoControls.enableZoom = true;
-        newOrthoControls.target.copy(currentTarget);
-        orthoControlsRef.current = newOrthoControls;
-        
-        cameraRef.current.position.copy(currentPosition);
-        orthoCameraRef.current.position.copy(currentOrthoPosition);
-      }
-    } else {
-      // Cambiar controles de vuelta al contenedor 3D
-      const canvas3D = rendererRef.current.domElement;
-      if (controlsRef.current && orthoControlsRef.current) {
-        const currentTarget = controlsRef.current.target.clone();
-        const currentPosition = cameraRef.current.position.clone();
-        const currentOrthoPosition = orthoCameraRef.current.position.clone();
-        
-        controlsRef.current.dispose();
-        orthoControlsRef.current.dispose();
-        
-        const newControls = new OrbitControls(cameraRef.current, canvas3D);
-        newControls.enableDamping = true;
-        newControls.dampingFactor = 0.08;
-        newControls.enablePan = true;
-        newControls.screenSpacePanning = true;
-        newControls.enableZoom = true;
-        newControls.target.copy(currentTarget);
-        controlsRef.current = newControls;
-        
-        const newOrthoControls = new OrbitControls(orthoCameraRef.current, canvas3D);
-        newOrthoControls.enableDamping = true;
-        newOrthoControls.dampingFactor = 0.08;
-        newOrthoControls.enablePan = true;
-        newOrthoControls.screenSpacePanning = true;
-        newOrthoControls.enableZoom = true;
-        newOrthoControls.target.copy(currentTarget);
-        orthoControlsRef.current = newOrthoControls;
-        
-        cameraRef.current.position.copy(currentPosition);
-        orthoCameraRef.current.position.copy(currentOrthoPosition);
-      }
-    }
-  }
-}, [pixelMode]);
+  // (Antes había aquí un useEffect[pixelMode] que disposeaba y recreaba ambos
+  // OrbitControls cada vez que se alternaba pixelMode, porque el canvas activo
+  // cambiaba entre renderer.domElement y un canvas HTML duplicado. Ahora el
+  // renderer.domElement es el único canvas visible en ambos modos — la
+  // pixelación ocurre en el shader — así que los controles ya no necesitan
+  // re-bindearse.)
 
   // ✅ FUNCIÓN PARA CARGAR MODELO CON SOPORTE DE ANIMACIONES
   const handleFileChange = (e) => {
@@ -812,17 +705,29 @@ useEffect(() => {
       setAnimationPlaying(false);
       setAvailableAnimations([]);
 
-      // Agregar nuevo modelo
+      // Agregar nuevo modelo. NO escalar arbitrariamente (antes: scale=50);
+      // dejamos las dimensiones nativas y dejamos que fitCamerasToObject ajuste
+      // la cámara al bounding box. Esto hace que cualquier GLB sea visible
+      // (antes: invisible si era muy chico o cámara dentro si era muy grande).
       modelRef.current = gltf.scene;
+      // Guardar el gltf entero para que el effect, al remontarse tras cerrar
+      // y reabrir el panel, pueda re-ejecutar setupAnimations contra el
+      // mismo objeto y reconectar el mixer al modelo.
+      gltfRef.current = gltf;
       modelRef.current.position.set(0, 0, 0);
-      modelRef.current.scale.set(50, 50, 50);
+      modelRef.current.scale.set(1, 1, 1);
       scene.add(modelRef.current);
+
+      // Encuadrar cámaras al modelo recién cargado.
+      if (fitCamerasToObjectRef.current) {
+        fitCamerasToObjectRef.current(modelRef.current);
+      }
 
       // ✅ CONFIGURAR ANIMACIONES DEL NUEVO MODELO
       setupAnimations(gltf);
 
       console.log('✅ Modelo cargado:', file.name);
-    }, 
+    },
     (progress) => {
       console.log('📥 Cargando:', (progress.loaded / progress.total * 100) + '%');
     },
@@ -833,57 +738,111 @@ useEffect(() => {
   };
 
   // Funciones de descarga (mismas que antes)
-  const downloadImage = () => {
+  // Helper: ejecuta el MISMO pipeline de pantalla (scene → rtRef + opcional
+  // normals → normalRtRef + post-process con materialScreen) y deposita el
+  // resultado en `outRT`. Garantiza que lo leído == lo que ve el usuario,
+  // sólo sin uShowGrid/uShowExportArea (que serían ruido en exports).
+  // Lo usan downloadImage y exportPixelData; downloadHighRes tiene su propio
+  // pipeline a 2K que no comparte el RT de pantalla.
+  const renderScreenToRT = (outRT) => {
     const renderer = rendererRef.current;
     const scene = sceneRef.current;
-    const materialScreen = materialScreenRef.current;
-    const rt = rtRef.current;
+    const material = materialScreenRef.current;
+    const dummyScene = dummySceneRef.current;
+    const dummyCamera = dummyCameraRef.current;
+    if (!renderer || !scene || !material || !dummyScene || !dummyCamera) return null;
 
+    const activeCamera = orthographicRef.current
+      ? orthoCameraRef.current
+      : cameraRef.current;
+
+    // Salvar uniforms que sólo deben estar activos en pantalla.
+    const prevShowGrid = material.uniforms.uShowGrid.value;
+    const prevShowExportArea = material.uniforms.uShowExportArea.value;
+    material.uniforms.uShowGrid.value = false;
+    material.uniforms.uShowExportArea.value = false;
+
+    // Pase 1: scene → RT principal (mismo RT que usa el animate loop, ya
+    // dimensionado por renderScale).
+    renderer.setRenderTarget(rtRef.current);
+    renderer.clear();
+    renderer.render(scene, activeCamera);
+
+    // Pase 2: normales → normalRT (sólo si outlines activos).
+    if (outlineEnabledRef.current && normalRtRef.current && normalMaterialRef.current) {
+      const prevOverride = scene.overrideMaterial;
+      scene.overrideMaterial = normalMaterialRef.current;
+      renderer.setRenderTarget(normalRtRef.current);
+      renderer.clear();
+      renderer.render(scene, activeCamera);
+      scene.overrideMaterial = prevOverride;
+    }
+
+    // Pase 3: post-process → outRT (en vez de a la pantalla).
+    renderer.setRenderTarget(outRT);
+    renderer.clear();
+    renderer.render(dummyScene, dummyCamera);
+
+    // Restaurar uniforms.
+    material.uniforms.uShowGrid.value = prevShowGrid;
+    material.uniforms.uShowExportArea.value = prevShowExportArea;
+    renderer.setRenderTarget(null);
+  };
+
+  const downloadImage = () => {
+    const renderer = rendererRef.current;
     if (!renderer || !modelRef.current) {
       alert("⚠️ Carga un modelo antes de exportar");
       return;
     }
 
-    console.log('📸 Capturando imagen con filtros aplicados...');
+    console.log('📸 Capturando imagen exactamente como se ve...');
 
-    const dummyScene = new THREE.Scene();
-    const dummyCamera = new THREE.OrthographicCamera(
-      window.innerWidth / -2,
-      window.innerWidth / 2,
-      window.innerHeight / 2,
-      window.innerHeight / -2,
-      -10000,
-      10000
+    const currentSize = renderer.getSize(new THREE.Vector2());
+    const canvasWidth = currentSize.x;
+    const canvasHeight = currentSize.y;
+
+    // Renderizar el pipeline de pantalla a un RT temporal y leer los píxeles.
+    // No usamos `renderer.domElement.toDataURL()` porque el canvas usa
+    // `preserveDrawingBuffer:false` por defecto y el contenido se descarta
+    // tras el render — además queríamos quitar el grid y el área de export.
+    const processedRT = new THREE.WebGLRenderTarget(canvasWidth, canvasHeight, {
+      minFilter: THREE.NearestFilter,
+      magFilter: THREE.NearestFilter,
+      format: THREE.RGBAFormat,
+    });
+    renderScreenToRT(processedRT);
+
+    const pixels = new Uint8Array(canvasWidth * canvasHeight * 4);
+    renderer.readRenderTargetPixels(
+      processedRT, 0, 0, canvasWidth, canvasHeight, pixels
     );
-    dummyCamera.position.z = 1;
 
-    const quadGeo = new THREE.PlaneGeometry(window.innerWidth, window.innerHeight);
-    const quad = new THREE.Mesh(quadGeo, materialScreen);
-    quad.position.z = -100;
-    dummyScene.add(quad);
+    // Volcar a un canvas 2D invirtiendo Y (GL → screen coords).
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvasWidth;
+    tempCanvas.height = canvasHeight;
+    const ctx = tempCanvas.getContext('2d');
+    const imageData = ctx.createImageData(canvasWidth, canvasHeight);
+    for (let y = 0; y < canvasHeight; y++) {
+      const srcRow = (canvasHeight - 1 - y) * canvasWidth * 4;
+      const dstRow = y * canvasWidth * 4;
+      for (let x = 0; x < canvasWidth * 4; x++) {
+        imageData.data[dstRow + x] = pixels[srcRow + x];
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
 
-    const activeCamera = orthographicRef.current ? orthoCameraRef.current : cameraRef.current;
-    renderer.setRenderTarget(rt);
-    renderer.clear();
-    renderer.render(scene, activeCamera);
-
-    renderer.setRenderTarget(null);
-    renderer.clear();
-    renderer.render(dummyScene, dummyCamera);
-
-    const dataURL = renderer.domElement.toDataURL("image/png");
-
-    const link = document.createElement("a");
+    const link = document.createElement('a');
     link.download = `pixel-art-${Date.now()}.png`;
-    link.href = dataURL;
+    link.href = tempCanvas.toDataURL('image/png');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 
-    quadGeo.dispose();
-    dummyScene.remove(quad);
+    processedRT.dispose();
 
-    console.log('✅ Imagen descargada con filtros aplicados');
+    console.log('✅ PNG descargado (pixel-perfect match con la pantalla)');
   };
 
   const downloadHighRes = () => {
@@ -906,15 +865,26 @@ useEffect(() => {
     const width = highResSize;
     const height = Math.round(highResSize / aspect);
     
+    // Para descarga 2K usamos LinearFilter (queda suavizado, ideal para PNG
+    // estilo render). Si el usuario quiere un PNG pixelado, debe ajustar el
+    // renderScale antes y exportar al editor para tener resolución exacta.
     const highResRT = new THREE.WebGLRenderTarget(width, height, {
-      minFilter: pixelModeRef.current ? THREE.NearestFilter : THREE.LinearFilter,
-      magFilter: pixelModeRef.current ? THREE.NearestFilter : THREE.LinearFilter,
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
       format: THREE.RGBAFormat,
+      depthBuffer: true,
+      depthTexture: new THREE.DepthTexture(width, height, THREE.UnsignedIntType),
     });
-    
+    const highResNormalRT = new THREE.WebGLRenderTarget(width, height, {
+      minFilter: THREE.NearestFilter,
+      magFilter: THREE.NearestFilter,
+      format: THREE.RGBAFormat,
+      depthBuffer: true,
+    });
+
     const finalRT = new THREE.WebGLRenderTarget(width, height, {
-      minFilter: pixelModeRef.current ? THREE.NearestFilter : THREE.LinearFilter,
-      magFilter: pixelModeRef.current ? THREE.NearestFilter : THREE.LinearFilter,
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
       format: THREE.RGBAFormat,
     });
 
@@ -929,18 +899,31 @@ useEffect(() => {
       camera.bottom = -zoom;
       camera.updateProjectionMatrix();
     }
-    
+
     const tempMaterial = new THREE.ShaderMaterial({
       uniforms: {
         tDiffuse: { value: highResRT.texture },
+        tDepth: { value: highResRT.depthTexture },
+        tNormal: { value: highResNormalRT.texture },
         uBrightness: { value: brightnessRef.current },
         uFlattenMode: { value: materialScreen.uniforms.uFlattenMode.value },
         uFlattenAmount: { value: flattenAmountRef.current },
         uAntiAlias: { value: antiAliasRef.current },
-        uEdgeDetection: { value: edgeDetectionRef.current },
-        uEdgeThickness: { value: edgeThicknessRef.current },
+        uOutlineEnabled: { value: outlineEnabledRef.current },
+        uDepthEdgeStrength: { value: depthEdgeStrengthRef.current },
+        uNormalEdgeStrength: { value: normalEdgeStrengthRef.current },
+        uDepthEdgeColor: { value: new THREE.Color(depthEdgeColorRef.current) },
+        uNormalEdgeColor: { value: new THREE.Color(normalEdgeColorRef.current) },
+        uNormalEdgeThreshold: { value: normalEdgeThresholdRef.current },
+        uDetectOccluded: { value: detectOccludedRef.current },
         uResolution: { value: new THREE.Vector2(width, height) },
-      
+        uRtResolution: { value: new THREE.Vector2(width, height) },
+        uPixelMode: { value: false },
+        uPixelSize: { value: 1.0 },
+        uShowGrid: { value: false },
+        uShowExportArea: { value: false },
+        uExportResolution: { value: resolutionRef.current },
+        uBackgroundColor: { value: new THREE.Color().setHex(parseInt(backgroundColorRef.current.replace('#', '0x'))) },
       },
       vertexShader: materialScreen.vertexShader,
       fragmentShader: materialScreen.fragmentShader,
@@ -961,11 +944,21 @@ useEffect(() => {
     renderer.setRenderTarget(highResRT);
     renderer.clear();
     renderer.render(scene, camera);
-    
+
+    // Pase de normales para que los contornos funcionen en la exportación.
+    if (outlineEnabledRef.current && normalMaterialRef.current) {
+      const prevOverride = scene.overrideMaterial;
+      scene.overrideMaterial = normalMaterialRef.current;
+      renderer.setRenderTarget(highResNormalRT);
+      renderer.clear();
+      renderer.render(scene, camera);
+      scene.overrideMaterial = prevOverride;
+    }
+
     renderer.setRenderTarget(finalRT);
     renderer.clear();
     renderer.render(dummyScene, dummyCamera);
-    
+
     const pixels = new Uint8Array(width * height * 4);
     renderer.readRenderTargetPixels(finalRT, 0, 0, width, height, pixels);
     
@@ -1013,6 +1006,7 @@ useEffect(() => {
     }
     
     highResRT.dispose();
+    highResNormalRT.dispose();
     finalRT.dispose();
     tempMaterial.dispose();
     quadGeo.dispose();
@@ -1022,596 +1016,487 @@ useEffect(() => {
   };
 
   const exportPixelData = () => {
-    if (!pixelModeRef.current || !modelRef.current) {
-      alert("⚠️ Activa el modo pixel y carga un modelo primero");
+    if (!modelRef.current) {
+      alert("⚠️ Carga un modelo primero");
       return;
     }
 
     const renderer = rendererRef.current;
-    const scene = sceneRef.current;
-    const materialScreen = materialScreenRef.current;
     const workingResolution = resolutionRef.current;
-    
-    console.log(`📐 Exportando área cuadrada: ${workingResolution}×${workingResolution}`);
-    
     const currentSize = renderer.getSize(new THREE.Vector2());
     const canvasWidth = currentSize.x;
     const canvasHeight = currentSize.y;
-    
-    const canvasSize = Math.min(canvasWidth, canvasHeight);
-    const exportStartX = Math.floor((canvasWidth - canvasSize) / 2);
-    const exportStartY = Math.floor((canvasHeight - canvasSize) / 2);
-    const exportSize = canvasSize;
-    
-    console.log(`📍 Área de exportación: ${exportStartX}, ${exportStartY}, ${exportSize}×${exportSize}`);
-    
-    const fullRT = new THREE.WebGLRenderTarget(canvasWidth, canvasHeight, {
-      minFilter: THREE.NearestFilter,
-      magFilter: THREE.NearestFilter,
-      format: THREE.RGBAFormat,
-    });
 
-    const activeCamera = orthographicRef.current ? orthoCameraRef.current : cameraRef.current;
-    
-    renderer.setRenderTarget(fullRT);
-    renderer.clear();
-    renderer.render(scene, activeCamera);
+    // Área de exportación = cuadrado centrado de lado min(canvasW, canvasH),
+    // exactamente la misma que muestra el overlay verde en pantalla.
+    const exportSize = Math.min(canvasWidth, canvasHeight);
+    const exportStartX = Math.floor((canvasWidth - exportSize) / 2);
+    const exportStartY = Math.floor((canvasHeight - exportSize) / 2);
 
-    const tempMaterial = new THREE.ShaderMaterial({
-      uniforms: {
-        tDiffuse: { value: fullRT.texture },
-        uBrightness: { value: brightnessRef.current },
-        uFlattenMode: { value: materialScreen.uniforms.uFlattenMode.value },
-        uFlattenAmount: { value: flattenAmountRef.current },
-        uAntiAlias: { value: antiAliasRef.current },
-        uEdgeDetection: { value: edgeDetectionRef.current },
-        uEdgeThickness: { value: edgeThicknessRef.current },
-        uResolution: { value: new THREE.Vector2(canvasWidth, canvasHeight) },
-        uPixelMode: { value: true },
-        uPixelSize: { value: canvasSize / workingResolution },
-        uShowGrid: { value: false },
-        uShowExportArea: { value: false },
-        uExportResolution: { value: workingResolution },
-        // AGREGAR ESTA LÍNEA:
-        uBackgroundColor: { value: new THREE.Color().setHex(parseInt(backgroundColorRef.current.replace('#', '0x'))) },
-      },
-      vertexShader: materialScreen.vertexShader,
-      fragmentShader: materialScreen.fragmentShader,
-      depthWrite: false,
-    });
+    console.log(
+      `📐 Export ${workingResolution}×${workingResolution} desde área ${exportSize}×${exportSize} en (${exportStartX}, ${exportStartY})`
+    );
 
+    // RT del tamaño del canvas (= lo que se ve), sin filtrado para no contaminar.
     const processedRT = new THREE.WebGLRenderTarget(canvasWidth, canvasHeight, {
       minFilter: THREE.NearestFilter,
       magFilter: THREE.NearestFilter,
       format: THREE.RGBAFormat,
     });
 
-    const dummyScene = new THREE.Scene();
-    const dummyCamera = new THREE.OrthographicCamera(
-      canvasWidth / -2, 
-      canvasWidth / 2, 
-      canvasHeight / 2, 
-      canvasHeight / -2, 
-      -10000, 
-      10000
-    );
-    dummyCamera.position.z = 1;
+    // Ejecutar el pipeline de pantalla → processedRT.
+    renderScreenToRT(processedRT);
 
-    const quadGeo = new THREE.PlaneGeometry(canvasWidth, canvasHeight);
-    const quad = new THREE.Mesh(quadGeo, tempMaterial);
-    quad.position.z = -100;
-    dummyScene.add(quad);
-
-    renderer.setRenderTarget(processedRT);
-    renderer.clear();
-    renderer.render(dummyScene, dummyCamera);
-
+    // Leer todos los píxeles del canvas. readRenderTargetPixels devuelve la
+    // imagen con Y invertido (origen abajo-izquierda en GL).
     const fullPixels = new Uint8Array(canvasWidth * canvasHeight * 4);
-    renderer.readRenderTargetPixels(processedRT, 0, 0, canvasWidth, canvasHeight, fullPixels);
+    renderer.readRenderTargetPixels(
+      processedRT, 0, 0, canvasWidth, canvasHeight, fullPixels
+    );
 
-    const finalRT = new THREE.WebGLRenderTarget(workingResolution, workingResolution, {
-      minFilter: THREE.NearestFilter,
-      magFilter: THREE.NearestFilter,
-      format: THREE.RGBAFormat,
-    });
-
-    const extractedPixels = new Uint8Array(exportSize * exportSize * 4);
-    
-    for (let y = 0; y < exportSize; y++) {
-      for (let x = 0; x < exportSize; x++) {
-        const srcX = exportStartX + x;
-        const srcY = exportStartY + y;
-        
-        if (srcX >= 0 && srcX < canvasWidth && srcY >= 0 && srcY < canvasHeight) {
-          const srcIndex = (srcY * canvasWidth + srcX) * 4;
-          const dstIndex = (y * exportSize + x) * 4;
-          
-          extractedPixels[dstIndex] = fullPixels[srcIndex];
-          extractedPixels[dstIndex + 1] = fullPixels[srcIndex + 1];
-          extractedPixels[dstIndex + 2] = fullPixels[srcIndex + 2];
-          extractedPixels[dstIndex + 3] = fullPixels[srcIndex + 3];
-        }
-      }
-    }
-
+    // Sample directo desde el área cuadrada hacia la grilla workingResolution.
+    // No promediamos vecinos — cada píxel exportado es 1 sample puntual del
+    // canvas, así "lo que veo == lo que se exporta" se cumple incluso a
+    // resolución alta del visor con renderScale=1.
     const pixelDataForEditor = [];
-    const pixelSize = exportSize / workingResolution;
-    
+    const step = exportSize / workingResolution;
+
     for (let py = 0; py < workingResolution; py++) {
       for (let px = 0; px < workingResolution; px++) {
-        const srcX = Math.floor(px * pixelSize);
-        const srcY = Math.floor(py * pixelSize);
-        
-        if (srcX < exportSize && srcY < exportSize) {
-          const index = (srcY * exportSize + srcX) * 4;
-          const r = extractedPixels[index];
-          const g = extractedPixels[index + 1];
-          const b = extractedPixels[index + 2];
-          const a = extractedPixels[index + 3];
-          
-          if (a > 10) {
-            pixelDataForEditor.push({
-              x: px,
-              y: py,
-              color: {
-                r: Math.max(0, Math.min(255, Math.floor(r || 0))),
-                g: Math.max(0, Math.min(255, Math.floor(g || 0))),
-                b: Math.max(0, Math.min(255, Math.floor(b || 0))),
-                a: Math.max(0, Math.min(255, Math.floor(a || 0)))
-              }
-            });
-          }
+        // Centro del píxel destino en el área de export.
+        const srcX = exportStartX + Math.floor((px + 0.5) * step);
+        // Y invertido: el píxel py=0 (arriba en editor) corresponde a la fila
+        // visualmente superior del canvas, que en coordenadas GL es la última.
+        const srcYscreen = exportStartY + Math.floor((py + 0.5) * step);
+        const srcYgl = canvasHeight - 1 - srcYscreen;
+
+        if (srcX < 0 || srcX >= canvasWidth || srcYgl < 0 || srcYgl >= canvasHeight) continue;
+        const idx = (srcYgl * canvasWidth + srcX) * 4;
+        const r = fullPixels[idx];
+        const g = fullPixels[idx + 1];
+        const b = fullPixels[idx + 2];
+        const a = fullPixels[idx + 3];
+
+        if (a > 10) {
+          pixelDataForEditor.push({
+            x: px,
+            y: py,
+            color: { r, g, b, a },
+          });
         }
       }
     }
 
-    fullRT.dispose();
     processedRT.dispose();
-    finalRT.dispose();
-    tempMaterial.dispose();
-    quadGeo.dispose();
-    dummyScene.remove(quad);
-    renderer.setRenderTarget(null);
 
-    console.log(`✅ Pixel data exportado del área cuadrada: ${workingResolution}×${workingResolution} (${pixelDataForEditor.length} píxeles)`);
+    console.log(
+      `✅ Exportados ${pixelDataForEditor.length} píxeles a ${workingResolution}×${workingResolution}`
+    );
 
     if (onPixelDataReady && pixelDataForEditor.length > 0) {
       onPixelDataReady(pixelDataForEditor);
     } else if (pixelDataForEditor.length === 0) {
       console.warn('⚠️ No se encontraron píxeles visibles en el área de exportación');
-      alert('⚠️ El modelo no generó píxeles visibles en el área de exportación. Ajusta la posición, zoom o área de captura.');
+      alert('⚠️ El modelo no generó píxeles visibles en el área cuadrada central. Ajusta posición, zoom o área de captura.');
     }
-    
+
     return pixelDataForEditor;
   };
 
-  // Agregar esta nueva función después de exportPixelData y antes del return:
+  // (Eliminado: updateCanvasWithPixelData. Antes alimentaba un canvas HTML
+  // duplicado en cada frame creando 2 RenderTargets, un ShaderMaterial nuevo y
+  // haciendo readRenderTargetPixels — readback síncrono GPU→CPU. Era la causa
+  // del lag al activar pixelMode. La pixelación ya la hace el shader
+  // materialScreen vía uniforms uPixelMode/uPixelSize sobre el mismo canvas
+  // del renderer, así que ese canvas extra y todo ese trabajo por frame eran
+  // redundantes. exportPixelData() sigue haciendo el readback bajo demanda
+  // cuando el usuario pulsa "Exportar al Editor".)
 
-// Función updateCanvasWithPixelData (agregar antes de animate)
-const updateCanvasWithPixelData = () => {
-  if (!pixelModeRef.current || !modelRef.current || !rendererRef.current) {
-    return;
-  }
-
-  const renderer = rendererRef.current;
-  const scene = sceneRef.current;
-  const materialScreen = materialScreenRef.current;
-  const workingResolution = resolutionRef.current;
-  
-  const currentSize = renderer.getSize(new THREE.Vector2());
-  const canvasWidth = currentSize.x;
-  const canvasHeight = currentSize.y;
-  
-  const canvasSize = Math.min(canvasWidth, canvasHeight);
-  const exportStartX = Math.floor((canvasWidth - canvasSize) / 2);
-  const exportStartY = Math.floor((canvasHeight - canvasSize) / 2);
-  const exportSize = canvasSize;
-  
-  // Crear render target temporal
-  const tempRT = new THREE.WebGLRenderTarget(canvasWidth, canvasHeight, {
-    minFilter: THREE.NearestFilter,
-    magFilter: THREE.NearestFilter,
-    format: THREE.RGBAFormat,
+  // Estado de colapso de secciones del panel — todas abiertas por defecto.
+  const [collapsed, setCollapsed] = useState({
+    modelo: false,
+    animacion: false,
+    render: false,
+    contornos: false,
+    color: false,
+    exportar: false,
   });
-
-  const activeCamera = orthographicRef.current ? orthoCameraRef.current : cameraRef.current;
-  
-  // Renderizar escena actual al render target temporal
-  const originalTarget = renderer.getRenderTarget();
-  renderer.setRenderTarget(tempRT);
-  renderer.clear();
-  renderer.render(scene, activeCamera);
-
-  // Crear material temporal para procesar efectos
-  const tempMaterial = new THREE.ShaderMaterial({
-    uniforms: {
-      tDiffuse: { value: tempRT.texture },
-      uBrightness: { value: brightnessRef.current },
-      uFlattenMode: { value: materialScreen.uniforms.uFlattenMode.value },
-      uFlattenAmount: { value: flattenAmountRef.current },
-      uAntiAlias: { value: antiAliasRef.current },
-      uEdgeDetection: { value: edgeDetectionRef.current },
-      uEdgeThickness: { value: edgeThicknessRef.current },
-      uResolution: { value: new THREE.Vector2(canvasWidth, canvasHeight) },
-      uPixelMode: { value: true },
-      uPixelSize: { value: canvasSize / workingResolution },
-      uShowGrid: { value: false },
-      uShowExportArea: { value: false },
-      uExportResolution: { value: workingResolution },
-      uBackgroundColor: { value: new THREE.Color().setHex(parseInt(backgroundColorRef.current.replace('#', '0x'))) },
-    },
-    vertexShader: materialScreen.vertexShader,
-    fragmentShader: materialScreen.fragmentShader,
-    depthWrite: false,
-  });
-
-  const processedRT = new THREE.WebGLRenderTarget(canvasWidth, canvasHeight, {
-    minFilter: THREE.NearestFilter,
-    magFilter: THREE.NearestFilter,
-    format: THREE.RGBAFormat,
-  });
-
-  // Crear escena temporal para aplicar efectos
-  const dummyScene = new THREE.Scene();
-  const dummyCamera = new THREE.OrthographicCamera(
-    canvasWidth / -2, 
-    canvasWidth / 2, 
-    canvasHeight / 2, 
-    canvasHeight / -2, 
-    -10000, 
-    10000
-  );
-  dummyCamera.position.z = 1;
-
-  const quadGeo = new THREE.PlaneGeometry(canvasWidth, canvasHeight);
-  const quad = new THREE.Mesh(quadGeo, tempMaterial);
-  quad.position.z = -100;
-  dummyScene.add(quad);
-
-  // Renderizar con efectos aplicados
-  renderer.setRenderTarget(processedRT);
-  renderer.clear();
-  renderer.render(dummyScene, dummyCamera);
-
-  // Leer píxeles del render target
-  const fullPixels = new Uint8Array(canvasWidth * canvasHeight * 4);
-  renderer.readRenderTargetPixels(processedRT, 0, 0, canvasWidth, canvasHeight, fullPixels);
-
-  // Extraer área cuadrada
-  const extractedPixels = new Uint8Array(exportSize * exportSize * 4);
-  
-  for (let y = 0; y < exportSize; y++) {
-    for (let x = 0; x < exportSize; x++) {
-      const srcX = exportStartX + x;
-      const srcY = exportStartY + y;
-      
-      if (srcX >= 0 && srcX < canvasWidth && srcY >= 0 && srcY < canvasHeight) {
-        const srcIndex = (srcY * canvasWidth + srcX) * 4;
-        const dstIndex = (y * exportSize + x) * 4;
-        
-        extractedPixels[dstIndex] = fullPixels[srcIndex];
-        extractedPixels[dstIndex + 1] = fullPixels[srcIndex + 1];
-        extractedPixels[dstIndex + 2] = fullPixels[srcIndex + 2];
-        extractedPixels[dstIndex + 3] = fullPixels[srcIndex + 3];
-      }
-    }
-  }
-
-  // Actualizar canvas HTML
-  const canvas = pixelCanvasRef.current;
-  if (canvas) {
-    // Calcular tamaño del canvas basado en el tamaño de la pantalla
-    const screenSize = Math.min(window.innerWidth, window.innerHeight);
-    const canvasDisplaySize = Math.min(Math.max(window.innerHeight * 1, 200), 800);
-    
-    // Configurar tamaño de renderizado y display
-    canvas.width = workingResolution;
-    canvas.height = workingResolution;
-    canvas.style.width = canvasDisplaySize + 'px';
-    canvas.style.height = canvasDisplaySize + 'px';
-    
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-
-    const imageData = ctx.createImageData(workingResolution, workingResolution);
-    
-    const pixelSize = exportSize / workingResolution;
-    
-    for (let py = 0; py < workingResolution; py++) {
-      for (let px = 0; px < workingResolution; px++) {
-        const srcX = Math.floor(px * pixelSize);
-        // Corregir inversión vertical
-        const srcY = Math.floor((workingResolution - 1 - py) * pixelSize);
-        
-        if (srcX < exportSize && srcY < exportSize) {
-          const srcIndex = (srcY * exportSize + srcX) * 4;
-          const dstIndex = (py * workingResolution + px) * 4;
-          
-          imageData.data[dstIndex] = extractedPixels[srcIndex];
-          imageData.data[dstIndex + 1] = extractedPixels[srcIndex + 1];
-          imageData.data[dstIndex + 2] = extractedPixels[srcIndex + 2];
-          imageData.data[dstIndex + 3] = extractedPixels[srcIndex + 3];
-        }
-      }
-    }
-    
-    ctx.putImageData(imageData, 0, 0);
-  }
-
-  // Limpiar recursos temporales
-  tempRT.dispose();
-  processedRT.dispose();
-  tempMaterial.dispose();
-  quadGeo.dispose();
-  dummyScene.remove(quad);
-  renderer.setRenderTarget(originalTarget);
-};
+  const toggleSection = (key) =>
+    setCollapsed((c) => ({ ...c, [key]: !c[key] }));
 
   return (
     <div className="three-container">
-      <div className="controls">
-        <div className="control-group">
-          <label className="control-label">Archivo GLB/GLTF:</label>
-          <input 
-            type="file" 
-            accept=".glb,.gltf" 
-            onChange={handleFileChange}
-            className="control-input"
-          />
-        </div>
+      <aside className="t3d-controls" aria-label="Panel de controles del visor 3D">
+        <header className="t3d-controls__header">
+          <span className="t3d-controls__header-icon"><IconBox size={16} /></span>
+          <div>
+            <div className="t3d-controls__title">Visor 3D</div>
+            <div className="t3d-controls__subtitle">Convierte modelos a pixel art</div>
+          </div>
+        </header>
 
-        {/* ✅ CONTROLES DE ANIMACIÓN */}
-        {hasAnimations && (
-          <>
-            <div className="control-group">
-              <label className="control-label">🎬 Animaciones disponibles:</label>
-              <select 
-                value={currentAnimation} 
-                onChange={(e) => changeAnimation(parseInt(e.target.value))}
-                className="control-input"
-                disabled={animationPlaying}
-              >
-                {availableAnimations.map((name, index) => (
-                  <option key={index} value={index}>{name}</option>
-                ))}
-              </select>
-            </div>
+        <div className="t3d-controls__scroll">
 
-            <div className="control-group">
-              <button 
+          {/* === MODELO === */}
+          <Section id="modelo" icon={<IconBox />} title="Modelo" open={!collapsed.modelo} onToggle={toggleSection}>
+            <label className="t3d-file">
+              <IconUpload className="t3d-file__icon" />
+              <span className="t3d-file__text">Cargar archivo GLB / GLTF</span>
+              <input type="file" accept=".glb,.gltf" onChange={handleFileChange} />
+            </label>
+          </Section>
+
+          {/* === ANIMACIÓN === */}
+          {hasAnimations && (
+            <Section id="animacion" icon={<IconFilm />} title="Animación" open={!collapsed.animacion} onToggle={toggleSection}>
+              <div className="t3d-row">
+                <div className="t3d-row__head">
+                  <span className="t3d-label">Clip activo</span>
+                </div>
+                <select
+                  className="t3d-select"
+                  value={currentAnimation}
+                  onChange={(e) => changeAnimation(parseInt(e.target.value))}
+                  disabled={animationPlaying}
+                >
+                  {availableAnimations.map((name, index) => (
+                    <option key={index} value={index}>{name}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                className={`t3d-btn ${animationPlaying ? "t3d-btn--warn" : "t3d-btn--accent"}`}
                 onClick={toggleAnimation}
-                className="download-button"
-                style={{background: animationPlaying ? '#f44336' : '#4CAF50'}}
               >
-                {animationPlaying ? '⏸️ Pausar' : '▶️ Reproducir'} Animación
+                {animationPlaying ? <IconPause className="t3d-btn__icon" /> : <IconPlay className="t3d-btn__icon" />}
+                {animationPlaying ? "Pausar" : "Reproducir"}
               </button>
-            </div>
+              <div className="t3d-row">
+                <div className="t3d-row__head">
+                  <span className="t3d-label">Velocidad</span>
+                  <span className="t3d-value">{animationSpeed.toFixed(1)}x</span>
+                </div>
+                <input
+                  className="t3d-slider"
+                  type="range" min="0.1" max="3.0" step="0.1"
+                  value={animationSpeed}
+                  onChange={(e) => updateAnimationSpeed(parseFloat(e.target.value))}
+                />
+              </div>
+            </Section>
+          )}
 
-            <div className="control-group">
-              <label className="control-label">Velocidad: {animationSpeed.toFixed(1)}x</label>
-              <input 
-                type="range" 
-                min="0.1" 
-                max="3.0" 
-                step="0.1" 
-                value={animationSpeed} 
-                onChange={(e) => updateAnimationSpeed(parseFloat(e.target.value))}
-                className="control-range"
+          {/* === RENDER === */}
+          <Section id="render" icon={<IconSliders />} title="Render" open={!collapsed.render} onToggle={toggleSection}>
+            <label className="t3d-toggle">
+              <input
+                type="checkbox"
+                checked={orthographic}
+                onChange={(e) => setOrthographic(e.target.checked)}
+              />
+              <span className="t3d-toggle__track" aria-hidden="true" />
+              <span className="t3d-toggle__text">
+                Cámara ortográfica
+                <span className="t3d-toggle__hint">Sin distorsión de perspectiva</span>
+              </span>
+            </label>
+
+            <div className="t3d-row">
+              <div className="t3d-row__head">
+                <span className="t3d-label">Brillo</span>
+                <span className="t3d-value">{brightness.toFixed(2)}</span>
+              </div>
+              <input
+                className="t3d-slider"
+                type="range" min="0" max="10" step="0.01"
+                value={brightness}
+                onChange={(e) => setBrightness(parseFloat(e.target.value))}
               />
             </div>
-          </>
-        )}
 
-        <div className="control-group">
-          <label className="control-label">Brillo: {brightness.toFixed(2)}</label>
-          <input 
-            type="range" 
-            min="0" 
-            max="10" 
-            step="0.01" 
-            value={brightness} 
-            onChange={(e) => setBrightness(parseFloat(e.target.value))}
-            className="control-range"
-          />
-        </div>
-
-        <div className="control-group">
-          <label className="control-label">
-            <input 
-              type="checkbox" 
-              checked={orthographic} 
-              onChange={(e) => setOrthographic(e.target.checked)}
-              className="control-checkbox"
-            />
-            Cámara Ortográfica (sin perspectiva)
-          </label>
-        </div>
-
-        <div className="control-group">
-          <label className="control-label">Efectos de Color:</label>
-          <select 
-            value={colorMode} 
-            onChange={(e) => setColorMode(e.target.value)}
-            className="control-input"
-          >
-            <option value="none">Sin efectos</option>
-            <option value="poster">Colores planos (Poster)</option>
-            <option value="toon">Estilo Toon</option>
-            <option value="contrast">Alto contraste</option>
-          </select>
-        </div>
-
-        <div className="control-group">
-          <label className="control-label">Aplanamiento Geométrico:</label>
-          <select 
-            value={flattenMode} 
-            onChange={(e) => setFlattenMode(e.target.value)}
-            className="control-input"
-          >
-            <option value="none">Sin aplanamiento</option>
-            <option value="flatten-z">Aplanar profundidad (Z)</option>
-            <option value="flatten-y">Aplanar altura (Y)</option>
-            <option value="flatten-x">Aplanar ancho (X)</option>
-          </select>
-        </div>
-
-        {flattenMode.includes('flatten-') && (
-          <div className="control-group">
-            <label className="control-label">Intensidad: {flattenAmount.toFixed(2)}</label>
-            <input 
-              type="range" 
-              min="0" 
-              max="1" 
-              step="0.01" 
-              value={flattenAmount} 
-              onChange={(e) => setFlattenAmount(parseFloat(e.target.value))}
-              className="control-range"
-            />
-          </div>
-        )}
-
-        <div className="control-group">
-          <label className="control-label">
-            <input 
-              type="checkbox" 
-              checked={antiAlias} 
-              onChange={(e) => setAntiAlias(e.target.checked)}
-              className="control-checkbox"
-            />
-            Anti-Aliasing (quitar blur)
-          </label>
-        </div>
-
-        <div className="control-group">
-          <label className="control-label">
-            <input 
-              type="checkbox" 
-              checked={edgeDetection} 
-              onChange={(e) => setEdgeDetection(e.target.checked)}
-              className="control-checkbox"
-            />
-            Contorno exterior
-          </label>
-        </div>
-
-        {edgeDetection && (
-          <div className="control-group">
-            <label className="control-label">Grosor de bordes: {edgeThickness.toFixed(1)}</label>
-            <input 
-              type="range" 
-              min="0.5" 
-              max="3.0" 
-              step="0.1" 
-              value={edgeThickness} 
-              onChange={(e) => setEdgeThickness(parseFloat(e.target.value))}
-              className="control-range"
-            />
-          </div>
-        )}
-
-        <div className="control-group">
-          <label className="control-label">
-            <input 
-              type="checkbox" 
-              checked={pixelMode} 
-              onChange={(e) => setPixelMode(e.target.checked)}
-              className="control-checkbox"
-            />
-            Modo Pixelado
-          </label>
-        </div>
-        <div className="control-group">
-  <label className="control-label">Color de fondo:</label>
-  <input 
-    type="color" 
-    value={backgroundColor} 
-    onChange={(e) => setBackgroundColor(e.target.value)}
-    className="control-input"
-    style={{height: '40px', width: '100%'}}
-  />
-</div>
-
-        <div className="control-group">
-          <button 
-            onClick={downloadImage}
-            className="download-button"
-          >
-            📥 Descargar Imagen Actual
-          </button>
-        </div>
-
-        <div className="control-group">
-          <button 
-            onClick={downloadHighRes}
-            className="download-button download-button-highres"
-          >
-            🎨 Descargar Alta Resolución
-          </button>
-        </div>
-
-        {pixelMode && (
-          <>
-            <div className="control-group">
-              <label className="control-label">Resolución de trabajo:</label>
-              <select 
-                value={resolution} 
-                onChange={(e) => setResolution(parseInt(e.target.value))}
-                className="control-input"
+            <div className="t3d-row">
+              <div className="t3d-row__head">
+                <span className="t3d-label">Render scale (1/n)</span>
+                <span className="t3d-value">{renderScale}×</span>
+              </div>
+              <select
+                className="t3d-select"
+                value={renderScale}
+                onChange={(e) => setRenderScale(parseInt(e.target.value))}
               >
-                <option value={16}>16×16 píxeles</option>
-                <option value={32}>32×32 píxeles</option>
-                <option value={64}>64×64 píxeles</option>
-                <option value={128}>128×128 píxeles</option>
-                <option value={256}>256×256 píxeles</option>
+                <option value={1}>1 — nativo (mejor calidad)</option>
+                <option value={2}>1/2 — half (más rápido)</option>
+                <option value={4}>1/4 — pixelado suave</option>
+                <option value={6}>1/6 — estilo hello-threejs</option>
+                <option value={8}>1/8 — máximo crunch</option>
               </select>
             </div>
 
-            <div className="control-group">
-              <label className="control-label">
-                <input 
-                  type="checkbox" 
-                  checked={showPixelGrid} 
-                  onChange={(e) => setShowPixelGrid(e.target.checked)}
-                  className="control-checkbox"
-                />
-                Mostrar grid de píxeles
-              </label>
-            </div>
-
-            <div className="control-group">
-              <label className="control-label">
-                <input 
-                  type="checkbox" 
-                  checked={showExportArea} 
-                  onChange={(e) => setShowExportArea(e.target.checked)}
-                  className="control-checkbox"
-                />
+            <label className="t3d-toggle">
+              <input
+                type="checkbox"
+                checked={showExportArea}
+                onChange={(e) => setShowExportArea(e.target.checked)}
+              />
+              <span className="t3d-toggle__track" aria-hidden="true" />
+              <span className="t3d-toggle__text">
                 Mostrar área de exportación
-              </label>
+                <span className="t3d-toggle__hint">Guía cuadrada para alinear el modelo</span>
+              </span>
+            </label>
+
+            <div className="t3d-row">
+              <div className="t3d-row__head">
+                <span className="t3d-label">Color de fondo</span>
+              </div>
+              <div className="t3d-color">
+                <input
+                  type="color"
+                  className="t3d-color__swatch"
+                  value={backgroundColor}
+                  onChange={(e) => setBackgroundColor(e.target.value)}
+                  aria-label="Color de fondo"
+                />
+                <span className="t3d-color__hex">{backgroundColor}</span>
+              </div>
             </div>
-          </>
-        )}
+          </Section>
 
-        <div className="control-group">
-          <button 
-            onClick={exportPixelData}
-            className="download-button"
-            style={{background: '#9C27B0'}}
-          >
-            🎨 Exportar al Editor ({resolution}×{resolution})
-          </button>
+          {/* === CONTORNOS (depth + normal, hello-threejs) === */}
+          <Section id="contornos" icon={<IconShapes />} title="Contornos" open={!collapsed.contornos} onToggle={toggleSection}>
+            <label className="t3d-toggle">
+              <input
+                type="checkbox"
+                checked={outlineEnabled}
+                onChange={(e) => setOutlineEnabled(e.target.checked)}
+              />
+              <span className="t3d-toggle__track" aria-hidden="true" />
+              <span className="t3d-toggle__text">
+                Activar outlines
+                <span className="t3d-toggle__hint">Edge depth + normales</span>
+              </span>
+            </label>
+
+            {outlineEnabled && (
+              <>
+                {/* === Silueta exterior (depth edges) === */}
+                <div className="t3d-edge-group">
+                  <div className="t3d-edge-group__title">Silueta exterior</div>
+                  <div className="t3d-row">
+                    <div className="t3d-row__head">
+                      <span className="t3d-label">Intensidad</span>
+                      <span className="t3d-value">{depthEdgeStrength.toFixed(2)}</span>
+                    </div>
+                    <input
+                      className="t3d-slider"
+                      type="range" min="0" max="1" step="0.01"
+                      value={depthEdgeStrength}
+                      onChange={(e) => setDepthEdgeStrength(parseFloat(e.target.value))}
+                    />
+                  </div>
+                  <div className="t3d-row">
+                    <div className="t3d-row__head">
+                      <span className="t3d-label">Color</span>
+                    </div>
+                    <div className="t3d-color">
+                      <input
+                        type="color"
+                        className="t3d-color__swatch"
+                        value={depthEdgeColor}
+                        onChange={(e) => setDepthEdgeColor(e.target.value)}
+                        aria-label="Color de silueta exterior"
+                      />
+                      <span className="t3d-color__hex">{depthEdgeColor}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* === Caras internas (normal edges) === */}
+                <div className="t3d-edge-group">
+                  <div className="t3d-edge-group__title">Caras internas</div>
+                  <div className="t3d-row">
+                    <div className="t3d-row__head">
+                      <span className="t3d-label">Intensidad</span>
+                      <span className="t3d-value">{normalEdgeStrength.toFixed(2)}</span>
+                    </div>
+                    <input
+                      className="t3d-slider"
+                      type="range" min="0" max="1" step="0.01"
+                      value={normalEdgeStrength}
+                      onChange={(e) => setNormalEdgeStrength(parseFloat(e.target.value))}
+                    />
+                  </div>
+                  <div className="t3d-row">
+                    <div className="t3d-row__head">
+                      <span className="t3d-label">Umbral angular</span>
+                      <span className="t3d-value">{normalEdgeThreshold.toFixed(2)}</span>
+                    </div>
+                    <input
+                      className="t3d-slider"
+                      type="range" min="0.02" max="0.5" step="0.01"
+                      value={normalEdgeThreshold}
+                      onChange={(e) => setNormalEdgeThreshold(parseFloat(e.target.value))}
+                    />
+                  </div>
+                  <div className="t3d-row">
+                    <div className="t3d-row__head">
+                      <span className="t3d-label">Color</span>
+                    </div>
+                    <div className="t3d-color">
+                      <input
+                        type="color"
+                        className="t3d-color__swatch"
+                        value={normalEdgeColor}
+                        onChange={(e) => setNormalEdgeColor(e.target.value)}
+                        aria-label="Color de caras internas"
+                      />
+                      <span className="t3d-color__hex">{normalEdgeColor}</span>
+                    </div>
+                  </div>
+                  <label className="t3d-toggle">
+                    <input
+                      type="checkbox"
+                      checked={detectOccluded}
+                      onChange={(e) => setDetectOccluded(e.target.checked)}
+                    />
+                    <span className="t3d-toggle__track" aria-hidden="true" />
+                    <span className="t3d-toggle__text">
+                      Detectar a través de oclusión
+                      <span className="t3d-toggle__hint">
+                        Marca brazo/cuerpo aunque solapen
+                      </span>
+                    </span>
+                  </label>
+                </div>
+
+                <div className="t3d-hint" role="note">
+                  <IconInfo className="t3d-hint__icon" />
+                  <span>
+                    Umbral bajo (0.05) capta curvas suaves; alto (0.4) sólo
+                    pliegues marcados. "A través de oclusión" activado
+                    permite ver el contorno del brazo sobre el cuerpo.
+                  </span>
+                </div>
+              </>
+            )}
+          </Section>
+
+          {/* === COLOR Y EFECTOS === */}
+          <Section id="color" icon={<IconPalette />} title="Color y efectos" open={!collapsed.color} onToggle={toggleSection}>
+            <div className="t3d-row">
+              <div className="t3d-row__head">
+                <span className="t3d-label">Modo de color</span>
+              </div>
+              <select
+                className="t3d-select"
+                value={colorMode}
+                onChange={(e) => setColorMode(e.target.value)}
+              >
+                <option value="none">Sin efectos</option>
+                <option value="poster">Posterizado (planos)</option>
+                <option value="toon">Toon shading</option>
+                <option value="contrast">Alto contraste</option>
+              </select>
+            </div>
+
+            <div className="t3d-row">
+              <div className="t3d-row__head">
+                <span className="t3d-label">Aplanado geométrico</span>
+              </div>
+              <select
+                className="t3d-select"
+                value={flattenMode}
+                onChange={(e) => setFlattenMode(e.target.value)}
+              >
+                <option value="none">Sin aplanar</option>
+                <option value="flatten-z">Profundidad (Z)</option>
+                <option value="flatten-y">Altura (Y)</option>
+                <option value="flatten-x">Ancho (X)</option>
+              </select>
+            </div>
+
+            {flattenMode.includes("flatten-") && (
+              <div className="t3d-row">
+                <div className="t3d-row__head">
+                  <span className="t3d-label">Intensidad aplanado</span>
+                  <span className="t3d-value">{flattenAmount.toFixed(2)}</span>
+                </div>
+                <input
+                  className="t3d-slider"
+                  type="range" min="0" max="1" step="0.01"
+                  value={flattenAmount}
+                  onChange={(e) => setFlattenAmount(parseFloat(e.target.value))}
+                />
+              </div>
+            )}
+
+            <label className="t3d-toggle">
+              <input
+                type="checkbox"
+                checked={antiAlias}
+                onChange={(e) => setAntiAlias(e.target.checked)}
+              />
+              <span className="t3d-toggle__track" aria-hidden="true" />
+              <span className="t3d-toggle__text">
+                Anti-aliasing
+                <span className="t3d-toggle__hint">Realza bordes en modo no-pixel</span>
+              </span>
+            </label>
+          </Section>
+
+          {/* === EXPORTAR === */}
+          <Section id="exportar" icon={<IconDownload />} title="Exportar" open={!collapsed.exportar} onToggle={toggleSection}>
+            <div className="t3d-row">
+              <div className="t3d-row__head">
+                <span className="t3d-label">Resolución para el editor</span>
+                <span className="t3d-value">{resolution}px</span>
+              </div>
+              <select
+                className="t3d-select"
+                value={resolution}
+                onChange={(e) => setResolution(parseInt(e.target.value))}
+              >
+                <option value={16}>16 × 16</option>
+                <option value={32}>32 × 32</option>
+                <option value={64}>64 × 64</option>
+                <option value={128}>128 × 128</option>
+                <option value={256}>256 × 256</option>
+              </select>
+            </div>
+
+            <button
+              type="button"
+              className="t3d-btn t3d-btn--purple"
+              onClick={exportPixelData}
+              title="Exportar al editor con la resolución elegida"
+            >
+              <IconSend className="t3d-btn__icon" />
+              Al editor ({resolution}×{resolution})
+            </button>
+
+            <button
+              type="button"
+              className="t3d-btn"
+              onClick={downloadImage}
+            >
+              <IconImage className="t3d-btn__icon" />
+              PNG actual
+            </button>
+            <button
+              type="button"
+              className="t3d-btn t3d-btn--warn"
+              onClick={downloadHighRes}
+            >
+              <IconDownload className="t3d-btn__icon" />
+              PNG alta resolución (2K)
+            </button>
+          </Section>
+
         </div>
-      </div>
+      </aside>
 
-      <div ref={containerRef} className="three-canvas-container" style={{
-  display: pixelMode ? 'none' : 'block'
-}} />
-
-{pixelMode && (
-  <canvas
-    ref={pixelCanvasRef}
-    className="threejs-pixelcanvas">
-  </canvas>
-)}
+      <div ref={containerRef} className="three-canvas-container" />
     </div>
   );
 }

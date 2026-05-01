@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import "./customSelect.css";
 
 const CustomSelect = ({ 
@@ -24,7 +25,13 @@ const CustomSelect = ({
   const [menuStyle, setMenuStyle] = useState({});
   const [useColumns, setUseColumns] = useState(false);
   const [columnsCount, setColumnsCount] = useState(1);
-  
+  // Rect del botón para anclar el portal. Lo guardamos para que el menú,
+  // renderizado en document.body vía createPortal, siga la posición del
+  // select aun si el panel derecho hace scroll o la ventana cambia de
+  // tamaño. Portal elegido para escapar el `overflow: hidden` del panel
+  // que antes recortaba el menú.
+  const [selectRect, setSelectRect] = useState(null);
+
   const selectRef = useRef(null);
   const menuRef = useRef(null);
   const searchRef = useRef(null);
@@ -172,19 +179,45 @@ const CustomSelect = ({
     }
   }, [isMenuOpen, options, searchTerm]);
 
-  // Recalcular en resize
-  useEffect(() => {
-    if (isMenuOpen) {
-      const handleResize = () => calculateMenuPosition();
-      window.addEventListener('resize', handleResize);
-      return () => window.removeEventListener('resize', handleResize);
-    }
+  // Medir el rect del botón al abrir y mantenerlo sincronizado con el
+  // scroll/resize, para que el portal del menú siga al botón.
+  useLayoutEffect(() => {
+    if (!isMenuOpen || !selectRef.current) return;
+    const r = selectRef.current.getBoundingClientRect();
+    setSelectRect({ top: r.top, left: r.left, width: r.width, height: r.height });
   }, [isMenuOpen]);
 
-  // Close menu when clicking outside
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    const update = () => {
+      if (!selectRef.current) return;
+      const r = selectRef.current.getBoundingClientRect();
+      setSelectRect((prev) => {
+        if (
+          prev &&
+          prev.top === r.top &&
+          prev.left === r.left &&
+          prev.width === r.width &&
+          prev.height === r.height
+        ) return prev;
+        return { top: r.top, left: r.left, width: r.width, height: r.height };
+      });
+    };
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [isMenuOpen]);
+
+  // Close menu when clicking outside. Ahora el menú vive en un portal,
+  // así que también comprobamos menuRef para no cerrar al clickear dentro.
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (selectRef.current && !selectRef.current.contains(event.target)) {
+      const insideSelect = selectRef.current && selectRef.current.contains(event.target);
+      const insideMenu = menuRef.current && menuRef.current.contains(event.target);
+      if (!insideSelect && !insideMenu) {
         setIsMenuOpen(false);
         setSearchTerm("");
         setFocusedIndex(-1);
@@ -292,79 +325,93 @@ const CustomSelect = ({
         </div>
       </button>
 
-      {isMenuOpen && (
-        <div 
-          className={`custom-select-menu position-${actualPosition} ${useColumns ? 'columns' : ''}`}
-          ref={menuRef}
+      {isMenuOpen && selectRect && createPortal(
+        <div
           style={{
-            ...menuStyle,
-            '--columns-count': columnsCount
+            position: 'fixed',
+            top: selectRect.top,
+            left: selectRect.left,
+            width: selectRect.width,
+            height: selectRect.height,
+            pointerEvents: 'none',
+            zIndex: 10000,
           }}
         >
-          <div className="custom-select-search">
-            <input
-              ref={searchRef}
-              type="text"
-              placeholder="Buscar..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className="custom-select-search-input"
-            />
-          </div>
-          
-          <div className={`custom-select-options ${useColumns ? 'columns-layout' : ''}`}>
-            {Object.keys(filteredOptions).length === 0 ? (
-              <div className="custom-select-no-results">
-                No se encontraron resultados
-              </div>
-            ) : (
-              Object.entries(filteredOptions).map(([category, items]) => (
-                <div key={category} className="custom-select-category">
-                  <div className="custom-select-category-header">
-                    {category}
-                  </div>
-                  {items.map((item, index) => {
-                    const globalIndex = flattenedOptions
-                      .filter(opt => opt.type === 'item')
-                      .findIndex(opt => opt.value === item.value);
-                    
-                    return (
-                      <button
-                        key={item.value}
-                        className={`custom-select-option ${
-                          selectedItem?.value === item.value ? 'selected' : ''
-                        } ${focusedIndex === globalIndex ? 'focused' : ''}`}
-                        onClick={() => handleSelect(item)}
-                        onMouseEnter={() => setFocusedIndex(globalIndex)}
-                      >
-                        {renderOption ? (
-                          renderOption(item)
-                        ) : (
-                          <>
-                            {item.icon && (
-                              <span className="custom-select-option-icon">
-                                {item.icon}
-                              </span>
-                            )}
-                            <span className="custom-select-option-label">
-                              {item.label}
-                            </span>
-                            {item.description && (
-                              <span className="custom-select-option-description">
-                                {item.description}
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </button>
-                    );
-                  })}
+          <div
+            className={`custom-select-menu position-${actualPosition} ${useColumns ? 'columns' : ''}`}
+            ref={menuRef}
+            style={{
+              ...menuStyle,
+              '--columns-count': columnsCount,
+              pointerEvents: 'auto',
+            }}
+          >
+            <div className="custom-select-search">
+              <input
+                ref={searchRef}
+                type="text"
+                placeholder="Buscar..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="custom-select-search-input"
+              />
+            </div>
+
+            <div className={`custom-select-options ${useColumns ? 'columns-layout' : ''}`}>
+              {Object.keys(filteredOptions).length === 0 ? (
+                <div className="custom-select-no-results">
+                  No se encontraron resultados
                 </div>
-              ))
-            )}
+              ) : (
+                Object.entries(filteredOptions).map(([category, items]) => (
+                  <div key={category} className="custom-select-category">
+                    <div className="custom-select-category-header">
+                      {category}
+                    </div>
+                    {items.map((item, index) => {
+                      const globalIndex = flattenedOptions
+                        .filter(opt => opt.type === 'item')
+                        .findIndex(opt => opt.value === item.value);
+
+                      return (
+                        <button
+                          key={item.value}
+                          className={`custom-select-option ${
+                            selectedItem?.value === item.value ? 'selected' : ''
+                          } ${focusedIndex === globalIndex ? 'focused' : ''}`}
+                          onClick={() => handleSelect(item)}
+                          onMouseEnter={() => setFocusedIndex(globalIndex)}
+                        >
+                          {renderOption ? (
+                            renderOption(item)
+                          ) : (
+                            <>
+                              {item.icon && (
+                                <span className="custom-select-option-icon">
+                                  {item.icon}
+                                </span>
+                              )}
+                              <span className="custom-select-option-label">
+                                {item.label}
+                              </span>
+                              {item.description && (
+                                <span className="custom-select-option-description">
+                                  {item.description}
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))
+              )}
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -1,57 +1,139 @@
 import React, { useState, useCallback, useRef } from 'react';
 import './saveProject.css';
 
-const SaveProject = ({ 
-  frames, 
+// ============================================================
+// Formato v2.1.0 — guarda TODO el estado del proyecto:
+//   canvases, framesResume, layers, onionSkin, viewport, paleta
+// Compatible con v1.0.0 y v2.0.0 mediante migradores.
+//
+// Cambios v2.0.0 → v2.1.0:
+//   - framesResume.extensions.threeDLayers añadido (capas 3D).
+//   - layer.type opcional ('paint' | '3d', default 'paint').
+//   - El parser viejo ignora extensions.threeDLayers (forward-compat). Las
+//     capas 3D abiertas en versiones <2.1.0 se ven como capas vacías o con
+//     su último canvas pre-renderizado.
+// ============================================================
+
+const PROJECT_FORMAT_VERSION = '2.1.0';
+const PROJECT_EXTENSION = 'pixcalli';
+const LEGACY_EXTENSION = 'pixelart';
+
+// ---- Migrador v1 → v2 ----
+function migrateV1toV2(data) {
+  return {
+    format: {
+      name: 'PixCalli Studio',
+      version: PROJECT_FORMAT_VERSION,
+      extension: PROJECT_EXTENSION,
+      created: data.format?.created ?? new Date().toISOString(),
+      lastModified: new Date().toISOString(),
+      migratedFrom: data.format?.version ?? '1.0.0',
+    },
+    metadata: data.metadata ?? {},
+    viewport: {
+      zoom: 1,
+      panOffset: { x: 0, y: 0 },
+      activeLayerId: null,
+      currentFrame: data.state?.currentFrame ?? 1,
+    },
+    animation: {
+      defaultFrameDuration: data.framesResume?.metadata?.defaultFrameDuration ?? 100,
+      frameRate: data.framesResume?.metadata?.frameRate ?? 10,
+      loop: true,
+    },
+    framesResume: data.framesResume ?? null,
+    layers: [],
+    canvases: data.canvasData
+      ? _flattenLegacyCanvases(data.canvasData)
+      : {},
+    palette: {
+      foreground: { r: 0, g: 0, b: 0, a: 255 },
+      background: { r: 255, g: 255, b: 255, a: 255 },
+      fillColor: { r: 0, g: 0, b: 0, a: 255 },
+      borderColor: { r: 0, g: 0, b: 0, a: 255 },
+      recentColors: [],
+    },
+    onionSkin: {
+      enabled: false,
+      settings: {
+        previousOpacity: 0.3,
+        nextOpacity: 0.3,
+        previousMatiz: null,
+        nextMatiz: null,
+      },
+      framesConfig: null,
+    },
+  };
+}
+
+// v1 guardaba canvasData[frameNumber][layerId]; v2 usa clave plana frame_N_layerId
+function _flattenLegacyCanvases(canvasData) {
+  const flat = {};
+  for (const [frameNumber, layerMap] of Object.entries(canvasData)) {
+    for (const [layerId, data] of Object.entries(layerMap)) {
+      flat[`frame_${frameNumber}_${layerId}`] = data;
+    }
+  }
+  return flat;
+}
+
+// ---- Componente principal ----
+const SaveProject = ({
+  // datos del editor
+  frames,
   currentFrame,
   framesResume,
+  layers,
+  zoom,
+  panOffset,
+  activeLayerId,
+  toolParameters,
+  recentColors,
+  onionSkinSettings,
+  onionFramesConfig,
+  onionSkinEnabled,
+  // extensiones aditivas (opcionales)
+  customPalettes,
+  animationTags,
+  slices,
+  tilesets,
+  referenceLayerMeta,
+  guides,
+  // callbacks
   onProjectLoaded,
+  onClose,
   projectMetadata = {},
-  className = ""
+  canvasWidth,
+  canvasHeight,
+  // toggle de bucle del reproductor — se persiste para restaurar al reabrir.
+  loopEnabled = true,
 }) => {
   const [projectName, setProjectName] = useState('mi-proyecto');
   const [isLoading, setIsLoading] = useState(false);
-  const [compressionLevel, setCompressionLevel] = useState('medium');
-  const [includeCanvas, setIncludeCanvas] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [additionalNotes, setAdditionalNotes] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef(null);
 
-  // Constantes del formato
-  const PROJECT_FORMAT_VERSION = "1.0.0";
-  const PROJECT_EXTENSION = "pixelart";
-
-  // ✅ Serializar canvas a base64
-  const serializeCanvas = useCallback((canvas, compression = 'medium') => {
+  // ---- Serialización de canvas ----
+  const serializeCanvas = useCallback((canvas) => {
     if (!canvas || !canvas.getContext) return null;
-
     try {
-      const quality = {
-        'low': 0.3,
-        'medium': 0.7,
-        'high': 0.9
-      }[compression] || 0.7;
-
-      const dataURL = canvas.toDataURL('image/png');
-      
       return {
         type: 'dataurl',
-        data: dataURL,
+        data: canvas.toDataURL('image/png'),
         width: canvas.width,
         height: canvas.height,
-        compression
       };
-    } catch (error) {
-      console.warn('Error serializando canvas:', error);
+    } catch (err) {
+      console.warn('Error serializando canvas:', err);
       return null;
     }
   }, []);
 
-  // ✅ Deserializar canvas desde base64
+  // ---- Deserialización de canvas ----
   const deserializeCanvas = useCallback((canvasData) => {
     if (!canvasData) return null;
-
     const canvas = document.createElement('canvas');
     canvas.width = canvasData.width;
     canvas.height = canvasData.height;
@@ -60,124 +142,147 @@ const SaveProject = ({
     if (canvasData.type === 'dataurl') {
       return new Promise((resolve) => {
         const img = new Image();
-        img.onload = () => {
-          ctx.drawImage(img, 0, 0);
-          resolve(canvas);
-        };
-        img.onerror = () => {
-          console.warn('Error cargando imagen');
-          resolve(canvas);
-        };
+        img.onload = () => { ctx.drawImage(img, 0, 0); resolve(canvas); };
+        img.onerror = () => resolve(canvas);
         img.src = canvasData.data;
       });
     }
-
-    return canvas;
+    return Promise.resolve(canvas);
   }, []);
 
-  // ✅ Serializar proyecto completo
+  // ---- Serialización completa v2 ----
   const serializeProject = useCallback(async () => {
-    try {
-      const projectData = {
-        format: {
-          name: "PixelArt Project",
-          version: PROJECT_FORMAT_VERSION,
-          extension: PROJECT_EXTENSION,
-          created: new Date().toISOString(),
-          lastModified: new Date().toISOString()
-        },
-        
-        state: {
-          currentFrame: currentFrame || 1,
-          frameCount: Object.keys(frames || {}).length
-        },
-        
-        framesResume: framesResume ? JSON.parse(JSON.stringify(framesResume)) : null,
-        
-        metadata: {
-          title: projectName,
-          author: projectMetadata.author || "",
-          description: additionalNotes || projectMetadata.description || "",
-          tags: projectMetadata.tags || [],
-          ...projectMetadata
-        }
-      };
+    const now = new Date().toISOString();
 
-      if (includeCanvas && frames) {
-        projectData.canvasData = {};
-        
-        for (const [frameNumber, frameData] of Object.entries(frames)) {
-          if (frameData.canvases) {
-            projectData.canvasData[frameNumber] = {};
-            
-            for (const [layerId, canvas] of Object.entries(frameData.canvases)) {
-              if (canvas && canvas.getContext) {
-                const canvasData = serializeCanvas(canvas, compressionLevel);
-                if (canvasData) {
-                  projectData.canvasData[frameNumber][layerId] = canvasData;
-                }
+    // Canvases: clave plana frame_N_layerId
+    const canvases = {};
+    if (frames) {
+      for (const [frameNumber, frameData] of Object.entries(frames)) {
+        if (frameData?.canvases) {
+          for (const [layerId, canvas] of Object.entries(frameData.canvases)) {
+            if (canvas?.getContext) {
+              const serialized = serializeCanvas(canvas);
+              if (serialized) {
+                canvases[`frame_${frameNumber}_${layerId}`] = serialized;
               }
             }
           }
         }
       }
-
-      projectData.stats = {
-        totalFrames: Object.keys(frames || {}).length,
-        hasCanvasData: includeCanvas,
-        compression: compressionLevel,
-        estimatedSize: JSON.stringify(projectData).length
-      };
-
-      return projectData;
-
-    } catch (error) {
-      console.error('Error serializando proyecto:', error);
-      throw new Error(`Error al preparar el proyecto: ${error.message}`);
     }
-  }, [frames, currentFrame, framesResume, projectName, projectMetadata, includeCanvas, compressionLevel, additionalNotes, serializeCanvas]);
 
-  // ✅ Guardar proyecto
+    // Capas: serializar solo los datos (no el canvas DOM)
+    const serializedLayers = (layers ?? []).map((layer) => ({
+      id: layer.id,
+      name: layer.name,
+      visible: layer.visible,
+      opacity: layer.opacity,
+      zIndex: layer.zIndex,
+      isGroupLayer: layer.isGroupLayer ?? false,
+      parentLayerId: layer.parentLayerId ?? null,
+      blendMode: layer.blendMode ?? 'normal',
+    }));
+
+    const projectData = {
+      format: {
+        name: 'PixCalli Studio',
+        version: PROJECT_FORMAT_VERSION,
+        extension: PROJECT_EXTENSION,
+        created: now,
+        lastModified: now,
+      },
+      metadata: {
+        title: projectName,
+        author: projectMetadata.author ?? '',
+        description: additionalNotes || projectMetadata.description || '',
+        tags: projectMetadata.tags ?? [],
+      },
+      viewport: {
+        zoom: zoom ?? 1,
+        panOffset: panOffset ?? { x: 0, y: 0 },
+        activeLayerId: activeLayerId ?? null,
+        currentFrame: currentFrame ?? 1,
+      },
+      animation: {
+        defaultFrameDuration: framesResume?.metadata?.defaultFrameDuration ?? 100,
+        frameRate: framesResume?.metadata?.frameRate ?? 10,
+        loop: loopEnabled,
+      },
+      framesResume: framesResume ? JSON.parse(JSON.stringify(framesResume)) : null,
+      layers: serializedLayers,
+      canvases,
+      palette: {
+        foreground: toolParameters?.foregroundColor ?? { r: 0, g: 0, b: 0, a: 255 },
+        background: toolParameters?.backgroundColor ?? { r: 255, g: 255, b: 255, a: 255 },
+        fillColor: toolParameters?.fillColor ?? { r: 0, g: 0, b: 0, a: 255 },
+        borderColor: toolParameters?.borderColor ?? { r: 0, g: 0, b: 0, a: 255 },
+        recentColors: recentColors ?? [],
+      },
+      onionSkin: {
+        enabled: onionSkinEnabled ?? false,
+        settings: onionSkinSettings ?? null,
+        framesConfig: onionFramesConfig ?? null,
+      },
+      dimensions: {
+        width: canvasWidth,
+        height: canvasHeight,
+      },
+      // --- Extensiones v2.1 (aditivas; parsers viejos las ignoran) ---
+      extensions: {
+        customPalettes: customPalettes ?? [],
+        animationTags: animationTags ?? [],
+        slices: slices ?? [],
+        // Los referenceLayers pueden traer un canvas grande: si el consumidor
+        // no pasó `referenceLayerMeta` como serializable, lo omitimos.
+        referenceLayers: Array.isArray(referenceLayerMeta) ? referenceLayerMeta : [],
+        // Los tilesets pueden pasarse preserializados (dataURL por tile) o null.
+        tilesets: tilesets ?? null,
+        guides: guides ?? [],
+      },
+    };
+
+    return projectData;
+  }, [
+    frames, framesResume, layers, zoom, panOffset, activeLayerId,
+    currentFrame, toolParameters, recentColors,
+    onionSkinSettings, onionFramesConfig, onionSkinEnabled,
+    projectName, additionalNotes, projectMetadata, serializeCanvas,
+    customPalettes, animationTags, slices, tilesets, referenceLayerMeta, guides,
+    canvasWidth, canvasHeight, loopEnabled,
+  ]);
+
+  // ---- Guardar ----
   const handleSave = useCallback(async () => {
     if (!projectName.trim()) {
       alert('Por favor, ingresa un nombre para el proyecto');
       return;
     }
-
     setIsLoading(true);
-    
     try {
       const projectData = await serializeProject();
       const jsonString = JSON.stringify(projectData, null, 2);
-      
       const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      
       const link = document.createElement('a');
       link.href = url;
       link.download = `${projectName}.${PROJECT_EXTENSION}`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
       URL.revokeObjectURL(url);
-      
-      console.log(`💾 Proyecto guardado: ${projectName}.${PROJECT_EXTENSION}`);
-      
-    } catch (error) {
-      console.error('Error guardando:', error);
-      alert(`Error al guardar: ${error.message}`);
+      console.log(`Proyecto guardado: ${projectName}.${PROJECT_EXTENSION}`);
+    } catch (err) {
+      console.error('Error guardando:', err);
+      alert(`Error al guardar: ${err.message}`);
     } finally {
       setIsLoading(false);
     }
   }, [projectName, serializeProject]);
 
-  // ✅ Cargar proyecto
+  // ---- Carga y restauración ----
   const handleLoad = useCallback(async (file) => {
     if (!file) return;
-
     setIsLoading(true);
-
     try {
       const fileContent = await new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -186,130 +291,87 @@ const SaveProject = ({
         reader.readAsText(file);
       });
 
-      const projectData = JSON.parse(fileContent);
+      let projectData = JSON.parse(fileContent);
 
-      if (projectData.format?.version !== PROJECT_FORMAT_VERSION) {
+      // Migrar formato antiguo
+      const version = projectData.format?.version;
+      if (version === '1.0.0') {
+        console.log('Migrando proyecto v1 → v2...');
+        projectData = migrateV1toV2(projectData);
+      } else if (version !== PROJECT_FORMAT_VERSION) {
         const proceed = confirm(
-          `Versión diferente detectada (${projectData.format?.version}). ¿Continuar?`
+          `Versión de archivo desconocida (${version}). Se intentará cargar igual. ¿Continuar?`
         );
-        if (!proceed) return;
+        if (!proceed) { setIsLoading(false); return; }
       }
 
-      let restoredFrames = null;
-      if (projectData.canvasData && frames) {
-        restoredFrames = { ...frames };
-        
-        for (const [frameNumber, canvasDataByLayer] of Object.entries(projectData.canvasData)) {
-          if (restoredFrames[frameNumber]?.canvases) {
-            for (const [layerId, canvasData] of Object.entries(canvasDataByLayer)) {
-              if (canvasData) {
-                const restoredCanvas = await deserializeCanvas(canvasData);
-                if (restoredCanvas && restoredFrames[frameNumber].canvases[layerId]) {
-                  restoredFrames[frameNumber].canvases[layerId] = restoredCanvas;
-                }
-              }
-            }
-          }
-        }
+      // Restaurar canvases a objetos canvas DOM
+      const restoredCanvases = {};
+      if (projectData.canvases) {
+        const promises = Object.entries(projectData.canvases).map(async ([key, data]) => {
+          const canvas = await deserializeCanvas(data);
+          if (canvas) restoredCanvases[key] = canvas;
+        });
+        await Promise.all(promises);
       }
 
       if (onProjectLoaded) {
         onProjectLoaded({
           success: true,
           projectData,
-          restoredFrames,
+          restoredCanvases,
           metadata: projectData.metadata,
-          stats: projectData.stats
         });
       }
 
-      if (projectData.metadata?.title) {
-        setProjectName(projectData.metadata.title);
-      }
-      if (projectData.metadata?.description) {
-        setAdditionalNotes(projectData.metadata.description);
-      }
+      if (projectData.metadata?.title) setProjectName(projectData.metadata.title);
+      if (projectData.metadata?.description) setAdditionalNotes(projectData.metadata.description);
 
-      console.log(`📁 Proyecto cargado: ${file.name}`);
-
-    } catch (error) {
-      console.error('Error cargando proyecto:', error);
-      alert(`Error al cargar: ${error.message}`);
-      
-      if (onProjectLoaded) {
-        onProjectLoaded({
-          success: false,
-          error: error.message
-        });
-      }
+      console.log(`Proyecto cargado: ${file.name}`);
+    } catch (err) {
+      console.error('Error cargando proyecto:', err);
+      alert(`Error al cargar: ${err.message}`);
+      if (onProjectLoaded) onProjectLoaded({ success: false, error: err.message });
     } finally {
       setIsLoading(false);
     }
-  }, [deserializeCanvas, frames, onProjectLoaded]);
+  }, [deserializeCanvas, onProjectLoaded]);
 
-  // ✅ Manejar selección de archivo
-  const handleFileSelect = useCallback((event) => {
-    const file = event.target.files[0];
-    if (file) {
-      handleLoad(file);
-    }
-    event.target.value = '';
+  // ---- Handlers de UI ----
+  const handleFileSelect = useCallback((e) => {
+    const file = e.target.files[0];
+    if (file) handleLoad(file);
+    e.target.value = '';
   }, [handleLoad]);
 
-  // ✅ Drag and drop handlers
-  const handleDrag = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  const handleDragIn = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(true);
-  }, []);
-
-  const handleDragOut = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-  }, []);
-
+  const handleDrag = useCallback((e) => { e.preventDefault(); e.stopPropagation(); }, []);
+  const handleDragIn = useCallback((e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true); }, []);
+  const handleDragOut = useCallback((e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); }, []);
   const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    
+    e.preventDefault(); e.stopPropagation(); setDragActive(false);
     const files = Array.from(e.dataTransfer.files);
-    const pixelArtFile = files.find(file => 
-      file.name.endsWith('.pixelart') || file.name.endsWith('.json')
+    const valid = files.find(f =>
+      f.name.endsWith(`.${PROJECT_EXTENSION}`) ||
+      f.name.endsWith(`.${LEGACY_EXTENSION}`) ||
+      f.name.endsWith('.json')
     );
-    
-    if (pixelArtFile) {
-      handleLoad(pixelArtFile);
-    } else {
-      alert('Por favor, arrastra un archivo .pixelart o .json válido');
-    }
+    if (valid) handleLoad(valid);
+    else alert(`Arrastra un archivo .${PROJECT_EXTENSION} o .${LEGACY_EXTENSION}`);
   }, [handleLoad]);
 
-  // ✅ Obtener información del proyecto
-  const getProjectInfo = useCallback(() => {
-    const frameCount = Object.keys(frames || {}).length;
-    const totalLayers = framesResume ? Object.keys(framesResume.layers || {}).length : 0;
-    
-    return {
-      frames: frameCount,
-      layers: totalLayers,
-      currentFrame: currentFrame || 1,
-      hasCanvas: includeCanvas,
-      compression: compressionLevel,
-      estimatedSizeKB: framesResume ? Math.round(JSON.stringify(framesResume).length / 1024) : 0
-    };
-  }, [frames, framesResume, currentFrame, includeCanvas, compressionLevel]);
+  const getProjectInfo = useCallback(() => ({
+    frames: Object.keys(frames ?? {}).length,
+    layers: (layers ?? []).length,
+    currentFrame: currentFrame ?? 1,
+    estimatedSizeKB: framesResume
+      ? Math.round(JSON.stringify(framesResume).length / 1024)
+      : 0,
+  }), [frames, layers, framesResume, currentFrame]);
 
   const projectInfo = getProjectInfo();
 
   return (
-    <div className='save-project-overlay'>
+    <div className='save-project-overlay' onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
     <div className={`save-project`}>
       {/* Header */}
       <div className="save-project__header">
@@ -318,34 +380,24 @@ const SaveProject = ({
           Gestor de Proyectos
         </div>
         <div className="save-project__stats">
-          <span className="stat">
-            <span className="stat__icon">🎬</span>
-            {projectInfo.frames} frames
-          </span>
-          <span className="stat">
-            <span className="stat__icon">🎨</span>
-            {projectInfo.layers} capas
-          </span>
-          <span className="stat">
-            <span className="stat__icon">📍</span>
-            Frame {projectInfo.currentFrame}
-          </span>
-          <span className="stat">
-            <span className="stat__icon">📊</span>
-            ~{projectInfo.estimatedSizeKB} KB
-          </span>
+          <span className="stat"><span className="stat__icon">🎬</span>{projectInfo.frames} frames</span>
+          <span className="stat"><span className="stat__icon">🎨</span>{projectInfo.layers} capas</span>
+          <span className="stat"><span className="stat__icon">📍</span>Frame {projectInfo.currentFrame}</span>
+          <span className="stat"><span className="stat__icon">📊</span>~{projectInfo.estimatedSizeKB} KB</span>
         </div>
+        {onClose && (
+          <button className="save-project__close" onClick={onClose} title="Cerrar">✕</button>
+        )}
       </div>
 
       {/* Form */}
       <div className="save-project__form">
-        {/* Nombre del proyecto */}
         <div className="form-group">
           <label className="form-label">
             <span className="form-label__icon">📝</span>
             Nombre del proyecto
           </label>
-          <input 
+          <input
             type="text"
             value={projectName}
             onChange={(e) => setProjectName(e.target.value)}
@@ -354,75 +406,20 @@ const SaveProject = ({
             className="form-input"
           />
         </div>
-
-        {/* Opciones básicas */}
-        <div className="form-group">
-          <div className="checkbox-group">
-            <label className="checkbox-label">
-              <input 
-                type="checkbox"
-                checked={includeCanvas}
-                onChange={(e) => setIncludeCanvas(e.target.checked)}
-                disabled={isLoading}
-                className="checkbox-input"
-              />
-              <span className="checkbox-custom"></span>
-              <span className="checkbox-text">
-                <span className="checkbox-title">Incluir contenido visual</span>
-                <span className="checkbox-subtitle">Guarda las imágenes dibujadas</span>
-              </span>
-            </label>
-          </div>
-          
-          {includeCanvas && (
-            <div className="compression-selector">
-              <label className="form-label form-label--small">
-                <span className="form-label__icon">🗜️</span>
-                Nivel de compresión
-              </label>
-              <div className="radio-group">
-                {[
-                  { value: 'low', label: 'Baja', subtitle: 'Mayor calidad, más tamaño' },
-                  { value: 'medium', label: 'Media', subtitle: 'Balance óptimo' },
-                  { value: 'high', label: 'Alta', subtitle: 'Menor tamaño, comprimido' }
-                ].map(option => (
-                  <label key={option.value} className="radio-label">
-                    <input 
-                      type="radio"
-                      name="compression"
-                      value={option.value}
-                      checked={compressionLevel === option.value}
-                      onChange={(e) => setCompressionLevel(e.target.value)}
-                      disabled={isLoading}
-                      className="radio-input"
-                    />
-                    <span className="radio-custom"></span>
-                    <span className="radio-text">
-                      <span className="radio-title">{option.label}</span>
-                      <span className="radio-subtitle">{option.subtitle}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
       </div>
 
-      {/* Botones principales */}
+      {/* Botones */}
       <div className="save-project__actions">
-        <button 
+        <button
           onClick={handleSave}
           disabled={isLoading || !projectName.trim()}
           className="btn btn--primary btn--save"
         >
           <span className="btn__icon">💾</span>
-          <span className="btn__text">
-            {isLoading ? 'Guardando...' : 'Guardar Proyecto'}
-          </span>
+          <span className="btn__text">{isLoading ? 'Guardando...' : 'Guardar Proyecto'}</span>
         </button>
-        
-        <button 
+
+        <button
           onClick={() => fileInputRef.current?.click()}
           disabled={isLoading}
           className="btn btn--secondary btn--load"
@@ -431,7 +428,7 @@ const SaveProject = ({
           <span className="btn__text">Cargar Proyecto</span>
         </button>
 
-        <button 
+        <button
           onClick={() => setShowAdvanced(!showAdvanced)}
           className={`btn btn--outline btn--toggle ${showAdvanced ? 'btn--toggle--active' : ''}`}
         >
@@ -447,13 +444,13 @@ const SaveProject = ({
             <span className="advanced-options__icon">⚙️</span>
             Configuración Avanzada
           </div>
-          
+
           <div className="form-group">
             <label className="form-label">
               <span className="form-label__icon">📝</span>
               Notas del proyecto
             </label>
-            <textarea 
+            <textarea
               value={additionalNotes}
               onChange={(e) => setAdditionalNotes(e.target.value)}
               placeholder="Descripción, notas, instrucciones..."
@@ -477,8 +474,8 @@ const SaveProject = ({
               </div>
               <div className="info-item">
                 <span className="info-item__icon">🎨</span>
-                <span className="info-item__label">Canvas</span>
-                <span className="info-item__value">{includeCanvas ? 'Incluido' : 'Solo estructura'}</span>
+                <span className="info-item__label">Capas</span>
+                <span className="info-item__value">{projectInfo.layers}</span>
               </div>
               <div className="info-item">
                 <span className="info-item__icon">⏰</span>
@@ -490,8 +487,8 @@ const SaveProject = ({
         </div>
       </div>
 
-      {/* Zona de drag & drop */}
-      <div 
+      {/* Zona drag & drop */}
+      <div
         className={`drop-zone ${dragActive ? 'drop-zone--active' : ''}`}
         onDragEnter={handleDragIn}
         onDragLeave={handleDragOut}
@@ -502,33 +499,31 @@ const SaveProject = ({
           <div className="drop-zone__icon">📁</div>
           <div className="drop-zone__text">
             <div className="drop-zone__title">Arrastra un archivo aquí</div>
-            <div className="drop-zone__subtitle">Archivos .pixelart o .json</div>
+            <div className="drop-zone__subtitle">Archivos .{PROJECT_EXTENSION} o .{LEGACY_EXTENSION}</div>
           </div>
         </div>
       </div>
 
       {/* Acciones rápidas */}
       <div className="quick-actions">
-        <button 
+        <button
           onClick={async () => {
             try {
               const projectData = await serializeProject();
               const jsonString = JSON.stringify(projectData, null, 2);
-              
               if (navigator.clipboard) {
                 await navigator.clipboard.writeText(jsonString);
-                alert('📋 Proyecto copiado al portapapeles');
               } else {
-                const textArea = document.createElement('textarea');
-                textArea.value = jsonString;
-                document.body.appendChild(textArea);
-                textArea.select();
+                const ta = document.createElement('textarea');
+                ta.value = jsonString;
+                document.body.appendChild(ta);
+                ta.select();
                 document.execCommand('copy');
-                document.body.removeChild(textArea);
-                alert('📋 Proyecto copiado al portapapeles');
+                document.body.removeChild(ta);
               }
-            } catch (error) {
-              alert(`Error: ${error.message}`);
+              alert('Proyecto copiado al portapapeles');
+            } catch (err) {
+              alert(`Error: ${err.message}`);
             }
           }}
           disabled={isLoading}
@@ -539,34 +534,22 @@ const SaveProject = ({
           <span className="btn__text">Copiar</span>
         </button>
 
-        <button 
+        <button
           onClick={() => {
             const input = prompt('Pega el JSON del proyecto aquí:');
-            if (input) {
-              try {
-                const projectData = JSON.parse(input);
-                
-                if (onProjectLoaded) {
-                  onProjectLoaded({
-                    success: true,
-                    projectData,
-                    restoredFrames: null,
-                    metadata: projectData.metadata,
-                    stats: projectData.stats
-                  });
-                }
-                
-                if (projectData.metadata?.title) {
-                  setProjectName(projectData.metadata.title);
-                }
-                if (projectData.metadata?.description) {
-                  setAdditionalNotes(projectData.metadata.description);
-                }
-                
-                alert('📋 Proyecto cargado desde portapapeles');
-              } catch (error) {
-                alert('❌ JSON inválido');
+            if (!input) return;
+            try {
+              let projectData = JSON.parse(input);
+              if (projectData.format?.version === '1.0.0') {
+                projectData = migrateV1toV2(projectData);
               }
+              if (onProjectLoaded) {
+                onProjectLoaded({ success: true, projectData, restoredCanvases: {}, metadata: projectData.metadata });
+              }
+              if (projectData.metadata?.title) setProjectName(projectData.metadata.title);
+              alert('Proyecto cargado desde portapapeles');
+            } catch {
+              alert('JSON inválido');
             }
           }}
           disabled={isLoading}
@@ -577,10 +560,17 @@ const SaveProject = ({
           <span className="btn__text">Pegar</span>
         </button>
 
-        <button 
+        <button
           onClick={() => {
             const info = getProjectInfo();
-            alert(`📊 Información del proyecto:\n\n• Frames: ${info.frames}\n• Capas: ${info.layers}\n• Frame actual: ${info.currentFrame}\n• Tamaño: ~${info.estimatedSizeKB} KB\n• Canvas incluido: ${info.hasCanvas ? 'Sí' : 'No'}\n• Compresión: ${info.compression}`);
+            alert(
+              `Información del proyecto:\n\n` +
+              `Frames: ${info.frames}\n` +
+              `Capas: ${info.layers}\n` +
+              `Frame actual: ${info.currentFrame}\n` +
+              `Tamaño estimado: ~${info.estimatedSizeKB} KB\n` +
+              `Formato: v${PROJECT_FORMAT_VERSION}`
+            );
           }}
           className="btn btn--small btn--ghost"
           title="Ver información del proyecto"
@@ -590,11 +580,11 @@ const SaveProject = ({
         </button>
       </div>
 
-      {/* Input file oculto */}
-      <input 
+      {/* Input oculto */}
+      <input
         ref={fileInputRef}
         type="file"
-        accept={`.${PROJECT_EXTENSION},.json`}
+        accept={`.${PROJECT_EXTENSION},.${LEGACY_EXTENSION},.json`}
         onChange={handleFileSelect}
         style={{ display: 'none' }}
       />
@@ -614,12 +604,8 @@ const SaveProject = ({
 
       {/* Footer */}
       <div className="save-project__footer">
-        <span className="footer-text">
-          💾 PixelArt Project Manager v{PROJECT_FORMAT_VERSION}
-        </span>
-        <span className="footer-formats">
-          Formatos: .pixelart, .json
-        </span>
+        <span className="footer-text">PixCalli Studio — Gestor de Proyectos v{PROJECT_FORMAT_VERSION}</span>
+        <span className="footer-formats">Formatos: .{PROJECT_EXTENSION}, .{LEGACY_EXTENSION}</span>
       </div>
     </div>
     </div>

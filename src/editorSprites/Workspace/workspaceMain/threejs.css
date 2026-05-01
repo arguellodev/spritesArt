@@ -1,6 +1,18 @@
+/* PixCalli — Visor 3D
+ * ─────────────────────────────────────────────────────────────
+ * Estética alineada con topToolbar.css: glass studio dark, acento
+ * púrpura PixCalli (#8c52ff), tipografía Inter + JetBrains Mono,
+ * micro-pisada de marca con scanlines y indicador 3-cuadros en focus.
+ *
+ * Usa las CSS variables globales de initializeProject.css
+ * (--bg-primary, --accent-color, etc.) — no redeclarar.
+ * ───────────────────────────────────────────────────────────── */
+
 .three-container {
-  background: rgba(63, 63, 63, 0.404);
-  backdrop-filter: blur(10px);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', system-ui, sans-serif;
+  background-color: rgba(20, 20, 24, 0.82);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
   position: absolute;
   top: 0;
   left: 0;
@@ -9,62 +21,633 @@
   z-index: 100000;
   display: flex;
   flex-direction: row;
+  color: var(--text-primary);
+  user-select: none;
 }
 
-.controls {
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
-  padding: 20px;
-  border-radius: 8px;
+/* === SIDEBAR DE CONTROLES === */
+.t3d-controls {
+  width: 296px;
+  min-width: 296px;
+  max-width: 296px;
+  height: 100%;
+  background-color: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  box-shadow: var(--panel-shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+  z-index: 100;
+  isolation: isolate;
+}
+
+/* Scanline ultra-sutil (decorativa) — el guiño pixel-art del topToolbar. */
+.t3d-controls::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.012) 0 1px,
+    transparent 1px 3px
+  );
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* === HEADER === */
+.t3d-controls__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border-color);
+  background: linear-gradient(180deg, var(--bg-tertiary), var(--bg-secondary));
+  flex-shrink: 0;
+}
+.t3d-controls__header-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  background: rgba(140, 82, 255, 0.16);
+  border: 1px solid rgba(140, 82, 255, 0.28);
+  color: var(--accent-hover);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.t3d-controls__title {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+.t3d-controls__subtitle {
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  margin-top: 2px;
+  letter-spacing: 0.02em;
+}
+
+/* === SCROLL === */
+.t3d-controls__scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px 6px 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+.t3d-controls__scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.t3d-controls__scroll::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.t3d-controls__scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--button-border);
+  background-clip: padding-box;
+}
+
+/* === SECCIÓN COLAPSABLE === */
+.t3d-section {
+  margin: 4px 4px 6px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+  transition: border-color 0.14s ease;
+}
+.t3d-section:hover {
+  border-color: var(--button-border);
+}
+.t3d-section--open {
+  border-color: rgba(140, 82, 255, 0.22);
+}
+
+.t3d-section__head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text-secondary);
+  text-align: left;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.t3d-section__head:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+}
+.t3d-section__head:focus-visible {
+  outline: 2px solid rgba(140, 82, 255, 0.55);
+  outline-offset: -2px;
+}
+.t3d-section--open .t3d-section__head {
+  color: var(--text-primary);
+  background-color: rgba(140, 82, 255, 0.08);
+  box-shadow: inset 0 -1px 0 0 rgba(140, 82, 255, 0.4);
+}
+.t3d-section__icon {
+  width: 14px;
+  height: 14px;
+  color: var(--accent-hover);
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+.t3d-section__name {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.t3d-section__chevron {
+  width: 13px;
+  height: 13px;
+  color: var(--text-secondary);
+  opacity: 0.6;
+  transition: transform 0.18s ease, opacity 0.12s ease;
+}
+.t3d-section__head:hover .t3d-section__chevron {
+  opacity: 1;
+}
+.t3d-section--open .t3d-section__chevron {
+  transform: rotate(180deg);
+  opacity: 0.95;
+}
+.t3d-section__body {
+  padding: 8px 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  min-width: 250px;
-  max-width: 300px; /* ✅ Limitar ancho máximo de controles */
-  font-family: Arial, sans-serif;
-  font-size: 14px;
-  z-index: 10000000000000;
-  overflow-y: auto; /* ✅ Scroll si hay muchos controles */
-  flex-shrink: 0; /* ✅ Evitar que se comprima */
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+.t3d-section--collapsed .t3d-section__body {
+  display: none;
 }
 
-.control-group {
+/* === FILAS / LABELS === */
+.t3d-row {
   display: flex;
   flex-direction: column;
   gap: 5px;
 }
-
-.control-label {
-  font-weight: bold;
-  margin-bottom: 5px;
+.t3d-row__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 16px;
+}
+.t3d-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0.01em;
+  line-height: 1.2;
 }
 
-.control-input {
-  padding: 5px;
+/* Value chips estilo kbd (mismo lenguaje visual que topToolbar). */
+.t3d-value {
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 6px;
+  color: var(--text-primary);
+  background: linear-gradient(180deg, rgba(140, 82, 255, 0.14), rgba(140, 82, 255, 0.04));
+  border: 1px solid rgba(140, 82, 255, 0.28);
+  border-bottom-color: rgba(0, 0, 0, 0.4);
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  min-width: 36px;
+  text-align: center;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
 }
 
-.control-range {
+/* === FILE PICKER === */
+.t3d-file {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background-color: var(--bg-tertiary);
+  border: 1px dashed var(--button-border);
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 11.5px;
+  color: var(--text-primary);
+  transition: background-color 0.14s ease, border-color 0.14s ease;
+}
+.t3d-file:hover {
+  border-color: var(--accent-color);
+  background-color: rgba(140, 82, 255, 0.08);
+}
+.t3d-file:focus-within {
+  outline: 2px solid rgba(140, 82, 255, 0.55);
+  outline-offset: 1px;
+}
+.t3d-file input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.t3d-file__icon {
+  width: 16px;
+  height: 16px;
+  color: var(--accent-hover);
+  flex-shrink: 0;
+}
+.t3d-file__text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.01em;
+}
+
+/* === SELECT === */
+.t3d-select {
+  appearance: none;
+  -webkit-appearance: none;
   width: 100%;
+  padding: 7px 28px 7px 10px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b8b8b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 13px;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+.t3d-select:hover {
+  border-color: var(--button-border);
+  background-color: var(--button-bg);
+}
+.t3d-select:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(140, 82, 255, 0.25);
+}
+.t3d-select:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.t3d-select option {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
-.control-checkbox {
-  margin-right: 8px;
+/* === SLIDER === */
+.t3d-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background-color: var(--bg-tertiary);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.t3d-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background-color: var(--bg-tertiary);
+}
+.t3d-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  border: 2px solid var(--bg-primary);
+  margin-top: -4.5px;
+  cursor: grab;
+  box-shadow: 0 0 0 1px rgba(140, 82, 255, 0.35), 0 1px 3px rgba(0, 0, 0, 0.4);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.t3d-slider::-webkit-slider-thumb:hover {
+  background: var(--accent-hover);
+  transform: scale(1.18);
+  box-shadow: 0 0 0 4px rgba(140, 82, 255, 0.18), 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+.t3d-slider::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  background: var(--accent-active);
+}
+.t3d-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background-color: var(--bg-tertiary);
+  border: none;
+}
+.t3d-slider::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  border: 2px solid var(--bg-primary);
+  cursor: grab;
+}
+.t3d-slider:focus-visible {
+  outline: 2px solid rgba(140, 82, 255, 0.55);
+  outline-offset: 3px;
 }
 
-/* ✅ SECCIÓN CORREGIDA - Canvas ocupa toda la altura restante */
+/* === TOGGLE SWITCH === */
+.t3d-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+  position: relative;
+}
+.t3d-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+.t3d-toggle__track {
+  position: relative;
+  width: 30px;
+  height: 17px;
+  border-radius: 9px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+.t3d-toggle__track::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background-color: var(--text-secondary);
+  transition: transform 0.2s cubic-bezier(0.4, 0.2, 0.2, 1), background-color 0.2s ease;
+}
+.t3d-toggle input:checked + .t3d-toggle__track {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+.t3d-toggle input:checked + .t3d-toggle__track::after {
+  transform: translateX(13px);
+  background-color: #ffffff;
+}
+.t3d-toggle input:focus-visible + .t3d-toggle__track {
+  outline: 2px solid rgba(140, 82, 255, 0.55);
+  outline-offset: 2px;
+}
+.t3d-toggle__text {
+  font-size: 12px;
+  color: var(--text-primary);
+  flex: 1;
+  letter-spacing: 0.01em;
+  line-height: 1.3;
+}
+.t3d-toggle__hint {
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  display: block;
+  margin-top: 2px;
+  opacity: 0.75;
+  letter-spacing: 0.01em;
+}
+
+/* === COLOR PICKER === */
+.t3d-color {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  padding: 4px 10px 4px 4px;
+  transition: border-color 0.12s ease;
+}
+.t3d-color:hover {
+  border-color: var(--button-border);
+}
+.t3d-color:focus-within {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(140, 82, 255, 0.25);
+}
+.t3d-color__swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.t3d-color__swatch::-webkit-color-swatch-wrapper { padding: 0; }
+.t3d-color__swatch::-webkit-color-swatch { border: none; border-radius: 4px; }
+.t3d-color__hex {
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* === GRUPO DE EDGE (silueta / caras internas) === */
+.t3d-edge-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+}
+.t3d-edge-group__title {
+  font-family: 'Inter', sans-serif;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-hover);
+  opacity: 0.85;
+  margin-bottom: 2px;
+}
+
+/* === BOTONES === */
+.t3d-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background-color: var(--button-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--button-border);
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  line-height: 1;
+  transition:
+    background-color 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease,
+    transform 0.1s ease;
+}
+.t3d-btn:hover:not(:disabled) {
+  background-color: var(--button-hover);
+  border-color: rgba(140, 82, 255, 0.45);
+  color: var(--text-primary);
+}
+.t3d-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.t3d-btn:focus-visible {
+  outline: 2px solid rgba(140, 82, 255, 0.55);
+  outline-offset: 1px;
+}
+.t3d-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.t3d-btn__icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--accent-hover);
+  opacity: 0.92;
+}
+
+/* Variante acento — botón principal (Reproducir, etc.). */
+.t3d-btn--accent {
+  background-color: rgba(140, 82, 255, 0.22);
+  border-color: var(--accent-color);
+  color: var(--accent-hover);
+  box-shadow:
+    0 0 0 1px rgba(140, 82, 255, 0.25),
+    inset 0 -2px 0 var(--accent-color);
+}
+.t3d-btn--accent:hover:not(:disabled) {
+  background-color: rgba(140, 82, 255, 0.32);
+  color: #d4bfff;
+}
+.t3d-btn--accent .t3d-btn__icon {
+  color: var(--accent-hover);
+  opacity: 1;
+}
+
+/* Variante warn — Pausar / acción reversible. Cyan eléctrico como
+ * los quick-actions busy del topToolbar (mismo lenguaje visual). */
+.t3d-btn--warn {
+  background-color: rgba(56, 248, 212, 0.10);
+  border-color: rgba(56, 248, 212, 0.45);
+  color: #38f8d4;
+  box-shadow:
+    0 0 0 1px rgba(56, 248, 212, 0.18),
+    inset 0 -2px 0 rgba(56, 248, 212, 0.6);
+}
+.t3d-btn--warn:hover:not(:disabled) {
+  background-color: rgba(56, 248, 212, 0.18);
+  border-color: rgba(56, 248, 212, 0.7);
+  color: #6dffe5;
+}
+.t3d-btn--warn .t3d-btn__icon { color: #38f8d4; opacity: 1; }
+
+/* Variante purple — el CTA "Al editor". Idéntica al --accent, pero
+ * más sólida porque es el flujo principal del visor 3D. */
+.t3d-btn--purple {
+  background: linear-gradient(180deg, var(--accent-color), var(--accent-active));
+  border-color: var(--accent-color);
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 2px 6px rgba(140, 82, 255, 0.35);
+}
+.t3d-btn--purple:hover:not(:disabled) {
+  background: linear-gradient(180deg, var(--accent-hover), var(--accent-color));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
+    0 3px 10px rgba(140, 82, 255, 0.5);
+}
+.t3d-btn--purple .t3d-btn__icon {
+  color: #ffffff;
+  opacity: 1;
+}
+
+/* === HINT BANNER === */
+.t3d-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  background-color: rgba(140, 82, 255, 0.07);
+  border: 1px solid rgba(140, 82, 255, 0.2);
+  border-radius: 5px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+}
+.t3d-hint__icon {
+  width: 13px;
+  height: 13px;
+  color: var(--accent-hover);
+  flex-shrink: 0;
+  margin-top: 1px;
+  opacity: 0.9;
+}
+
+/* === ÁREA DEL CANVAS === */
 .three-canvas-container {
-  flex: 1; /* ✅ Ocupa todo el espacio restante */
-  height: 100%; /* ✅ Altura completa del contenedor padre */
+  flex: 1;
+  height: 100%;
   min-width: 400px;
   min-height: 400px;
-  border: 1px solid #ddd;
+  background-color: #08080b;
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(140, 82, 255, 0.04), transparent 60%);
   overflow: hidden;
   position: relative;
-  display: flex; /* ✅ Flex para centrar el canvas si es necesario */
+  display: flex;
   align-items: center;
   justify-content: center;
 }
-
 .three-canvas-container canvas {
   display: block;
   width: 100% !important;
@@ -74,42 +657,13 @@
   max-height: 100%;
 }
 
-/* Botones de descarga */
-.download-button {
-  padding: 10px 15px;
-  background: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: bold;
-  transition: background-color 0.3s;
-  width: 100%;
-}
-
-.download-button:hover {
-  background: #45a049;
-}
-
-.download-button-highres {
-  background: #FF6B35;
-}
-
-.download-button-highres:hover {
-  background: #e55a30;
-}
-
-.threejs-pixelcanvas {
-  position: absolute;
-  top: 0px;
-  right: 0px;
-  border: 2px solid #00ff00;
-  background: #000;
-  image-rendering: pixelated;
-  image-rendering: -moz-crisp-edges;
-  image-rendering: crisp-edges;
-  z-index: 1000;
-  /* Remover max-width y max-height fijos */
-  /* El tamaño ahora se controla desde JavaScript */
+/* === REDUCED MOTION === */
+@media (prefers-reduced-motion: reduce) {
+  .t3d-section__chevron,
+  .t3d-toggle__track::after,
+  .t3d-slider::-webkit-slider-thumb,
+  .t3d-btn,
+  .t3d-section__head {
+    transition: none;
+  }
 }
