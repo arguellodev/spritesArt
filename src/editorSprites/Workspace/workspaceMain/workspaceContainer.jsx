@@ -76,6 +76,7 @@ import Enhanced3DFlattener from "./ThreeJsDemo";
 import Layer3DDriversHost from "../threeD/Layer3DDriversHost";
 import Layer3DPanel from "../threeD/Layer3DPanel";
 import { acquireRenderer } from "../threeD/ThreeDLayerRenderer";
+import DevConsolePanel from "../../devConsole/DevConsolePanel";
 import {
   storeBuffer, hasBuffer, bufferToDataUrl, dataUrlToBuffer,
 } from "../threeD/threeDAssetStore";
@@ -11719,7 +11720,13 @@ const topMenus = useMemo(() => {
             active={threeJsVisualizer}
             onClose={() => setThreeJsVisualizer(false)}
           />
-          
+
+          {/* Consola de desarrollo: panel lateral derecho que captura
+              console.* + window errors + tareas marcadas via logger.task.
+              Usa position:fixed con offset configurable via CSS var
+              --devconsole-right-offset. */}
+          <DevConsolePanel />
+
 
       
           <AnimationExporter
