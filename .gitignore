@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Electron builder output
+release
+*.asar
+
 # Git worktrees (isolated development branches)
 .worktrees
 
