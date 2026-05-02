@@ -1,3 +1,13 @@
+"use no memo";
+// ^ Opt-out del React Compiler para todo el modulo. Las funciones de aqui
+// (pushEntry, formatArgs, flushPending, los wrappers de patchConsole, los
+// listeners de window) se llaman desde contextos NO-componente: callbacks
+// de console.* desde cualquier parte de la app, requestAnimationFrame,
+// window.error/unhandledrejection. Si el compilador les inyecta _c() de
+// react-compiler-runtime, esas llamadas fallan con "Invalid hook call"
+// (React error #321) en cuanto se dispara cualquier console.log fuera
+// de un render. Mismo patron que blendModes.js / gif.js / pixelBlender.js.
+
 // Logger singleton para el DevConsolePanel embebido en la UI.
 //
 // Por qué fuera de React:
