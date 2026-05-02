@@ -82,3 +82,43 @@ button, input, select, textarea, a {
 button, [role="button"], input[type="button"], input[type="submit"], input[type="reset"] {
 	touch-action: manipulation;
 }
+
+/* ============================================================
+ * Variables de breakpoints — referencia para JS (matchMedia) y
+ * para reglas @media que necesiten apoyarse en el mismo valor.
+ *
+ * Las @media queries deben usar literales (768px, 480px) porque
+ * los preprocesadores y las DevTools no resuelven var() en
+ * media queries hasta CSS Container Queries Level 5.
+ * ============================================================ */
+:root {
+	--bp-mobile: 480px;
+	--bp-mobile-l: 767px;
+	--bp-tablet: 1023px;
+	--bp-laptop: 1279px;
+
+	/* Touch target minimo segun WCAG 2.5.5 + Material Design.
+	 * Aplicado solo en pantallas tactiles via @media pointer:coarse. */
+	--touch-target-min: 44px;
+}
+
+/* Previene horizontal scroll global — los componentes que necesiten
+ * scroll horizontal deben pedirlo explicitamente con overflow-x:auto. */
+html, body {
+	overflow-x: hidden;
+}
+
+/* Touch target enforce: en pantallas tactiles cualquier boton dentro
+ * de las barras criticas debe respetar 44x44px minimo. Cubre topToolbar
+ * (tasks 3+), navbar de herramientas (task 4), timeline (task 6) y
+ * cualquier .quick-actions ya existente. */
+@media (pointer: coarse) {
+	.quick-actions button,
+	.navbar button,
+	.top-toolbar button,
+	.toolbar button,
+	.layer-actions button {
+		min-width: var(--touch-target-min);
+		min-height: var(--touch-target-min);
+	}
+}
