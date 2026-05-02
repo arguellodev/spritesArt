@@ -1029,10 +1029,22 @@ margin-right: 20px;
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 500;
-  flex: 1;
+  flex: 1 1 auto;
+  /* min-width explícito: con `flex:1` y muchos botones en .layer-actions
+   * (eye + blend + trash + dotted = 4-5 × 24px), el nombre se podía colapsar
+   * a 0 ancho. El min-width garantiza que siempre quede al menos truncado
+   * con ellipsis. */
+  min-width: 40px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Los botones de acción no deben crecer más allá de su tamaño natural
+ * (24px cada uno). Sin esto, en flex layouts el navegador podía darles
+ * espacio extra a costa del nombre. */
+.layer-info .layer-actions {
+  flex: 0 0 auto;
 }
 
 .layer-name-input {

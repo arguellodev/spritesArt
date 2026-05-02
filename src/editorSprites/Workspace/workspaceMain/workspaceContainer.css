@@ -982,3 +982,50 @@ cursor: grab;
     transition: none;
   }
 }
+
+/* ==========================================================================
+   MODO TABLETA — body.pixcalli-tablet-mode
+   --------------------------------------------------------------------------
+   Activado por el toggle del topToolbar. Asegura que los gestos del navegador
+   (scroll, pinch-to-zoom, doble-tap-zoom, swipe-back) NO interfieran con el
+   pintado por dedo o S Pen / Apple Pencil sobre el canvas. Sin esto, en una
+   tableta el primer toque de pintura puede activar scroll en lugar de
+   dibujar, o un pinch puede zoomear el documento entero.
+
+   `touch-action: none` deshabilita los gestos por completo dentro del
+   elemento, dejando los Pointer Events libres para que la pipeline de
+   `usePointer` los procese (con presion + tipo via e.pressure / e.pointerType
+   para discriminar dedo de stylus).
+
+   Aplicamos a:
+   - .workspace2-container: el wrapper exterior del workspace
+   - .workspace-container: el contenedor del canvas activo
+   - canvas mismo (cualquier canvas dentro del workspace)
+   ========================================================================== */
+body.pixcalli-tablet-mode .workspace2-container,
+body.pixcalli-tablet-mode .workspace-container,
+body.pixcalli-tablet-mode .workspace-container canvas {
+  touch-action: none;
+  -ms-touch-action: none;
+  /* Evita que iOS-style overscroll bounce mueva el canvas accidentalmente. */
+  overscroll-behavior: contain;
+  /* Bloquea seleccion accidental al arrastrar el dedo. */
+  -webkit-user-select: none;
+  user-select: none;
+  /* iOS: bloquea callout (el menu que sale al mantener presionado). */
+  -webkit-touch-callout: none;
+}
+
+/* Cursor diferenciado para que sea obvio que el modo tableta esta on. */
+body.pixcalli-tablet-mode .quick-action--tablet.quick-action--active::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #38f8d4;
+  box-shadow: 0 0 6px rgba(56, 248, 212, 0.8);
+}
