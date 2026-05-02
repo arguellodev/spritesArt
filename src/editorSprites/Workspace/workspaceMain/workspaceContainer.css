@@ -1016,7 +1016,9 @@ body.pixcalli-tablet-mode .workspace-container canvas {
   -webkit-touch-callout: none;
 }
 
-/* Cursor diferenciado para que sea obvio que el modo tableta esta on. */
+/* Indicador visual: punto bajo el icono cuando el modo esta activo. Cyan
+ * para tableta, ambar para stylus — colores distintos para que de un
+ * vistazo sepas cual esta on. */
 body.pixcalli-tablet-mode .quick-action--tablet.quick-action--active::after {
   content: '';
   position: absolute;
@@ -1028,4 +1030,34 @@ body.pixcalli-tablet-mode .quick-action--tablet.quick-action--active::after {
   border-radius: 50%;
   background: #38f8d4;
   box-shadow: 0 0 6px rgba(56, 248, 212, 0.8);
+}
+
+body.pixcalli-stylus-mode .quick-action--stylus.quick-action--active::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.8);
+}
+
+/* Stylus button deshabilitado: visualmente apagado, sin hover, cursor de
+ * not-allowed. Solo se habilita cuando tabletMode esta on, porque palm
+ * rejection sin tablet-mode no tiene sentido (los gestos del navegador
+ * siguen activos). */
+.quick-action.quick-action--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: auto; /* mantener tooltip clickeable */
+}
+
+.quick-action.quick-action--disabled:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  transform: none;
 }

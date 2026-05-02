@@ -45,6 +45,11 @@ function debounce(func, delay) {
 
 export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {}) {
   const { endPressOnLeave = false, preventContextMenu = true } = options;
+  // acceptedPointerTypes: si se provee (array como ['pen'] o ['mouse','pen']),
+  // los eventos cuyo `pointerType` NO esta en el array se ignoran enteros.
+  // Sirve al modo stylus: solo eventos pointerType:'pen' tocan el pipeline
+  // de drawing → palm rejection automatico (un palm es pointerType:'touch').
+  // Si es null/undefined, todos los tipos pasan (comportamiento legacy).
   
   // Refs para datos que cambian frecuentemente
   const positionRef = useRef({ x: 0, y: 0 });
@@ -243,19 +248,29 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
 
     if (!container || !target) return;
 
+    // Helper: filtra el evento si su pointerType no esta en la allow-list
+    // configurada via options.acceptedPointerTypes. Devuelve true si hay que
+    // bailar.
+    const isPointerTypeRejected = (e) => {
+      const accepted = optionsRef.current?.acceptedPointerTypes;
+      if (!accepted || !Array.isArray(accepted) || accepted.length === 0) return false;
+      return !accepted.includes(e.pointerType);
+    };
+
     const handlePointerDown = (e) => {
       try {
+        if (isPointerTypeRejected(e)) return;
         if (isInsideIgnore(e, !isPressedRef.current)) return;
-        
+
         const buttonType = getButtonType(e);
         if (!buttonType) return;
-        
+
         const positions = updatePosition(e);
         if (!positions) return;
 
         isPressedRef.current = buttonType;
         setIsPressed(buttonType);
-        
+
         const newPath = [positions.target];
         pathRef.current = newPath;
         setPath(newPath);
@@ -266,8 +281,9 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
 
     const handlePointerMove = (e) => {
       try {
+        if (isPointerTypeRejected(e)) return;
         if (isInsideIgnore(e, !isPressedRef.current)) return;
-        
+
         // SIEMPRE actualizar posición (para preview), con throttling
         const positions = updatePosition(e);
         if (!positions) return;
