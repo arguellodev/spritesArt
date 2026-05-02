@@ -25,7 +25,8 @@ const PERSIST_DEBOUNCE_MS = 1000;
 const STORAGE_KEY = "pixcalli.devConsole.logs";
 
 // ---- Estado ----
-const ring = []; // entradas, push al final, shift al inicio cuando supera RING_LIMIT
+const ring = []; // entradas oficiales reflejadas en el snapshot
+const pending = []; // entradas recien empujadas, esperando ser fusionadas
 let nextId = 1;
 let snapshot = { logs: [], version: 0 };
 let snapshotDirty = true;
@@ -82,45 +83,73 @@ function formatArgs(args) {
   return args.map((a) => safeStringify(a)).join(" ");
 }
 
-// ---- Push + notify ----
+// ---- Push + flush + notify ----
+//
+// Critico para useSyncExternalStore: `ring` (la fuente del snapshot) NO debe
+// mutarse durante un render de React. Si el patch de console.* se dispara
+// mientras React esta renderizando (e.g., un componente loguea en render),
+// y eso muta `ring` sincronicamente, getSnapshot devuelve referencias
+// distintas dentro del mismo render -> tearing -> error #321.
+//
+// Solucion: pushEntry empuja a `pending` (cola intocable por getSnapshot) y
+// agenda un flush en rAF. El flush mueve pending -> ring entre frames, fuera
+// del ciclo de render activo. Asi el snapshot es estable durante cualquier
+// render dado.
 function pushEntry({ level, source, args, taskTag = null }) {
-  const text = formatArgs(args);
-  const entry = {
+  pending.push({
     id: nextId++,
     ts: Date.now(),
     level,
     source,
     taskTag,
-    text,
-  };
-  ring.push(entry);
-  if (ring.length > RING_LIMIT) ring.shift();
-  snapshotDirty = true;
-  schedulePersist();
-  scheduleNotify();
+    args,
+  });
+  scheduleFlush();
 }
 
-let notifyPending = false;
-function scheduleNotify() {
-  if (notifyPending) return;
-  notifyPending = true;
-  // rAF en navegador; setTimeout en SSR (no se da, pero por seguridad).
+let flushScheduled = false;
+function scheduleFlush() {
+  if (flushScheduled) return;
+  flushScheduled = true;
   const tick = () => {
-    notifyPending = false;
-    if (inDispatch) return; // siguiente frame lo intentará de nuevo via push
-    inDispatch = true;
-    try {
-      subs.forEach((fn) => {
-        try { fn(); } catch { /* sub roto no debe tumbar el resto */ }
-      });
-    } finally {
-      inDispatch = false;
-    }
+    flushScheduled = false;
+    flushPending();
   };
   if (typeof requestAnimationFrame === "function") {
     requestAnimationFrame(tick);
   } else {
     setTimeout(tick, 16);
+  }
+}
+
+function flushPending() {
+  if (pending.length === 0) return;
+  for (const e of pending) {
+    ring.push({
+      id: e.id,
+      ts: e.ts,
+      level: e.level,
+      source: e.source,
+      taskTag: e.taskTag,
+      text: formatArgs(e.args),
+    });
+    if (ring.length > RING_LIMIT) ring.shift();
+  }
+  pending.length = 0;
+  snapshotDirty = true;
+  schedulePersist();
+  notifySubs();
+}
+
+function notifySubs() {
+  if (inDispatch) return;
+  inDispatch = true;
+  try {
+    subs.forEach((fn) => {
+      try { fn(); } catch { /* sub roto no debe tumbar el resto */ }
+    });
+  } finally {
+    inDispatch = false;
   }
 }
 
@@ -183,10 +212,13 @@ export function getSnapshot() {
 }
 
 export function clearLogs() {
+  // clearLogs se invoca desde event handlers (botón "Limpiar"), no durante
+  // render de React, asi que mutar ring sincronicamente es seguro.
   ring.length = 0;
+  pending.length = 0;
   snapshotDirty = true;
   schedulePersist();
-  scheduleNotify();
+  notifySubs();
 }
 
 // ---- API pública para mensajes "del app" ----

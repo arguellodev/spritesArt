@@ -4,6 +4,7 @@
 // espacio del canvas sin perder acceso a "expandir y ver progreso".
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   LuChevronRight, LuChevronLeft, LuTrash2, LuCopy, LuSearch,
   LuArrowDownToLine, LuTerminal, LuFilter,
@@ -154,11 +155,19 @@ const DevConsolePanel = () => {
 
   const filterLabel = FILTERS.find((f) => f.id === filter)?.label ?? "Todo";
 
+  // ---- Portal a document.body ----
+  // .complete-canvas-tracker (ancestor del mount) tiene animation con
+  // translateZ que crea un containing block, atrapando position:fixed.
+  // createPortal a body escapa de ese contexto. Mismo patrón que el
+  // popover de onion-skin (commit b39b0d8).
+  const portalTarget = typeof document !== "undefined" ? document.body : null;
+  if (!portalTarget) return null;
+
   // ---- Render: modo colapsado ----
   if (collapsed) {
     const errorCount = logs.filter((e) => e.level === "error").length;
     const warnCount = logs.filter((e) => e.level === "warn").length;
-    return (
+    return createPortal(
       <aside
         className="devc devc-collapsed"
         aria-label="Consola (colapsada)"
@@ -181,12 +190,13 @@ const DevConsolePanel = () => {
           )}
           <LuChevronLeft size={14} className="devc-collapsed-arrow" aria-hidden="true" />
         </button>
-      </aside>
+      </aside>,
+      portalTarget
     );
   }
 
   // ---- Render: modo expandido ----
-  return (
+  return createPortal(
     <aside className="devc devc-expanded" aria-label="Consola">
       <header className="devc-header">
         <div className="devc-header-row devc-header-title-row">
@@ -330,7 +340,8 @@ const DevConsolePanel = () => {
           );
         })}
       </div>
-    </aside>
+    </aside>,
+    portalTarget
   );
 };
 
