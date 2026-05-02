@@ -2995,3 +2995,86 @@ margin-right: 20px;
   }
 }
 
+/* ============================================================
+ * TIMELINE EN MOBILE — tabs Frames/Capas
+ *
+ * En pantallas ≤767px no caben los dos paneles (.layer-info + grid de
+ * frames) lado a lado. Se renderea un tab switcher arriba; el atributo
+ * data-mobile-tab del .timeline-container decide cual lado se muestra.
+ * Ademas la timeline pierde altura fija de desktop y adopta 38vh
+ * adaptativa con minimo absoluto para que sea utilizable.
+ * ============================================================ */
+@media (max-width: 767px) {
+  /* Tab switcher siempre arriba del timeline. Touch targets 44px+. */
+  .timeline-mobile-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 6px 8px;
+    background: var(--bg-tertiary, #262626);
+    border-top: 1px solid var(--border-color, #444);
+  }
+
+  .timeline-mobile-tab {
+    flex: 1;
+    min-height: 44px;
+    padding: 8px 12px;
+    background: transparent;
+    border: 1px solid var(--border-color, #444);
+    border-radius: 8px;
+    color: var(--text-secondary, #b8b8b8);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  }
+
+  .timeline-mobile-tab:hover,
+  .timeline-mobile-tab:focus-visible {
+    background: var(--bg-secondary, #2a2a2a);
+    color: var(--text-primary, #f0f0f0);
+    outline: none;
+  }
+
+  .timeline-mobile-tab.is-active {
+    background: var(--accent-color, #8c52ff);
+    border-color: var(--accent-color, #8c52ff);
+    color: #fff;
+  }
+
+  /* Timeline container: altura adaptativa cuando esta en modo mobile-tab.
+   * 38vh es comodo para 4-5 capas o ~6 frames visibles a la vez. */
+  .timeline-container[data-mobile-tab] {
+    height: 38vh;
+    max-height: 38vh;
+    min-height: 220px;
+  }
+
+  /* TAB FRAMES — solo grid de frames visible. Oculta el .layer-info
+   * de cada fila y el placeholder corner top-left. El header-frames
+   * sigue visible para que se vean los numeros de frame. */
+  .timeline-container[data-mobile-tab="frames"] .layer-info {
+    display: none;
+  }
+  .timeline-container[data-mobile-tab="frames"] .timeline-header-left-placeholder {
+    display: none;
+  }
+
+  /* TAB LAYERS — solo .layer-info visible (panel de capas con nombres
+   * y acciones), grid de frames oculto. El .layer-info se expande para
+   * tomar el ancho completo. */
+  .timeline-container[data-mobile-tab="layers"] .timeline-frames,
+  .timeline-container[data-mobile-tab="layers"] .timeline-header-frames-wrapper {
+    display: none;
+  }
+  .timeline-container[data-mobile-tab="layers"] .layer-info {
+    width: 100% !important;
+    max-width: 100%;
+    border-right: none;
+  }
+  .timeline-container[data-mobile-tab="layers"] .timeline-header-left-placeholder {
+    width: 100% !important;
+    flex: 1;
+  }
+}
+

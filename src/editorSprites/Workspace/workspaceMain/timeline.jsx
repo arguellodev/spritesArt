@@ -4,6 +4,7 @@ import './layerAnimation.css'
 
 import LayerRow, { FrameNumberCell } from './layerRow';
 import ConfigOnionSkin from './configOnionSkin';
+import { useViewport } from '../hooks/useViewport';
 import { CgArrowLongRightC } from "react-icons/cg";
 import { BsDashCircleDotted } from "react-icons/bs";
 import CustomContextMenu from './customContextMenu';
@@ -287,6 +288,24 @@ const FramesTimeline = ({
   }, [framesResume]);
   const [editingLayerId, setEditingLayerId] = useState(null);
   const [editingName, setEditingName] = useState('');
+
+  // ── Modo mobile: tab switcher Frames/Capas ──
+  // En pantallas ≤767px no caben los dos paneles lado a lado (.layer-info
+  // a la izquierda + grid de frames a la derecha). El usuario alterna
+  // entre ver "Frames" o "Capas" via tab. Persistencia en localStorage
+  // para que vuelva a la vista preferida al recargar.
+  const vp = useViewport();
+  const [mobileTimelineTab, setMobileTimelineTab] = useState(() => {
+    try {
+      const v = localStorage.getItem("pixcalli.timeline.mobileTab");
+      return v === "layers" ? "layers" : "frames";
+    } catch { return "frames"; }
+  });
+  useEffect(() => {
+    if (!vp.isMobileL) return;
+    try { localStorage.setItem("pixcalli.timeline.mobileTab", mobileTimelineTab); }
+    catch { /* */ }
+  }, [mobileTimelineTab, vp.isMobileL]);
   // (Eliminado: `editingGroupId` / `editingGroupName` useStates — solo los
   // leían `startEditingGroup` / `saveGroupName` / `handleGroupKeyDown`, todos
   // ya borrados como dead code.)
@@ -1536,13 +1555,47 @@ const renderLayerWithTimeline = (layer) => {
 
 
 
+      {/* Tab switcher mobile: en ≤767px no caben los dos paneles lado a
+          lado, el usuario alterna entre Frames y Capas. Solo se renderea
+          en mobile (display:none arriba via CSS). */}
+      {vp.isMobileL && (
+        <div className="timeline-mobile-tabs" role="tablist" aria-label="Vista de timeline">
+          <button
+            type="button"
+            role="tab"
+            className={`timeline-mobile-tab${mobileTimelineTab === "frames" ? " is-active" : ""}`}
+            aria-selected={mobileTimelineTab === "frames"}
+            onClick={() => setMobileTimelineTab("frames")}
+          >
+            Frames
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className={`timeline-mobile-tab${mobileTimelineTab === "layers" ? " is-active" : ""}`}
+            aria-selected={mobileTimelineTab === "layers"}
+            onClick={() => setMobileTimelineTab("layers")}
+          >
+            Capas
+          </button>
+        </div>
+      )}
+
       {/* Timeline principal: GRID con header-row (frame-numbers) + layer rows.
           Todos comparten el mismo layout de columnas vía `--layer-info-width`
           aplicado tanto al `.timeline-header-left-placeholder` como al
           `.layer-info` de cada LayerRow. De esa forma el frame-number #N en
           la fila superior queda EXACTAMENTE encima de la celda #N en cada
-          capa de abajo. */}
-      <div className="timeline-container">
+          capa de abajo.
+
+          En mobile (vp.isMobileL), data-mobile-tab activa reglas CSS que
+          ocultan o `.layer-info` (vista frames) o el grid de frames
+          (vista layers), haciendo que el panel visible tome el ancho
+          completo. */}
+      <div
+        className="timeline-container"
+        data-mobile-tab={vp.isMobileL ? mobileTimelineTab : undefined}
+      >
         {/* Header row: frame-numbers strip column-aligned con las filas de capas */}
         <div className="timeline-header-row">
           {/* Esquina top-left del grid: botones de gestión de capas
