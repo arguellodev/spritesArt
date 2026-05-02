@@ -465,3 +465,217 @@
     transition: none;
   }
 }
+
+/* ============================================================
+ * MODO MOBILE — drawer slide-up con grid de herramientas
+ *
+ * Cuando viewport ≤767px, la navbar lateral se reemplaza por:
+ *  1. .navbar-mobile-trigger — FAB circular esquina inferior izquierda
+ *     que muestra el icono de la herramienta actual.
+ *  2. .navbar-mobile-drawer — overlay slide-up con grid de 4 columnas
+ *     que lista TODAS las herramientas (incluidas las de dropdown
+ *     aplanadas). Tap en una activa la tool y cierra el drawer.
+ *
+ * El portal va a document.body para escapar de cualquier
+ * containing-block creado por transforms en el editor.
+ * ============================================================ */
+
+.navbar-mobile-trigger {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--bg-tertiary, #262626);
+  border: 1px solid var(--border-color, #444);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 9000;
+  cursor: pointer;
+  color: var(--text-primary, #f0f0f0);
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.navbar-mobile-trigger:active {
+  transform: scale(0.94);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.navbar-mobile-trigger:focus-visible {
+  outline: 2px solid var(--accent-color, #8c52ff);
+  outline-offset: 2px;
+}
+
+.navbar-mobile-trigger.navbar-light {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: #e2e8f0;
+  color: #0f172a;
+}
+
+.navbar-mobile-trigger__icon {
+  font-size: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.navbar-mobile-trigger__placeholder {
+  font-size: 22px;
+  opacity: 0.7;
+}
+
+/* Drawer overlay + sheet */
+
+.navbar-mobile-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 9500;
+  animation: navbar-mobile-drawer-fadein 180ms ease-out;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.navbar-mobile-drawer {
+  width: 100%;
+  max-width: 600px;
+  max-height: 75vh;
+  background: var(--bg-secondary, #2a2a2a);
+  border-radius: 16px 16px 0 0;
+  padding: 16px 14px 24px;
+  overflow-y: auto;
+  animation: navbar-mobile-drawer-slideup 220ms ease-out;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45);
+  position: relative;
+}
+
+.navbar-mobile-drawer::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.navbar-mobile-drawer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 4px 10px;
+  margin-top: 6px;
+  border-bottom: 1px solid var(--border-color, #444);
+  margin-bottom: 12px;
+}
+
+.navbar-mobile-drawer__title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #b8b8b8);
+}
+
+.navbar-mobile-drawer__close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary, #b8b8b8);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  min-height: 36px;
+}
+
+.navbar-mobile-drawer__close:hover,
+.navbar-mobile-drawer__close:focus-visible {
+  background: var(--bg-tertiary, #333);
+  color: var(--text-primary, #f0f0f0);
+  outline: none;
+}
+
+.navbar-mobile-drawer__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.navbar-mobile-tool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 6px;
+  background: var(--bg-tertiary, #333);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--text-primary, #f0f0f0);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  text-align: center;
+  min-height: 72px;
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+.navbar-mobile-tool:hover {
+  background: var(--layer-hover, #3f3f3f);
+}
+
+.navbar-mobile-tool:active {
+  transform: scale(0.97);
+}
+
+.navbar-mobile-tool.is-active {
+  background: rgba(140, 82, 255, 0.18);
+  border-color: var(--accent-color, #8c52ff);
+  color: var(--accent-hover, #9d6dff);
+}
+
+.navbar-mobile-tool__icon {
+  font-size: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.navbar-mobile-tool__label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  font-weight: 500;
+}
+
+@keyframes navbar-mobile-drawer-fadein {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes navbar-mobile-drawer-slideup {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navbar-mobile-drawer-overlay,
+  .navbar-mobile-drawer {
+    animation: none;
+  }
+  .navbar-mobile-trigger,
+  .navbar-mobile-tool {
+    transition: none;
+  }
+}
