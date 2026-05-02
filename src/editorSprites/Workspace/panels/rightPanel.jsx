@@ -2,26 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LuChevronLeft, LuChevronRight, LuChevronDown, LuLayoutPanelLeft, LuX } from "react-icons/lu";
+import { useViewport } from "../hooks/useViewport";
 import "./rightPanel.css";
-
-// Hook minimo para detectar viewport mobile (< 768px). Sirve para decidir
-// si el panel se renderea como sidebar fijo o como bottom-sheet drawer.
-// Usa matchMedia con listener para reaccionar a rotaciones / resize en
-// vez de leer window.innerWidth una sola vez.
-function useIsMobile(maxWidth = 767) {
-  const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.matchMedia(`(max-width: ${maxWidth}px)`).matches;
-  });
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mql = window.matchMedia(`(max-width: ${maxWidth}px)`);
-    const onChange = (e) => setIsMobile(e.matches);
-    mql.addEventListener?.("change", onChange);
-    return () => mql.removeEventListener?.("change", onChange);
-  }, [maxWidth]);
-  return isMobile;
-}
 
 const STORAGE_KEY = "pixcalli.rightPanel.v2";
 // La anchura del panel se persiste aparte porque la modifica el módulo de
@@ -107,7 +89,8 @@ function guardarEstado(estado) {
 // El estado persiste en localStorage por key `pixcalli.rightPanel.v2`.
 export function RightPanel({ paneles }) {
   const MODULOS = buildModulos(paneles);
-  const isMobile = useIsMobile();
+  const vp = useViewport();
+  const isMobile = vp.isMobileL;
 
   const [expandido, setExpandido] = useState(() => {
     const saved = cargarEstado();
