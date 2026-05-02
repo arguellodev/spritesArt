@@ -56,6 +56,12 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
   const relativeToTargetRef = useRef({ x: 0, y: 0 });
   const isPressedRef = useRef(null);
   const pathRef = useRef([]);
+  // Solo el primer puntero que aterriza queda "captured" hasta que sale.
+  // Pointers adicionales (segundo dedo en pinch, palm, mouse mientras hay
+  // touch activo) son descartados — fix del bug donde 2 dedos en tablet
+  // hacian pisotearse el path al sobreescribir isPressed/pathRef.
+  // null = no hay puntero activo, ready para capturar el siguiente.
+  const activePointerIdRef = useRef(null);
   
   // Estados que SÍ necesitan causar re-render
   const [isPressed, setIsPressed] = useState(null);
@@ -234,6 +240,7 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
 
   const endPress = useCallback(() => {
     isPressedRef.current = null;
+    activePointerIdRef.current = null;
     setIsPressed(null);
   }, []);
 
@@ -262,12 +269,20 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
         if (isPointerTypeRejected(e)) return;
         if (isInsideIgnore(e, !isPressedRef.current)) return;
 
+        // Si ya hay un puntero capturado (primer dedo dibujando), rechazar
+        // pointers adicionales — el segundo dedo NO debe robar el path.
+        // Cualquier gesture detector que quiera procesar este evento puede
+        // hacerlo en paralelo (escucha en el mismo container, recibe el
+        // evento independiente de que aqui lo descartemos).
+        if (activePointerIdRef.current !== null) return;
+
         const buttonType = getButtonType(e);
         if (!buttonType) return;
 
         const positions = updatePosition(e);
         if (!positions) return;
 
+        activePointerIdRef.current = e.pointerId;
         isPressedRef.current = buttonType;
         setIsPressed(buttonType);
 
@@ -283,6 +298,17 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
       try {
         if (isPointerTypeRejected(e)) return;
         if (isInsideIgnore(e, !isPressedRef.current)) return;
+
+        // Solo procesar el puntero capturado cuando hay uno activo. Si no
+        // hay (estado de hover/preview puro), todos los punteros pueden
+        // actualizar la posicion visual — sirve para el preview de brocha
+        // que sigue al mouse aun sin click.
+        if (
+          activePointerIdRef.current !== null &&
+          e.pointerId !== activePointerIdRef.current
+        ) {
+          return;
+        }
 
         // SIEMPRE actualizar posición (para preview), con throttling
         const positions = updatePosition(e);
@@ -306,10 +332,18 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
 
     const handlePointerUp = (e) => {
       try {
+        // Solo el pointerup del puntero capturado libera el press. Si un
+        // 2do dedo se levanta antes que el 1ro, el 1ro sigue dibujando.
+        if (
+          activePointerIdRef.current !== null &&
+          e.pointerId !== activePointerIdRef.current
+        ) {
+          return;
+        }
         if (!isPressedRef.current) return;
-        
+
         if (isInsideIgnore(e, false)) return;
-        
+
         updatePosition(e);
         endPress();
       } catch (error) {
@@ -320,7 +354,7 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
     const handlePointerLeave = (e) => {
       try {
         const currentOptions = optionsRef.current;
-        
+
         if (!isPressedRef.current) {
           positionRef.current = { x: 0, y: 0 };
           relativeToTargetRef.current = { x: 0, y: 0 };
@@ -328,7 +362,7 @@ export function usePointer(containerRef, targetRef, ignoreRefs = [], options = {
           setPosition({ x: 0, y: 0 });
           setRelativeToTarget({ x: 0, y: 0 });
         }
-        
+
         if (currentOptions.endPressOnLeave && isPressedRef.current) {
           endPress();
         }
