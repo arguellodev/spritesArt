@@ -25,6 +25,9 @@ import {
   LuBrainCircuit,
   LuUpload,
   LuBox,
+  LuMaximize,
+  LuMinimize,
+  LuTablet,
   LuBrush,
   LuMousePointer2,
   LuMousePointerClick,
@@ -362,6 +365,25 @@ const [showAboutModal, setShowAboutModal] = useState(false);
 const [showKeybindingsModal, setShowKeybindingsModal] = useState(false);
 // Espejo del estado nativo de fullscreen — reactivo para mostrar el check.
 const [isFullscreen, setIsFullscreen] = useState(false);
+// Modo tableta: cuando esta on, el canvas adopta `touch-action: none` para
+// que los gestos de scroll/pinch del navegador no interfieran con el
+// pintado por dedo o S Pen. Persiste en localStorage para que al abrir
+// desde la tablet quede como lo dejaste.
+const [tabletMode, setTabletMode] = useState(() => {
+  try { return localStorage.getItem("pixcalli.tabletMode") === "1"; }
+  catch { return false; }
+});
+useEffect(() => {
+  try { localStorage.setItem("pixcalli.tabletMode", tabletMode ? "1" : "0"); }
+  catch { /* sin storage */ }
+  // Clase global en <body> para que las reglas CSS (touch-action en canvas
+  // y wrappers) se apliquen sin tener que prop-drillar el flag por todos
+  // los componentes.
+  if (typeof document !== "undefined") {
+    document.body.classList.toggle("pixcalli-tablet-mode", tabletMode);
+  }
+}, [tabletMode]);
+const toggleTabletMode = useCallback(() => setTabletMode((v) => !v), []);
 // Espejo de `isGenerating` del AIgenerator — alimenta el indicador de
 // estado del botón "IA" en el toolbar.
 const [aiGenerating, setAiGenerating] = useState(false);
@@ -11608,6 +11630,40 @@ const topMenus = useMemo(() => {
           >
             <LuBox className="quick-action__icon" aria-hidden="true" />
             <span className="quick-action__label">3D</span>
+          </button>
+          <button
+            type="button"
+            className={
+              'quick-action quick-action--tablet' +
+              (tabletMode ? ' quick-action--active' : '')
+            }
+            onClick={toggleTabletMode}
+            aria-pressed={tabletMode}
+            title={
+              tabletMode
+                ? 'Modo tableta activo — touch + S Pen reconocidos en el canvas. Clic para desactivar.'
+                : 'Activar modo tableta (optimizado para pintado por touch y stylus)'
+            }
+          >
+            <LuTablet className="quick-action__icon" aria-hidden="true" />
+            <span className="quick-action__label">Tableta</span>
+          </button>
+          <button
+            type="button"
+            className={
+              'quick-action quick-action--fullscreen' +
+              (isFullscreen ? ' quick-action--active' : '')
+            }
+            onClick={toggleFullscreenAction}
+            aria-pressed={isFullscreen}
+            title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+          >
+            {isFullscreen
+              ? <LuMinimize className="quick-action__icon" aria-hidden="true" />
+              : <LuMaximize className="quick-action__icon" aria-hidden="true" />}
+            <span className="quick-action__label">
+              {isFullscreen ? 'Salir' : 'Pantalla'}
+            </span>
           </button>
         </div>
         {/* Bloque <div className="tools"> original eliminado: el resto de
