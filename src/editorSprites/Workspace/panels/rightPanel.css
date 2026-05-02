@@ -279,17 +279,25 @@
     to { opacity: 1; }
   }
 
-  /* Panel mobile: bottom sheet flotante. Sobrescribe el sidebar fijo. */
+  /* Panel mobile: bottom sheet flotante con snap points. Sobrescribe el
+   * sidebar fijo del desktop.
+   *
+   * Snap controlado por atributo data-snap (set desde React):
+   *   half (default) — 50vh, deja la mitad superior visible
+   *   full           — 90vh, casi toda la pantalla
+   *
+   * La altura transiciona suave entre snap points. Durante el drag se
+   * inyecta `transition: none` via inline style (state isDragging) para
+   * que el sheet siga el dedo sin lag.
+   */
   .pc-right-panel-mobile {
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
     width: 100vw;
-    /* 85vh deja un poco de viewport visible arriba como contexto, asi
-     * el usuario no pierde la referencia de donde esta el editor. */
-    height: 85vh;
-    max-height: 85vh;
+    height: 50vh;
+    max-height: 90vh;
     border-left: none;
     border-top: 1px solid var(--border-color, #333);
     border-radius: 18px 18px 0 0;
@@ -297,10 +305,22 @@
     z-index: 100;
     /* Slide-up al montarse (cuando se abre el drawer). */
     animation: pc-rp-sheet-up 240ms cubic-bezier(0.32, 0.72, 0, 1);
+    /* Transicion para snap suave entre alturas y para el reset del
+     * transform al final del drag. */
+    transition: height 220ms cubic-bezier(0.32, 0.72, 0, 1),
+                transform 220ms cubic-bezier(0.32, 0.72, 0, 1);
     /* Evita el rubber-band scroll en iOS cuando el panel se scrollea. */
     overscroll-behavior: contain;
     /* Quita el delay de 300ms del tap en mobile. */
     touch-action: manipulation;
+    will-change: transform, height;
+  }
+
+  .pc-right-panel-mobile[data-snap="full"] {
+    height: 90vh;
+  }
+  .pc-right-panel-mobile[data-snap="half"] {
+    height: 50vh;
   }
 
   @keyframes pc-rp-sheet-up {
@@ -314,16 +334,50 @@
     }
   }
 
-  /* Drag-handle: barrita gris arriba del sheet, affordance de "se puede
-   * arrastrar". Funcional via tap-en-X o backdrop por simplicidad. */
+  /* Drag-handle: zona tappeable con barrita visual centrada. Hit area
+   * full-width × 24px alto para que el dedo grueso lo encuentre facil
+   * sin tener que pegarle al pixel exacto de la barrita. */
   .pc-rp-drag-handle {
     flex-shrink: 0;
+    width: 100%;
+    height: 24px;
+    margin: 0;
+    padding: 8px 0 4px;
+    background: transparent;
+    border-radius: 0;
+    opacity: 1;
+    cursor: grab;
+    /* Bloquear gestos del navegador para que el drag funcione fluido. */
+    touch-action: none;
+    /* Centrar la barrita visual via pseudo-element. */
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .pc-rp-drag-handle::before {
+    content: "";
     width: 44px;
     height: 4px;
-    margin: 8px auto 4px auto;
     background: var(--border-color, #555);
     border-radius: 2px;
     opacity: 0.5;
+    transition: opacity 120ms ease;
+  }
+
+  .pc-rp-drag-handle:hover::before,
+  .pc-rp-drag-handle:focus-visible::before {
+    opacity: 0.8;
+  }
+
+  .pc-rp-drag-handle:active {
+    cursor: grabbing;
+  }
+
+  .pc-rp-drag-handle:focus-visible {
+    outline: 2px solid var(--accent-color, #8c52ff);
+    outline-offset: -2px;
   }
 
   /* Header del panel: titulo + boton X bien separados, touch-friendly. */
