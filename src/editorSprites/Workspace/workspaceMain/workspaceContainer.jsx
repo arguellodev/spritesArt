@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useMemo, Activity } from "react";
 import { usePointer, useLayerManager } from "../hooks/hooks";
+import { useTabletGestures } from "../hooks/useTabletGestures";
 import { flushSync } from "react-dom";
 import PlayingAnimation from "./playingAnimation";
 import { jsAlgorithm } from "../rotesprite";
@@ -28,6 +29,7 @@ import {
   LuMaximize,
   LuMinimize,
   LuTablet,
+  LuPen,
   LuBrush,
   LuMousePointer2,
   LuMousePointerClick,
@@ -373,17 +375,75 @@ const [tabletMode, setTabletMode] = useState(() => {
   try { return localStorage.getItem("pixcalli.tabletMode") === "1"; }
   catch { return false; }
 });
+// Modo stylus: sub-modo de tabletMode. Cuando ambos estan on, drawing
+// solo acepta pointerType:'pen' (palm rejection automatico — la mano
+// apoyada en la pantalla genera eventos pointerType:'touch' que se
+// descartan). Los gestos multi-touch (pinch/pan) siguen funcionando salvo
+// mientras el pen este activo (anti-palm-during-stylus).
+const [stylusMode, setStylusMode] = useState(() => {
+  try { return localStorage.getItem("pixcalli.stylusMode") === "1"; }
+  catch { return false; }
+});
 useEffect(() => {
   try { localStorage.setItem("pixcalli.tabletMode", tabletMode ? "1" : "0"); }
   catch { /* sin storage */ }
-  // Clase global en <body> para que las reglas CSS (touch-action en canvas
-  // y wrappers) se apliquen sin tener que prop-drillar el flag por todos
-  // los componentes.
   if (typeof document !== "undefined") {
     document.body.classList.toggle("pixcalli-tablet-mode", tabletMode);
   }
 }, [tabletMode]);
+useEffect(() => {
+  try { localStorage.setItem("pixcalli.stylusMode", stylusMode ? "1" : "0"); }
+  catch { /* */ }
+  if (typeof document !== "undefined") {
+    document.body.classList.toggle("pixcalli-stylus-mode", stylusMode && tabletMode);
+  }
+}, [stylusMode, tabletMode]);
 const toggleTabletMode = useCallback(() => setTabletMode((v) => !v), []);
+const toggleStylusMode = useCallback(() => setStylusMode((v) => !v), []);
+
+// Track de "pen activo" para que el detector de gestos descarte touches
+// (palm) mientras un stylus esta dibujando. Usamos capture-phase listeners
+// a nivel window para detectar el pen ANTES que cualquier handler local.
+const penActiveRef = useRef(false);
+const penReleaseTimerRef = useRef(null);
+useEffect(() => {
+  if (!tabletMode) {
+    penActiveRef.current = false;
+    return;
+  }
+  const onPenDown = (e) => {
+    if (e.pointerType !== "pen") return;
+    if (penReleaseTimerRef.current) {
+      clearTimeout(penReleaseTimerRef.current);
+      penReleaseTimerRef.current = null;
+    }
+    penActiveRef.current = true;
+  };
+  const onPenUp = (e) => {
+    if (e.pointerType !== "pen") return;
+    // Grace period de 200ms: una palma que aterriza JUSTO despues de
+    // levantar el stylus no debe disparar gesto fantasma. 200ms es lo
+    // suficientemente corto para no notarse y suficiente largo para
+    // cubrir el delay tipico mano-pen.
+    if (penReleaseTimerRef.current) clearTimeout(penReleaseTimerRef.current);
+    penReleaseTimerRef.current = setTimeout(() => {
+      penActiveRef.current = false;
+      penReleaseTimerRef.current = null;
+    }, 200);
+  };
+  window.addEventListener("pointerdown", onPenDown, true);
+  window.addEventListener("pointerup", onPenUp, true);
+  window.addEventListener("pointercancel", onPenUp, true);
+  return () => {
+    window.removeEventListener("pointerdown", onPenDown, true);
+    window.removeEventListener("pointerup", onPenUp, true);
+    window.removeEventListener("pointercancel", onPenUp, true);
+    if (penReleaseTimerRef.current) {
+      clearTimeout(penReleaseTimerRef.current);
+      penReleaseTimerRef.current = null;
+    }
+  };
+}, [tabletMode]);
 // Espejo de `isGenerating` del AIgenerator — alimenta el indicador de
 // estado del botón "IA" en el toolbar.
 const [aiGenerating, setAiGenerating] = useState(false);
@@ -524,7 +584,13 @@ useKeybindingsListener(keybindingsRegistry);
     rightMirrorCornerRef,
     animationLayerRef,
     rotationHandlerRef
-  ]);
+  ], {
+    // En modo stylus + tablet: solo aceptar 'pen' en la pipeline de drawing.
+    // Los toques de palma (pointerType:'touch') se descartan antes de
+    // entrar al pipeline → palm rejection automatico. fuera de stylus,
+    // null = todos los tipos aceptados (mouse, touch, pen).
+    acceptedPointerTypes: (tabletMode && stylusMode) ? ['pen'] : null,
+  });
 
   const lastPixelRef = useRef(null);
   const [drawMode, setDrawMode] = useState("draw");
@@ -693,6 +759,39 @@ useKeybindingsListener(keybindingsRegistry);
     zoom,
     isPressed,
     isolatedPixels
+  });
+
+  // Multi-touch gestures: pinch-to-zoom + two-finger pan. Solo activo en
+  // modo tableta. blockTouch evita que palmas (pointerType:'touch')
+  // disparen gestos mientras un stylus esta dibujando — fundamental cuando
+  // stylusMode esta on, opcional pero util fuera de el.
+  useTabletGestures(workspaceRef, {
+    enabled: tabletMode,
+    // Funcion getter: el detector llama esto al momento del evento, asi
+    // que siempre lee el valor actualizado de penActiveRef.current
+    // (cambia sin re-render). Pasarlo como valor causaria stale closure.
+    blockTouch: () => penActiveRef.current,
+    onZoom: ({ delta }) => {
+      // delta es multiplicativo (>1 = zoom in, <1 = zoom out). Clampeamos
+      // al rango razonable del editor — el zoom inicial es 10 y el wheel
+      // suele ir hasta ~50.
+      setZoom((prev) => {
+        const next = prev * delta;
+        if (!Number.isFinite(next)) return prev;
+        return Math.max(1, Math.min(60, next));
+      });
+    },
+    onPan: ({ dx, dy }) => {
+      // dx, dy son deltas en pixeles de pantalla. moveViewport opera en
+      // unidades de canvas (sprite-pixels), asi que dividimos por zoom y
+      // negamos: arrastrar dedos hacia la derecha (dx>0) debe hacer que
+      // el contenido siga al dedo, lo que requiere que viewportOffset
+      // disminuya (mismo signo que la rama de hand-tool en line ~3342).
+      if (zoom <= 0) return;
+      const cx = -Math.round(dx / zoom);
+      const cy = -Math.round(dy / zoom);
+      if (cx !== 0 || cy !== 0) moveViewport(cx, cy);
+    },
   });
 
   // Sincronizar compositeRenderRef (declarada más arriba) con la fn real
@@ -11641,12 +11740,34 @@ const topMenus = useMemo(() => {
             aria-pressed={tabletMode}
             title={
               tabletMode
-                ? 'Modo tableta activo — touch + S Pen reconocidos en el canvas. Clic para desactivar.'
+                ? 'Modo tableta activo — touch + S Pen + gestos pinch/pan. Clic para desactivar.'
                 : 'Activar modo tableta (optimizado para pintado por touch y stylus)'
             }
           >
             <LuTablet className="quick-action__icon" aria-hidden="true" />
             <span className="quick-action__label">Tableta</span>
+          </button>
+          <button
+            type="button"
+            className={
+              'quick-action quick-action--stylus' +
+              (stylusMode && tabletMode ? ' quick-action--active' : '') +
+              (!tabletMode ? ' quick-action--disabled' : '')
+            }
+            onClick={toggleStylusMode}
+            disabled={!tabletMode}
+            aria-pressed={stylusMode && tabletMode}
+            aria-disabled={!tabletMode}
+            title={
+              !tabletMode
+                ? 'Activá primero "Tableta" para usar el modo stylus'
+                : stylusMode
+                  ? 'Modo stylus activo — solo el S Pen pinta, la palma se ignora. Gestos siguen funcionando.'
+                  : 'Activar modo stylus (solo el lapiz pinta — palm rejection)'
+            }
+          >
+            <LuPen className="quick-action__icon" aria-hidden="true" />
+            <span className="quick-action__label">Stylus</span>
           </button>
           <button
             type="button"
