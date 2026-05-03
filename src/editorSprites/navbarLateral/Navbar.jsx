@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
+import { LuX } from "react-icons/lu";
+import { useViewport } from "../Workspace/hooks/useViewport";
 import "./Navbar.css";
 
 // Componente principal Navbar con estilos integrados
@@ -25,6 +28,12 @@ const NavbarLateral = ({
   const [openDropdowns, setOpenDropdowns] = useState({});
   const [selectedSubitems, setSelectedSubitems] = useState({});
   const [collapsedInternal, setCollapsedInternal] = useState(false);
+  // Drawer del modo mobile: cuando viewport es ≤767px, la navbar lateral se
+  // vuelve un FAB en esquina inferior izquierda; al tocarlo se abre un
+  // overlay con grid de todas las herramientas. Tap en una la activa y
+  // cierra el drawer.
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const vp = useViewport();
   const isControlled = collapsedProp !== undefined;
   const collapsed = isControlled ? collapsedProp : collapsedInternal;
   const requestCollapse = (next) => {
@@ -60,6 +69,16 @@ const NavbarLateral = ({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // ESC cierra el drawer mobile.
+  useEffect(() => {
+    if (!mobileDrawerOpen) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setMobileDrawerOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mobileDrawerOpen]);
 
   // Manejar toggles de dropdowns
   const toggleDropdown = (id) => {
@@ -228,6 +247,104 @@ const NavbarLateral = ({
     }
     return null;
   };
+
+  // ── MODO MOBILE (≤767px) ──
+  // En pantallas pequeñas la barra lateral con todas las herramientas en
+  // columna no cabe. Reemplazamos por un FAB esquina inferior izquierda
+  // que abre un drawer slide-up con las tools en grid 4 columnas.
+  // Esto sobrescribe cualquier valor de `collapsed` controlado por el
+  // padre — el padre se entera del cambio via onCollapseChange si
+  // necesita ajustar otra UI.
+  if (vp.isMobileL) {
+    const activeItem = findActiveItem();
+    // Aplanar items: convertir cada `dropdown` en items individuales para
+    // que todos sean tappeables en el grid sin niveles anidados.
+    const flatItems = [];
+    items.forEach((item) => {
+      if (item.dropdown) {
+        item.dropdown.forEach((sub) => flatItems.push(sub));
+      } else {
+        flatItems.push(item);
+      }
+    });
+    return (
+      <>
+        <button
+          type="button"
+          className={`navbar-mobile-trigger navbar-${theme}`}
+          onClick={() => setMobileDrawerOpen(true)}
+          title={activeItem?.label || "Herramientas"}
+          aria-label={activeItem?.label
+            ? `Herramienta actual: ${activeItem.label}. Toca para abrir el panel de herramientas.`
+            : "Abrir panel de herramientas"}
+          aria-haspopup="dialog"
+          aria-expanded={mobileDrawerOpen}
+        >
+          {activeItem?.icon ? (
+            <span className="navbar-mobile-trigger__icon" aria-hidden="true">
+              {activeItem.icon}
+            </span>
+          ) : (
+            <span className="navbar-mobile-trigger__placeholder" aria-hidden="true">≡</span>
+          )}
+        </button>
+        {mobileDrawerOpen && createPortal(
+          <div
+            className="navbar-mobile-drawer-overlay"
+            onClick={() => setMobileDrawerOpen(false)}
+            role="presentation"
+          >
+            <div
+              className={`navbar-mobile-drawer navbar-${theme}`}
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Panel de herramientas"
+            >
+              <div className="navbar-mobile-drawer__header">
+                <span className="navbar-mobile-drawer__title">Herramientas</span>
+                <button
+                  type="button"
+                  className="navbar-mobile-drawer__close"
+                  onClick={() => setMobileDrawerOpen(false)}
+                  aria-label="Cerrar panel de herramientas"
+                >
+                  <LuX size={18} />
+                </button>
+              </div>
+              <div className="navbar-mobile-drawer__grid">
+                {flatItems.map((it, i) => {
+                  const active = it.toolValue === activeTool;
+                  return (
+                    <button
+                      key={`${it.toolValue || it.label}-${i}`}
+                      type="button"
+                      className={`navbar-mobile-tool${active ? " is-active" : ""}`}
+                      onClick={() => {
+                        if (typeof it.onClick === "function") it.onClick();
+                        if (onItemClick) onItemClick(it);
+                        setMobileDrawerOpen(false);
+                      }}
+                      aria-pressed={active}
+                      title={it.label}
+                    >
+                      {it.icon && (
+                        <span className="navbar-mobile-tool__icon" aria-hidden="true">
+                          {it.icon}
+                        </span>
+                      )}
+                      <span className="navbar-mobile-tool__label">{it.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+      </>
+    );
+  }
 
   // Modo colapsado.
   //  - Controlado: devolvemos null. El padre decide dónde pintar el

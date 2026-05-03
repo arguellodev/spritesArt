@@ -2,26 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LuChevronLeft, LuChevronRight, LuChevronDown, LuLayoutPanelLeft, LuX } from "react-icons/lu";
+import { useViewport } from "../hooks/useViewport";
 import "./rightPanel.css";
-
-// Hook minimo para detectar viewport mobile (< 768px). Sirve para decidir
-// si el panel se renderea como sidebar fijo o como bottom-sheet drawer.
-// Usa matchMedia con listener para reaccionar a rotaciones / resize en
-// vez de leer window.innerWidth una sola vez.
-function useIsMobile(maxWidth = 767) {
-  const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.matchMedia(`(max-width: ${maxWidth}px)`).matches;
-  });
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mql = window.matchMedia(`(max-width: ${maxWidth}px)`);
-    const onChange = (e) => setIsMobile(e.matches);
-    mql.addEventListener?.("change", onChange);
-    return () => mql.removeEventListener?.("change", onChange);
-  }, [maxWidth]);
-  return isMobile;
-}
 
 const STORAGE_KEY = "pixcalli.rightPanel.v2";
 // La anchura del panel se persiste aparte porque la modifica el módulo de
@@ -107,7 +89,73 @@ function guardarEstado(estado) {
 // El estado persiste en localStorage por key `pixcalli.rightPanel.v2`.
 export function RightPanel({ paneles }) {
   const MODULOS = buildModulos(paneles);
-  const isMobile = useIsMobile();
+  const vp = useViewport();
+  const isMobile = vp.isMobileL;
+
+  // Snap point del bottom-sheet en mobile. 'half' = 50vh (default, deja
+  // canvas visible arriba), 'full' = 90vh (panel toma casi toda la
+  // pantalla, util para escoger paleta o navegar history). Persiste en
+  // localStorage para que el usuario no tenga que re-ajustar cada vez.
+  const [mobileSnap, setMobileSnap] = useState(() => {
+    try {
+      const v = localStorage.getItem("pixcalli.rightPanel.mobileSnap");
+      return v === "full" ? "full" : "half";
+    } catch { return "half"; }
+  });
+  useEffect(() => {
+    if (!isMobile) return;
+    try { localStorage.setItem("pixcalli.rightPanel.mobileSnap", mobileSnap); }
+    catch { /* sin storage */ }
+  }, [mobileSnap, isMobile]);
+
+  // Drag state del handle. Refs evitan re-renders durante el drag — solo
+  // mutamos `dragOffsetPx` via setState para que la transform se aplique
+  // (necesita estar en el render). Pointerdown/move/up usan el mismo
+  // pointerId para no confundirse con multi-touch.
+  const sheetRef = useRef(null);
+  const dragRef = useRef({ pointerId: null, startY: 0 });
+  const [dragOffsetPx, setDragOffsetPx] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDragStart = useCallback((e) => {
+    if (!isMobile) return;
+    if (dragRef.current.pointerId !== null) return; // ya hay un drag activo
+    try { e.target.setPointerCapture?.(e.pointerId); } catch { /* */ }
+    dragRef.current = { pointerId: e.pointerId, startY: e.clientY };
+    setIsDragging(true);
+  }, [isMobile]);
+
+  const handleDragMove = useCallback((e) => {
+    if (e.pointerId !== dragRef.current.pointerId) return;
+    const delta = e.clientY - dragRef.current.startY;
+    // Resistance al arrastrar hacia arriba mas alla de full (clamp negativo).
+    const offset = delta < -40 ? -40 : delta;
+    setDragOffsetPx(offset);
+  }, []);
+
+  const handleDragEnd = useCallback((e) => {
+    if (e.pointerId !== dragRef.current.pointerId) return;
+    const delta = e.clientY - dragRef.current.startY;
+    dragRef.current = { pointerId: null, startY: 0 };
+    setIsDragging(false);
+    setDragOffsetPx(0);
+
+    // Decision de snap basada en la altura inicial (segun snap actual) +
+    // delta acumulado. Threshold simple: dragged-down > 120px → cierra;
+    // dragged-up > 80px desde half → snap full; resto mantiene snap.
+    const vh = window.innerHeight;
+    const startH = (mobileSnap === "full" ? 0.9 : 0.5) * vh;
+    const endH = startH - delta; // arrastrar hacia abajo reduce altura
+    const closeThreshold = vh * 0.30;
+    const halfThreshold = vh * 0.65;
+    if (endH < closeThreshold) {
+      setExpandido(false);
+    } else if (endH > halfThreshold) {
+      setMobileSnap("full");
+    } else {
+      setMobileSnap("half");
+    }
+  }, [mobileSnap]);
 
   const [expandido, setExpandido] = useState(() => {
     const saved = cargarEstado();
@@ -221,15 +269,46 @@ export function RightPanel({ paneles }) {
         />
       )}
       <aside
+        ref={sheetRef}
         className={`pc-right-panel ${isMobile ? "pc-right-panel-mobile" : ""}`}
         aria-label="Panel derecho"
-        style={isMobile ? undefined : styleAncho}
+        style={
+          isMobile
+            ? {
+                // Inline style por dos motivos:
+                //  1. transform debe aplicarse durante el drag pixel-a-pixel
+                //  2. Sobreescribe la animacion CSS de slide-up cuando hace falta.
+                transform: dragOffsetPx !== 0 ? `translateY(${dragOffsetPx}px)` : undefined,
+                transition: isDragging ? "none" : undefined,
+              }
+            : styleAncho
+        }
+        data-snap={isMobile ? mobileSnap : undefined}
         role={isMobile ? "dialog" : undefined}
         aria-modal={isMobile ? "true" : undefined}
       >
-        {/* Drag handle visual en mobile (no funcional, solo affordance):
-            indica al usuario que el panel se puede arrastrar para cerrar. */}
-        {isMobile && <div className="pc-rp-drag-handle" aria-hidden="true" />}
+        {/* Drag handle funcional: drag down → snap half/cerrar. Drag up →
+            snap full. Threshold por altura final del sheet. */}
+        {isMobile && (
+          <div
+            className="pc-rp-drag-handle"
+            role="button"
+            tabIndex={0}
+            aria-label={`Redimensionar panel. Estado actual: ${mobileSnap === "full" ? "completo" : "medio"}.`}
+            onPointerDown={handleDragStart}
+            onPointerMove={handleDragMove}
+            onPointerUp={handleDragEnd}
+            onPointerCancel={handleDragEnd}
+            onKeyDown={(e) => {
+              // Accesibilidad: ↑ expande, ↓ reduce/cierra.
+              if (e.key === "ArrowUp") setMobileSnap("full");
+              else if (e.key === "ArrowDown") {
+                if (mobileSnap === "full") setMobileSnap("half");
+                else setExpandido(false);
+              }
+            }}
+          />
+        )}
         <div className="pc-rp-header">
           <span className="pc-rp-header-title">Paneles</span>
           <button

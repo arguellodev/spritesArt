@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { LuChevronRight } from 'react-icons/lu';
+import { LuChevronRight, LuMenu } from 'react-icons/lu';
+import { useViewport } from '../hooks/useViewport';
 import './topToolbar.css';
 
 const EMPTY_MENUS = [];
@@ -46,7 +47,25 @@ const TopToolbar = ({
   // si el panel se sale por el borde derecho del viewport.
   const [dropdownAlign, setDropdownAlign] = useState('left');
 
+  const vp = useViewport();
   const hasMenus = Array.isArray(menus) && menus.length > 0;
+
+  // En mobile (≤767px) los menus desplegables no caben — se colapsan a un
+  // solo dropdown "Menu" cuyos items son los menus originales convertidos
+  // en submenus. La logica existente de submenu (anchored, click-outside,
+  // posicionamiento) maneja todo nativamente sin codigo nuevo.
+  const effectiveMenus = vp.isMobileL && hasMenus
+    ? [{
+        key: '__overflow__',
+        label: 'Menú',
+        icon: <LuMenu size={16} />,
+        items: menus.map((m) => ({
+          name: m.label,
+          icon: m.icon || null,
+          submenu: m.items,
+        })),
+      }]
+    : menus;
 
   const cancelPendingSubmenuClose = () => {
     if (submenuCloseTimerRef.current) {
@@ -390,7 +409,7 @@ const TopToolbar = ({
     <div className="topToolbar-container" ref={containerRef}>
       {hasMenus && (
         <div className="topToolbar-left" role="menubar">
-          {menus.map((menu) => {
+          {effectiveMenus.map((menu) => {
             const key = menu.key || menu.label;
             const isOpen = activeDropdown === key;
             return (

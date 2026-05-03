@@ -616,4 +616,38 @@
   .dropdown-item-shortcut {
     display: none;
   }
+
+  /* ─── Quick-actions en mobile ───
+   * Ocultar labels (IA, 3D, Tableta, Stylus, Pantalla); dejar solo iconos.
+   * Asi 5 botones de 44x44 + 4 gaps caben en ~232px, holgado en cualquier
+   * celular ≥320px. Los tooltips siguen mostrando el texto al long-press.
+   * .quick-actions deja de estar absolutamente posicionado en el centro
+   * y se vuelve flex normal — necesario porque con menus colapsados a
+   * "···" hay espacio de sobra a la derecha del menu y queremos que las
+   * acciones queden a continuacion sin overlay. */
+  .quick-action__label {
+    display: none;
+  }
+  .quick-action {
+    padding: 8px;
+    min-width: var(--touch-target-min, 44px);
+    min-height: var(--touch-target-min, 44px);
+    gap: 0;
+  }
+  .quick-actions {
+    position: static;
+    left: auto;
+    top: auto;
+    transform: none;
+    gap: 6px;
+    flex-wrap: nowrap;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* Branding "Powered by" se oculta en mobile — no hay espacio y la marca
+   * ya esta presente en el splash de inicializacion. */
+  .topToolbar-right {
+    display: none;
+  }
 }
